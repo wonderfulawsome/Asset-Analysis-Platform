@@ -16,6 +16,9 @@ practice/
 .vscode/
 .idea/
 
+# Claude Code
+.claude/
+
 # OS 파일
 .DS_Store
 Thumbs.db
