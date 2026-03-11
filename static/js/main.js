@@ -657,45 +657,107 @@ async function loadFeed() {
   setupTickerDrift();
 }
 
+// ── 네비게이션 히스토리 관리 ──
+let _currentTabIdx = 0;                                    // 현재 활성 탭 인덱스
+let _lastBackTime = 0;                                     // 마지막 뒤로가기 시간 (앱 종료용)
+const _isApp = /android|iphone|ipad/i.test(navigator.userAgent); // 앱/모바일 여부
+
+// 탭 전환 함수 (pushState 옵션)
+function switchTab(idx, addHistory) {
+  const tabs = document.querySelectorAll('.tab');           // 탭 버튼들
+  tabs.forEach(t => t.classList.remove('active'));          // 모든 탭 비활성화
+  tabs[idx].classList.add('active');                        // 선택 탭 활성화
+  TAB_IDS.forEach(id => {                                  // 모든 탭 컨텐츠 숨기기
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  const target = TAB_IDS[idx];                             // 대상 탭 ID
+  if (target) {
+    const el = document.getElementById(target);
+    if (el) {
+      el.style.display = '';                               // 대상 탭 표시
+      setTimeout(() => {                                   // 페이드인 애니메이션
+        el.querySelectorAll('.fade-target').forEach(ft => ft.classList.add('visible'));
+      }, 50);
+    }
+  }
+  // 신호 탭 최초 진입 시 데이터 로드
+  if (idx === 1 && !window._signalLoaded) {
+    window._signalLoaded = true;
+    loadCrashSurge();
+    loadDirection();
+    loadCrashSurgeHistory();
+  }
+  // 거시경제 탭 최초 진입 시 데이터 로드
+  if (idx === 2 && typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
+    window._sectorLoaded = true;
+    loadSectorCycle();
+  }
+  // 히스토리에 상태 추가 (뒤로가기 지원)
+  if (addHistory && idx !== _currentTabIdx) {
+    history.pushState({ tab: idx }, '');
+  }
+  _currentTabIdx = idx;                                    // 현재 탭 인덱스 갱신
+}
+
 // ── 탭 전환 ──
 const TAB_IDS = ['tab-market', 'tab-signal', 'tab-sector'];
 const tabs = document.querySelectorAll('.tab');
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
-    const idx = parseInt(tab.dataset.idx, 10);
-    tabs.forEach(t => t.classList.remove('active'));
-    tab.classList.add('active');
-    TAB_IDS.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.style.display = 'none';
-    });
-    const target = TAB_IDS[idx];
-    if (target) {
-      const el = document.getElementById(target);
-      if (el) {
-        el.style.display = '';
-        // Force fade-in for elements in the newly visible tab
-        setTimeout(() => {
-          el.querySelectorAll('.fade-target').forEach(ft => {
-            ft.classList.add('visible');
-          });
-        }, 50);
-      }
-    }
-    // 신호 탭 최초 진입 시 데이터 로드
-    if (idx === 1 && !window._signalLoaded) {
-      window._signalLoaded = true;
-      loadCrashSurge();
-      loadDirection();
-      loadCrashSurgeHistory();
-    }
-    // 거시경제 탭 최초 진입 시 데이터 로드
-    if (idx === 2 && typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
-      window._sectorLoaded = true;
-      loadSectorCycle();
-    }
+    const idx = parseInt(tab.dataset.idx, 10);             // 클릭한 탭 인덱스
+    switchTab(idx, true);                                  // 히스토리 추가하며 전환
   });
 });
+
+// ── 뒤로가기(popstate) 처리 ──
+window.addEventListener('popstate', (e) => {
+  const overlay = document.getElementById('detail-overlay');
+  // 1. 상세 페이지가 열려있으면 닫기
+  if (overlay && overlay.classList.contains('open')) {
+    overlay.classList.remove('open');                       // 상세 페이지 닫기 (슬라이드 아웃)
+    return;
+  }
+  // 2. 히스토리에 탭 상태가 있으면 복원
+  if (e.state && e.state.tab !== undefined) {
+    switchTab(e.state.tab, false);                         // 히스토리 추가 없이 탭 전환
+    return;
+  }
+  // 3. 마지막 화면 (시장 탭)에서 뒤로가기
+  if (_currentTabIdx !== 0) {
+    switchTab(0, false);                                   // 시장 탭으로 이동
+    history.pushState({ tab: 0 }, '');                     // 히스토리 보충
+    return;
+  }
+  // 4. 시장 탭에서 뒤로가기 → 앱이면 2번 눌러야 종료
+  if (_isApp) {
+    const now = Date.now();
+    if (now - _lastBackTime < 2000) {                      // 2초 이내 두 번째 뒤로가기
+      return;                                              // 브라우저 기본 동작 (앱 종료)
+    }
+    _lastBackTime = now;                                   // 첫 번째 뒤로가기 시간 기록
+    history.pushState({ tab: 0 }, '');                     // 히스토리 보충 (종료 방지)
+    showBackToast();                                       // 토스트 메시지 표시
+  }
+  // 웹에서는 그대로 브라우저 기본 동작 (페이지 이탈)
+});
+
+// 초기 히스토리 상태 설정
+history.replaceState({ tab: 0 }, '');
+
+// ── 뒤로가기 토스트 메시지 ──
+function showBackToast() {
+  let toast = document.getElementById('back-toast');
+  if (!toast) {                                            // 토스트 엘리먼트가 없으면 생성
+    toast = document.createElement('div');
+    toast.id = 'back-toast';
+    toast.className = 'back-toast';
+    toast.textContent = '한 번 더 누르면 종료됩니다';
+    document.body.appendChild(toast);
+  }
+  toast.classList.add('show');                              // 토스트 표시
+  setTimeout(() => toast.classList.remove('show'), 2000);  // 2초 후 숨기기
+}
 
 // ── Crash/Surge 전조 탐지 ──
 async function loadCrashSurge() {
@@ -894,17 +956,20 @@ function openDetail(title, renderFn) {
   const overlay = document.getElementById('detail-overlay');
   const titleEl = document.getElementById('detail-title');
   const body = document.getElementById('detail-body');
-  titleEl.textContent = title;
-  body.innerHTML = '';
-  renderFn(body);
-  requestAnimationFrame(() => overlay.classList.add('open'));
+  titleEl.textContent = title;                             // 제목 설정
+  body.innerHTML = '';                                     // 본문 초기화
+  renderFn(body);                                          // 컨텐츠 렌더링
+  history.pushState({ detail: true }, '');                  // 히스토리에 상세 상태 추가
+  requestAnimationFrame(() => overlay.classList.add('open')); // 슬라이드인 애니메이션
 }
 
 function closeDetail() {
-  document.getElementById('detail-overlay').classList.remove('open');
+  document.getElementById('detail-overlay').classList.remove('open'); // 슬라이드아웃
 }
 
-document.getElementById('detail-back').addEventListener('click', closeDetail);
+document.getElementById('detail-back').addEventListener('click', () => {
+  history.back();                                          // 뒤로가기로 상세 닫기 (popstate에서 처리)
+});
 
 // ── 바 차트 렌더 헬퍼 ──
 function renderBarChart(container, items, maxAbs, descMap) {

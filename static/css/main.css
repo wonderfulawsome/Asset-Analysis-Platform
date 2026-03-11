@@ -1223,3 +1223,35 @@ body {
   color: transparent !important;
 }
 @keyframes shimmer { to { background-position: -200% 0; } }
+
+/* ── 뒤로가기 토스트 ────────────────────────── */
+.back-toast {
+  position: fixed;                                /* 화면 하단 고정 */
+  bottom: 80px;                                   /* 하단 여백 */
+  left: 50%;                                      /* 가운데 정렬 */
+  transform: translateX(-50%) translateY(20px);    /* 초기 위치 (아래) */
+  background: rgba(0, 0, 0, 0.8);                 /* 반투명 검정 배경 */
+  color: #fff;                                    /* 흰색 텍스트 */
+  padding: 10px 24px;                             /* 내부 여백 */
+  border-radius: 24px;                            /* 둥근 모서리 */
+  font-size: 13px;                                /* 폰트 크기 */
+  font-weight: 500;                               /* 폰트 두께 */
+  opacity: 0;                                     /* 초기 투명 */
+  pointer-events: none;                           /* 클릭 불가 */
+  transition: opacity 0.3s, transform 0.3s;       /* 페이드+슬라이드 전환 */
+  z-index: 9999;                                  /* 최상위 표시 */
+  white-space: nowrap;                            /* 줄바꿈 방지 */
+}
+.back-toast.show {
+  opacity: 1;                                     /* 표시 시 불투명 */
+  transform: translateX(-50%) translateY(0);       /* 원래 위치로 이동 */
+}
+
+/* ── 탭 전환 애니메이션 ──────────────────────── */
+.content {
+  animation: tabFadeIn 0.25s ease-out;            /* 탭 전환 시 페이드인 */
+}
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(8px); }  /* 아래에서 위로 */
+  to   { opacity: 1; transform: translateY(0); }
+}
