@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+jinja2
+apscheduler
+supabase
+pandas
+numpy
+hmmlearn
+scikit-learn
+joblib
+openpyxl
+xlrd
+xgboost
+yfinance
+curl_cffi
+python-dotenv
+notebook
