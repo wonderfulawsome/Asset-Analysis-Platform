@@ -866,10 +866,17 @@ async function loadDirection() {
       </div>`;
     }
 
+    // 백분위 텍스트 생성
+    const pctl = d.net_score_percentile;                  // 백분위 값
+    const pctlText = pctl != null
+      ? `상위 ${(100 - pctl).toFixed(1)}%`
+      : '';                                               // 백분위 없으면 빈 문자열
+
     el.innerHTML = `
       <div style="text-align:center;padding:8px 0 4px">
         <div style="font-size:11px;color:var(--sub);margin-bottom:4px">순방향 점수 (급등 − 폭락)</div>
         <div style="font-size:28px;font-weight:800;color:${netColor}">${netSign}${d.current_net_score}</div>
+        ${pctlText ? `<div style="font-size:12px;color:var(--sub);margin-top:2px">과거 대비 <b style="color:${netColor}">${pctlText}</b></div>` : ''}
         <div style="font-size:20px;margin-top:2px">${ds.icon}</div>
       </div>
       <div style="padding:4px 0 8px;font-size:11px;color:var(--sub);text-align:center">

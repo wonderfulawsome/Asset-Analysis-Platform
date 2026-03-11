@@ -1,7 +1,16 @@
 from fastapi import APIRouter
 from database.repositories import fetch_crash_surge_current, fetch_crash_surge_history, fetch_crash_surge_all, fetch_macro_closes
+import time                                              # 캐시 만료 체크용
 
 router = APIRouter()
+
+# ── 방향성 분석 캐시 (매번 DB 조회 방지) ──
+_dir_cache = {                                           # 캐시 딕셔너리
+    'cs_data': None,                                     # crash_surge 전체 데이터
+    'macro_data': None,                                  # macro 종가 데이터
+    'loaded_at': 0,                                      # 마지막 로드 시각
+}
+_CACHE_TTL = 1800                                        # 캐시 유효 시간 30분 (초)
 
 
 @router.get('/current')
@@ -29,8 +38,14 @@ def get_direction():
     if not current or current.get('net_score') is None:
         return None
 
-    # 전체 히스토리 조회
-    all_data = fetch_crash_surge_all()                  # 전체 기간 데이터
+    # 캐시가 만료되었으면 DB에서 다시 로드
+    now = time.time()                                    # 현재 시각
+    if _dir_cache['cs_data'] is None or (now - _dir_cache['loaded_at']) > _CACHE_TTL:
+        _dir_cache['cs_data'] = fetch_crash_surge_all()  # 전체 crash_surge 조회
+        _dir_cache['macro_data'] = fetch_macro_closes()  # 전체 SPY 종가 조회
+        _dir_cache['loaded_at'] = now                    # 로드 시각 갱신
+
+    all_data = _dir_cache['cs_data']                     # 캐시에서 가져옴
     if not all_data or len(all_data) < 30:
         return {'current_net_score': current.get('net_score'), 'message': '백필 데이터 부족'}
 
@@ -41,8 +56,8 @@ def get_direction():
     dates = [r['date'] for r in all_data]               # 날짜 리스트
     net_scores = [r.get('net_score', 0) or 0 for r in all_data]  # net_score 리스트
 
-    # SPY 종가를 macro_raw에서 가져옴 (crash_surge_result에는 없으므로)
-    macro_rows = fetch_macro_closes()                    # 전체 SPY 종가 조회 (방향성 분석용)
+    # SPY 종가 (캐시에서 가져옴)
+    macro_rows = _dir_cache['macro_data']                # 캐시된 macro 데이터
     if not macro_rows:
         return {'current_net_score': current.get('net_score'), 'message': 'macro 데이터 부족'}
 
@@ -51,7 +66,7 @@ def get_direction():
 
     # 현재 net_score 기준 ±5 범위 구간 설정
     cur_net = current.get('net_score', 0)               # 오늘의 net_score
-    margin = 7.0                                        # ±7 범위로 유사 구간 탐색
+    margin = 1.0                                        # ±1 범위로 유사 구간 탐색
 
     # 유사 구간에서의 미래 수익률 통계 계산
     results = {}                                         # 5/10/20일 후 결과
@@ -93,8 +108,13 @@ def get_direction():
     else:
         direction = '데이터 부족'
 
+    # 백분위 계산: 현재 net_score가 과거 대비 어느 위치인지
+    all_net = np.array(net_scores)                       # 전체 net_score 배열
+    percentile = round(float((all_net < cur_net).mean()) * 100, 1)  # 현재보다 낮은 비율
+
     return {
         'current_net_score': cur_net,                    # 현재 순방향 점수
+        'net_score_percentile': percentile,              # 백분위 (0~100, 높을수록 상승 쪽)
         'direction': direction,                          # 방향 판정
         'horizon_stats': results,                        # 5/10/20일 통계
         'margin': margin,                                # 탐색 범위
