@@ -151,6 +151,52 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
     return {'spy': spy, 'fred': fred, 'cboe': cboe, 'putcall': putcall}
 
 
+def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
+    """경량 수집: 최근 N일치만 빠르게 가져옴 (30분 주기 예측용).
+    yfinance 장 중 호출 시 SPY/Cboe/PutCall은 실시간 데이터 포함.
+    FRED는 일별 업데이트만 가능하므로 최신 확정값 사용.
+    """
+    # 1) SPY OHLCV — 장 중이면 실시간 가격 포함
+    print('  [CrashSurge-Light] SPY OHLCV 수집...')
+    spy_raw = yf.Ticker('SPY').history(period=f'{lookback_days}d', auto_adjust=True)  # 최근 N일
+    spy = _strip_tz(spy_raw)[['Open', 'High', 'Low', 'Close', 'Volume']]  # OHLCV만 추출
+
+    # 2) FRED 12개 — 일별 확정값 (실시간 불가)
+    fred = {}  # FRED 시리즈 저장용
+    print('  [CrashSurge-Light] FRED 시리즈 수집...')
+    for sid, col in FRED_MAP.items():  # 12개 시리즈 순회
+        try:
+            fred[col] = _fetch_fred(sid, col)  # CSV 다운로드
+        except Exception as e:
+            print(f'  [CrashSurge-Light] {col}: 실패 — {e}')
+            fred[col] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))  # 빈 DataFrame
+
+    # 3) Cboe 5개 — 장 중이면 실시간 가격 포함
+    cboe = {}  # Cboe 지수 저장용
+    print('  [CrashSurge-Light] Cboe 지수 수집...')
+    for ticker, col in CBOE_MAP.items():  # VIX, VIX3M, VIX9D, VVIX, SKEW
+        try:
+            h = yf.Ticker(ticker).history(period=f'{lookback_days}d', auto_adjust=True)  # 최근 N일
+            h = _strip_tz(h)  # 타임존 제거
+            cboe[col] = h['Close'].rename(col)  # 종가만 추출
+        except Exception as e:
+            print(f'  [CrashSurge-Light] {col}: 실패 — {e}')
+            cboe[col] = pd.Series(dtype=float, name=col)  # 빈 Series
+
+    # 4) Put/Call 비율 — 장 중이면 실시간 포함
+    putcall = {}  # Put/Call 비율 저장용
+    for ticker, name in PUTCALL_MAP.items():  # Total, Equity
+        try:
+            h = yf.Ticker(ticker).history(period=f'{lookback_days}d', auto_adjust=True)  # 최근 N일
+            h = _strip_tz(h)  # 타임존 제거
+            putcall[name] = h['Close'].rename(name)  # 종가만 추출
+        except Exception:
+            putcall[name] = pd.Series(dtype=float, name=name)  # 빈 Series
+
+    print(f'  [CrashSurge-Light] SPY: {len(spy)}행, 실시간 데이터 포함')
+    return {'spy': spy, 'fred': fred, 'cboe': cboe, 'putcall': putcall}  # 전체 데이터 반환
+
+
 # ── 피처 엔지니어링 ──
 
 def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict, putcall: dict) -> pd.DataFrame:

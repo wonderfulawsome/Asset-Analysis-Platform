@@ -14,7 +14,8 @@ from database.repositories import (upsert_macro, upsert_noise_regime, upsert_fea
 from processor.feature1_regime import train_hmm, load_model, predict_regime
 from processor.feature2_sector_cycle import run_sector_cycle
 from collector.crash_surge_data import (
-    fetch_crash_surge_raw, compute_features, compute_labels, prepare_datasets, ALL_FEATURES,
+    fetch_crash_surge_raw, fetch_crash_surge_light,
+    compute_features, compute_labels, prepare_datasets, ALL_FEATURES,
 )
 from processor.feature3_crash_surge import (
     train_crash_surge, load_model as load_crash_surge_model, predict_crash_surge,
@@ -91,6 +92,33 @@ def run_pipeline(light: bool = False) -> None:
     print('\n[Step 5] ETF 가격 수집...')
     index_prices = fetch_index_prices()  # 31개 ETF 종가/등락률 수집
     upsert_index_prices(index_prices)
+
+    # Step 5b: 경량 모드 crash/surge 실시간 예측 (기존 모델 사용, 학습 없음)
+    if light:
+        print('\n[Step 5b] 폭락/급등 실시간 예측...')
+        try:
+            cs_model = load_crash_surge_model()  # 저장된 모델 로드
+            if cs_model is not None:
+                raw_light = fetch_crash_surge_light()  # 최근 데이터 경량 수집 (SPY/Cboe/PutCall 실시간 포함)
+                features_light = compute_features(raw_light['spy'], raw_light['fred'],
+                                                  raw_light['cboe'], raw_light['putcall'])  # 46 피처 계산
+                # Core 피처 NaN 제거, Aux fillna(0) 처리
+                from collector.crash_surge_data import CORE_FEATURES, AUX_FEATURES
+                import numpy as np
+                feat_row = features_light[ALL_FEATURES].copy()  # 피처만 추출
+                feat_row = feat_row.dropna(subset=CORE_FEATURES)  # Core NaN 제거
+                feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)  # Aux 결측 대체
+                feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)  # inf 제거
+                if len(feat_row) > 0:
+                    latest_row = feat_row.iloc[[-1]].values  # 최신 1행 추출
+                    cs_result = predict_crash_surge(latest_row, cs_model)  # 예측 실행
+                    upsert_crash_surge(cs_result)  # DB 저장
+                else:
+                    print('  [CrashSurge-Light] 유효한 피처 행 없음, 건너뜀')
+            else:
+                print('  [CrashSurge-Light] 저장된 모델 없음, 건너뜀 (전체 파이프라인에서 학습 필요)')
+        except Exception as e:
+            print(f'  [CrashSurge-Light] 실시간 예측 실패: {e}')
 
     # 경량 모드가 아닐 때만 무거운 작업 실행
     if not light:
