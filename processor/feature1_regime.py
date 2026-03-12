@@ -53,14 +53,16 @@ def compute_noise_score(means: np.ndarray) -> np.ndarray:
     )
 
 
-def train_hmm(features_df) -> dict:
+def train_hmm(features_df, monthly_bundle: dict = None) -> dict:
     """4-state GaussianHMM 학습 → 모델 번들 저장 및 반환.
 
     Args:
         features_df: pd.DataFrame with FEATURE_NAMES columns (윈저라이징 적용 완료)
+        monthly_bundle: compute_monthly_features() 반환값 (경량 파이프라인용 캐시 데이터 포함)
 
     Returns:
-        dict with model, scaler, state_to_phase, phase_order, train_month
+        dict with model, scaler, state_to_phase, phase_order, train_month,
+             last_monthly_values, winsor_bounds, amihud_q01, amihud_q99
     """
     X = features_df[FEATURE_NAMES].values
     scaler = RobustScaler()
@@ -89,12 +91,33 @@ def train_hmm(features_df) -> dict:
     # phase_order: phase_order[phase_rank] = hmm_state_id
     phase_order = [int(sid) for sid in sorted_states]
 
+    # ── 경량 파이프라인용 월별 피처 캐시값 추출 ──
+    last_monthly = {}                                    # 월별 4피처 최신값 저장용
+    winsor_bounds = {}                                   # 윈저라이징 범위 저장용
+    amihud_q01 = 0.0                                     # Amihud 하한 기본값
+    amihud_q99 = 0.0                                     # Amihud 상한 기본값
+    if monthly_bundle is not None:                       # compute_monthly_features 결과가 있으면
+        feat_df = monthly_bundle['features']             # 월별 피처 DataFrame
+        last_monthly = {                                 # 마지막 행의 월별 피처값 추출
+            'fundamental_gap': float(feat_df['fundamental_gap'].iloc[-1]),  # 펀더멘털 갭 최신값
+            'erp_zscore':      float(feat_df['erp_zscore'].iloc[-1]),      # ERP Z-score 최신값
+            'vix_term':        float(feat_df['vix_term'].iloc[-1]),        # VIX 텀 최신값
+            'hy_spread':       float(feat_df['hy_spread'].iloc[-1]),       # HY 스프레드 최신값
+        }
+        winsor_bounds = monthly_bundle.get('winsor_bounds', {})  # 윈저라이징 범위
+        amihud_q01 = monthly_bundle.get('amihud_q01', 0.0)      # Amihud 윈저 하한
+        amihud_q99 = monthly_bundle.get('amihud_q99', 0.0)      # Amihud 윈저 상한
+
     bundle = {
-        'model': model,
-        'scaler': scaler,
-        'state_to_phase': state_to_phase,
-        'phase_order': phase_order,
-        'train_month': datetime.date.today().strftime('%Y-%m'),
+        'model': model,                                  # 학습된 HMM 모델
+        'scaler': scaler,                                # RobustScaler
+        'state_to_phase': state_to_phase,                # HMM state → 국면 매핑
+        'phase_order': phase_order,                      # 국면 순서
+        'train_month': datetime.date.today().strftime('%Y-%m'),  # 학습 월
+        'last_monthly_values': last_monthly,             # 월별 4피처 최신값 (경량용)
+        'winsor_bounds': winsor_bounds,                  # 윈저라이징 범위 (경량용)
+        'amihud_q01': amihud_q01,                        # Amihud 윈저 하한 (경량용)
+        'amihud_q99': amihud_q99,                        # Amihud 윈저 상한 (경량용)
     }
 
     os.makedirs(MODEL_DIR, exist_ok=True)

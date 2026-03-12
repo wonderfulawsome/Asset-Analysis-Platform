@@ -7,6 +7,7 @@ from collector.sector_etf import fetch_sector_etf_returns
 from collector.noise_regime_data import (
     fetch_shiller, fetch_fred_regime, fetch_sector_stocks,
     fetch_amihud_stocks, compute_monthly_features, compute_daily_features,
+    fetch_noise_regime_light,
 )
 from database.repositories import (upsert_macro, upsert_noise_regime, upsert_fear_greed,
                                    upsert_index_prices, upsert_sector_macro, upsert_sector_cycle,
@@ -65,7 +66,7 @@ def run_pipeline(light: bool = False) -> None:
                           model_bundle.get('train_month') != current_month)
         if should_retrain:
             print('[Step 3] 모델 재학습...')
-            model_bundle = train_hmm(bundle['features'])
+            model_bundle = train_hmm(bundle['features'], monthly_bundle=bundle)
         else:
             print(f'[Step 3] 기존 모델 사용 (학습 월: {model_bundle["train_month"]})')
 
@@ -119,6 +120,19 @@ def run_pipeline(light: bool = False) -> None:
                 print('  [CrashSurge-Light] 저장된 모델 없음, 건너뜀 (전체 파이프라인에서 학습 필요)')
         except Exception as e:
             print(f'  [CrashSurge-Light] 실시간 예측 실패: {e}')
+
+        # Step 5c: 경량 모드 Noise HMM 실시간 예측 (기존 모델 사용, 학습 없음)
+        print('\n[Step 5c] Noise HMM 실시간 예측...')
+        try:
+            noise_model = load_model()                   # 저장된 Noise HMM 모델 로드
+            if noise_model is not None and noise_model.get('last_monthly_values'):  # 모델 + 캐시값 존재 확인
+                daily_feat = fetch_noise_regime_light(noise_model)  # 실시간 4피처 + 캐시 4피처 → 8피처 벡터
+                noise_result = predict_regime(daily_feat, noise_model)  # 국면 예측 실행
+                upsert_noise_regime(noise_result)        # DB 저장
+            else:
+                print('  [NoiseHMM-Light] 저장된 모델 또는 캐시값 없음, 건너뜀 (전체 파이프라인에서 학습 필요)')
+        except Exception as e:
+            print(f'  [NoiseHMM-Light] 실시간 예측 실패: {e}')
 
     # 경량 모드가 아닐 때만 무거운 작업 실행
     if not light:

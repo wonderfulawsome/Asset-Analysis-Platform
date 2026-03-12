@@ -448,3 +448,142 @@ def compute_daily_features(bundle: dict) -> np.ndarray:
     rv_val = float(spy_ret_recent.std() * np.sqrt(252))
 
     return np.array([[fg_val, ez_val, rc_val, disp_val, ami_val, vt_val, hy_val, rv_val]])
+
+
+def fetch_noise_regime_light(model_bundle: dict, lookback_days: int = 60) -> np.ndarray:
+    """경량 수집: 실시간 가능한 4피처는 Yahoo/FRED에서 재계산, 월별 4피처는 모델 번들에서 가져옴.
+
+    실시간 피처: residual_corr, dispersion, amihud, realized_vol (Yahoo Finance)
+    월별 피처(캐시): fundamental_gap, erp_zscore, vix_term, hy_spread (모델 저장 시 캐싱)
+
+    Args:
+        model_bundle: train_hmm()에서 저장한 모델 번들 (last_monthly_values 포함)
+        lookback_days: 수집할 최근 일수 (기본 60일)
+
+    Returns:
+        np.ndarray shape (1, 8) — 8피처 벡터
+    """
+    # ── 모델 번들에서 월별 피처 캐시값 로드 ──
+    monthly = model_bundle['last_monthly_values']        # 월별 4피처 최신값 딕셔너리
+    fg_val = monthly['fundamental_gap']                  # 펀더멘털 갭
+    ez_val = monthly['erp_zscore']                       # ERP Z-score
+    vt_val_cached = monthly['vix_term']                  # VIX 텀 스트럭처 (캐시, FRED 실시간으로 덮어쓸 수 있음)
+    hy_val_cached = monthly['hy_spread']                 # HY 스프레드 (캐시, FRED 실시간으로 덮어쓸 수 있음)
+    amihud_q01 = model_bundle['amihud_q01']              # Amihud 윈저라이징 하한
+    amihud_q99 = model_bundle['amihud_q99']              # Amihud 윈저라이징 상한
+
+    period_str = f'{lookback_days}d'                     # yfinance 기간 문자열
+
+    # ── ① SPY + 25 섹터 종목 일별 종가 수집 (실시간 반영) ──
+    print('  [NoiseHMM-Light] SPY + 섹터 종목 수집...')
+    all_tickers = ['SPY'] + ALL_STOCKS                   # SPY + 25개 섹터 종목
+    frames = {}                                          # 티커별 종가 저장용
+    for ticker in all_tickers:                           # 26개 티커 순회
+        try:
+            t = yf.Ticker(ticker)                        # yfinance 객체 생성
+            hist = t.history(period=period_str, auto_adjust=True)  # 최근 N일 수집
+            if len(hist) > 0:                            # 데이터가 있으면
+                idx = hist.index                         # 인덱스 추출
+                if hasattr(idx, 'tz') and idx.tz is not None:  # 타임존 있으면
+                    idx = idx.tz_localize(None)          # 타임존 제거
+                frames[ticker] = pd.Series(hist['Close'].values, index=idx, name=ticker)  # 종가 시리즈
+        except Exception as e:
+            print(f'    {ticker} 실패: {e}')             # 실패 로그
+
+    stock_prices = pd.DataFrame(frames)                  # DataFrame으로 변환
+    stock_returns = stock_prices.pct_change().dropna()   # 일별 수익률 계산
+
+    # SPY 수익률 추출
+    spy_ret = _strip_tz(stock_returns['SPY']) if 'SPY' in stock_returns.columns else None  # SPY 수익률
+
+    # ── ② 베타 제거 잔차 계산 ──
+    residuals = pd.DataFrame(index=stock_returns.index)  # 잔차 저장용 빈 DataFrame
+    for ticker in ALL_STOCKS:                            # 25개 종목 순회
+        if ticker not in stock_returns.columns or spy_ret is None:  # 데이터 없으면 건너뜀
+            continue
+        ret = stock_returns[ticker]                      # 종목 수익률
+        cov_spy = ret.rolling(60, min_periods=20).cov(spy_ret)  # SPY와의 공분산 (min 20일)
+        spy_var = spy_ret.rolling(60, min_periods=20).var()  # SPY 분산
+        beta = cov_spy / spy_var                         # 베타 계산
+        residuals[ticker] = ret - beta * spy_ret         # 잔차 = 수익률 - 베타*시장수익률
+    residuals = residuals.dropna(how='all')              # 전부 NaN인 행 제거
+
+    # ── ③-A residual_corr: 최근 20일 잔차 페어와이즈 상관 ──
+    recent_resid = residuals.iloc[-20:]                  # 최근 20일 잔차
+    pair_corrs = []                                      # 페어와이즈 상관 저장용
+    for sector, stocks in SECTOR_STOCKS.items():         # 5개 섹터 순회
+        avail = [s for s in stocks if s in recent_resid.columns]  # 사용 가능한 종목
+        if len(avail) < 2:                               # 2개 미만이면 건너뜀
+            continue
+        for s1, s2 in combinations(avail, 2):            # 모든 쌍 조합
+            c = recent_resid[s1].corr(recent_resid[s2])  # 상관계수 계산
+            pair_corrs.append(c)                         # 리스트에 추가
+    rc_val = float(np.mean(pair_corrs)) if pair_corrs else float(monthly.get('residual_corr_fallback', 0.0))  # 평균 또는 폴백
+
+    # ── ③-B dispersion: 최근 20일 횡단면 std 평균 ──
+    avail_stocks = [s for s in ALL_STOCKS if s in stock_returns.columns]  # 사용 가능한 종목
+    recent_ret = stock_returns[avail_stocks].iloc[-20:]  # 최근 20일 수익률
+    disp_val = float(recent_ret.std(axis=1).mean())      # 횡단면 표준편차 평균
+
+    # ── ④ Amihud 종목 수집 + 계산 ──
+    print('  [NoiseHMM-Light] Amihud 종목 수집...')
+    amihud_daily_vals = []                               # Amihud 일별 값 저장용
+    for ticker in AMIHUD_STOCKS:                         # 5개 메가캡 순회
+        try:
+            t = yf.Ticker(ticker)                        # yfinance 객체 생성
+            hist = t.history(period=period_str, auto_adjust=True)  # 최근 N일 수집
+            if len(hist) > 0:                            # 데이터가 있으면
+                hist = _strip_tz_df(hist)                # 타임존 제거
+                oc_ret = np.log(hist['Close'] / hist['Open']).abs()  # |log(종가/시가)|
+                dollar_vol = hist['Close'] * hist['Volume']  # 달러 거래량
+                ami_t = oc_ret / dollar_vol.replace(0, np.nan)  # Amihud 비유동성
+                amihud_daily_vals.append(ami_t)          # 리스트에 추가
+        except Exception as e:
+            print(f'    Amihud {ticker} 실패: {e}')      # 실패 로그
+
+    if amihud_daily_vals:                                # Amihud 데이터가 있으면
+        amihud_recent = pd.concat(amihud_daily_vals, axis=1).mean(axis=1).dropna()  # 종목 평균
+        log_ami = np.log(amihud_recent.iloc[-20:].mean() + 1e-15)  # 최근 20일 평균의 로그
+        ami_val = float(np.clip(log_ami, amihud_q01, amihud_q99))  # 윈저라이징 적용
+    else:
+        ami_val = 0.0                                    # 폴백값
+
+    # ── ⑤ FRED 실시간: VIX, VIX3M, HY_OAS ──
+    print('  [NoiseHMM-Light] FRED 실시간 지표 수집...')
+    try:
+        vix_df = _fetch_fred('VIXCLS', 'vix')           # VIX 일별
+        vix3m_df = _fetch_fred('VXVCLS', 'vix3m')       # VIX3M 일별
+        latest_vix = float(vix_df['vix'].dropna().iloc[-1])  # 최신 VIX
+        latest_vix3m = float(vix3m_df['vix3m'].dropna().iloc[-1])  # 최신 VIX3M
+        vt_val = latest_vix / latest_vix3m               # VIX 텀 스트럭처 = VIX/VIX3M
+    except Exception as e:
+        print(f'    VIX term 실패, 캐시 사용: {e}')      # 실패 시 캐시 사용
+        vt_val = vt_val_cached                           # 모델 번들의 캐시값
+
+    try:
+        hy_df = _fetch_fred('BAMLH0A0HYM2', 'hy_spread')  # HY OAS 수집
+        hy_val = float(hy_df['hy_spread'].dropna().iloc[-1])  # 최신 HY 스프레드
+    except Exception as e:
+        print(f'    HY spread 실패, 캐시 사용: {e}')     # 실패 시 캐시 사용
+        hy_val = hy_val_cached                           # 모델 번들의 캐시값
+
+    # ── ⑥ realized_vol: 최근 20일 SPY 수익률 기반 ──
+    if spy_ret is not None and len(spy_ret) >= 20:       # SPY 데이터가 충분하면
+        rv_val = float(spy_ret.iloc[-20:].std() * np.sqrt(252))  # 연율화 실현 변동성
+    else:
+        rv_val = float(monthly.get('realized_vol_fallback', 0.15))  # 폴백값
+
+    # ── 윈저라이징 적용 ──
+    winsor_bounds = model_bundle.get('winsor_bounds', {})  # 윈저라이징 범위 로드
+    raw_values = [fg_val, ez_val, rc_val, disp_val, ami_val, vt_val, hy_val, rv_val]  # 8피처 원본값
+    clipped_values = []                                  # 윈저라이징 적용 후 값
+    for i, fname in enumerate(FEATURE_NAMES):            # 8피처 순회
+        val = raw_values[i]                              # 원본값
+        if fname in winsor_bounds:                       # 범위가 있으면
+            q01, q99 = winsor_bounds[fname]              # 하한, 상한 추출
+            val = float(np.clip(val, q01, q99))          # 클리핑 적용
+        clipped_values.append(val)                       # 결과 추가
+
+    feat_vector = np.array([clipped_values])             # (1, 8) shape 배열 생성
+    print(f'  [NoiseHMM-Light] 8피처 벡터 생성 완료')    # 완료 로그
+    return feat_vector                                   # 8피처 벡터 반환
