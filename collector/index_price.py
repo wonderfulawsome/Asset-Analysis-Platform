@@ -23,7 +23,7 @@ def fetch_index_prices() -> list[dict]:
     from_date = today - datetime.timedelta(days=10)      # 10일 전부터 조회 (주말/공휴일 대비 여유분)
     # 날짜를 Unix timestamp(초)로 변환 — Yahoo API가 이 형식을 요구함
     from_ts = int(datetime.datetime.combine(from_date, datetime.time()).timestamp())
-    to_ts   = int(datetime.datetime.combine(today,     datetime.time()).timestamp())
+    to_ts   = int(datetime.datetime.combine(today + datetime.timedelta(days=1), datetime.time()).timestamp())  # +1일: 장 중 실시간 데이터 포함
 
     result = []  # 최종 결과를 담을 리스트
     for ticker in TICKERS:  # 31개 티커를 하나씩 순회
