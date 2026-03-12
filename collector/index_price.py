@@ -34,17 +34,17 @@ def fetch_index_prices() -> list[dict]:
             resp = requests.get(url, params=params, headers=HEADERS, timeout=15)  # API 호출 (15초 타임아웃)
             resp.raise_for_status()                      # HTTP 에러 시 예외 발생
             data   = resp.json()['chart']['result'][0]   # JSON 응답에서 차트 데이터 추출
-            meta   = data['meta']                        # 메타 정보 (시장 상태, 실시간 가격 포함)
-            market_state = meta.get('marketState', '')   # 시장 상태: REGULAR(장중), CLOSED, PRE, POST 등
+            meta   = data['meta']                        # 메타 정보 (실시간 가격 포함)
             closes = data['indicators']['adjclose'][0]['adjclose']  # 수정 종가 리스트
             closes = [c for c in closes if c is not None]  # None 값 제거 (거래 없는 날)
 
             if len(closes) < 1:                          # 데이터가 없으면 건너뜀
                 continue
 
-            if market_state == 'REGULAR':                # 장 중이면 실시간 가격 사용
-                curr = meta.get('regularMarketPrice')    # 실시간 현재가
-                prev = closes[-1]                        # 전일 확정 종가 (adjclose 마지막 값)
+            realtime_price = meta.get('regularMarketPrice')  # 실시간 현재가 (장 중이면 존재)
+            if realtime_price and realtime_price != closes[-1]:  # 실시간 가격이 있고 종가와 다르면 → 장 중
+                curr = realtime_price                    # 실시간 현재가 사용
+                prev = closes[-1]                        # 전일 확정 종가
             else:                                        # 장 마감이면 확정 종가 사용
                 if len(closes) < 2:                      # 최소 2일치 필요
                     continue
