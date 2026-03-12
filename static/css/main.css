@@ -25,7 +25,7 @@ html, body {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  font-family: 'Pretendard Variable', -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   max-width: 480px;
   margin: 0 auto;
   height: 100%;
