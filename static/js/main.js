@@ -321,8 +321,8 @@ async function loadMarketOverview() {
 
     // RSI 색상/라벨 결정
     const rsi = d.rsi || 0;
-    const rsiColor = rsi >= 70 ? '#EF4444' : rsi <= 30 ? '#22C55E' : '#F97316';
-    const rsiLabel = rsi >= 70 ? '과매수' : rsi <= 30 ? '과매도' : '중립';
+    const rsiColor = rsi >= 60 ? '#EF4444' : rsi <= 40 ? '#22C55E' : '#F97316';  // 60 이상 과매수, 40 이하 과매도
+    const rsiLabel = rsi >= 60 ? '과매수' : rsi <= 40 ? '과매도' : '중립';      // 40~60 중립
 
     // 카드 렌더링
     el.innerHTML = `<div class="mo-card">
