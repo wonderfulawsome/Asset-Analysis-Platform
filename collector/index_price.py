@@ -1,4 +1,5 @@
 import datetime       # 날짜/시간 처리용 표준 라이브러리
+import time           # 현재 Unix 타임스탬프 조회용
 import requests       # HTTP 요청을 보내기 위한 라이브러리
 
 # Yahoo Finance API 호출 시 브라우저처럼 보이게 하는 헤더 (차단 방지)
@@ -41,10 +42,15 @@ def fetch_index_prices() -> list[dict]:
             if len(closes) < 1:                          # 데이터가 없으면 건너뜀
                 continue
 
-            realtime_price = meta.get('regularMarketPrice')  # 실시간 현재가 (장 중이면 존재)
-            if realtime_price and realtime_price != closes[-1]:  # 실시간 가격이 있고 종가와 다르면 → 장 중
-                curr = realtime_price                    # 실시간 현재가 사용
-                prev = closes[-1]                        # 전일 확정 종가
+            # currentTradingPeriod로 장 중 여부 판단 (가장 정확)
+            now_ts = int(time.time())                    # 현재 Unix 타임스탬프
+            trading = meta.get('currentTradingPeriod', {}).get('regular', {})  # 정규장 시간대
+            is_market_open = trading.get('start', 0) <= now_ts <= trading.get('end', 0)  # 정규장 범위 내인지
+
+            realtime_price = meta.get('regularMarketPrice')  # 실시간 현재가
+            if is_market_open and realtime_price:        # 장 중이면 실시간 가격 사용
+                prev = closes[-2] if len(closes) >= 2 else closes[-1]  # 전일 종가 (adjclose에 당일 미확정 포함될 수 있음)
+                curr = realtime_price                    # 실시간 현재가
             else:                                        # 장 마감이면 확정 종가 사용
                 if len(closes) < 2:                      # 최소 2일치 필요
                     continue
