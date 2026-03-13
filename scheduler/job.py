@@ -11,7 +11,7 @@ from collector.noise_regime_data import (
 )
 from database.repositories import (upsert_macro, upsert_noise_regime, upsert_fear_greed,
                                    upsert_index_prices, upsert_sector_macro, upsert_sector_cycle,
-                                   upsert_crash_surge)
+                                   upsert_crash_surge, fetch_crash_surge_all)
 from processor.feature1_regime import train_hmm, load_model, predict_regime
 from processor.feature2_sector_cycle import run_sector_cycle
 from collector.crash_surge_data import (
@@ -183,17 +183,19 @@ def run_pipeline(light: bool = False) -> None:
             cs_result = predict_crash_surge(latest_row, cs_model)
             upsert_crash_surge(cs_result)
 
-            # Step 7b: 전체 기간 crash/surge 점수 백필 (모델 학습/재학습 시에만)
+            # Step 7b: 신규 날짜만 백필 (기존 히스토리 보존, redeploy 시에도 과거 점수 유지)
             if cs_should_retrain:
-                print('\n[Step 7b] 전체 기간 점수 백필...')
-                backfill_records = backfill_crash_surge(datasets['df_full'], cs_model)
-                # 100건씩 나눠서 upsert (Supabase 요청 크기 제한 대비)
-                batch_size = 100
-                for i in range(0, len(backfill_records), batch_size):
-                    batch = backfill_records[i:i + batch_size]
-                    for rec in batch:
-                        upsert_crash_surge(rec)
-                print(f'[Step 7b] 백필 완료: {len(backfill_records)}건 DB 저장')
+                print('\n[Step 7b] 신규 날짜 점수 백필...')
+                backfill_records = backfill_crash_surge(datasets['df_full'], cs_model)  # 전체 기간 점수 계산
+                # DB에서 기존 날짜 목록 조회
+                existing = fetch_crash_surge_all()                                      # 기존 DB 레코드 전체 조회
+                existing_dates = {r['date'] for r in existing}                          # 기존 날짜를 set으로 변환
+                # 기존에 없는 날짜만 필터링
+                new_records = [r for r in backfill_records if r['date'] not in existing_dates]  # 신규 날짜만 추출
+                print(f'[Step 7b] 전체 {len(backfill_records)}건 중 신규 {len(new_records)}건 백필')
+                for rec in new_records:                                                 # 신규 레코드만 DB 저장
+                    upsert_crash_surge(rec)
+                print(f'[Step 7b] 백필 완료: {len(new_records)}건 DB 저장')
         except Exception as e:
             print(f'[Step 7] 폭락/급등 전조 실패, 건너뜀: {e}')  # 실패해도 파이프라인 완료 처리
 
