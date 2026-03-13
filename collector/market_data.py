@@ -42,7 +42,9 @@ def _fetch_df(ticker: str, from_ts: int, to_ts: int) -> pd.DataFrame:
     closes  = result['indicators']['adjclose'][0]['adjclose']  # 수정 종가 배열
     volumes = result['indicators']['quote'][0]['volume']    # 거래량 배열
     index = pd.to_datetime(timestamps, unit='s').normalize()  # 타임스탬프 → 날짜 인덱스
-    return pd.DataFrame({'close': closes, 'volume': volumes}, index=index)
+    df = pd.DataFrame({'close': closes, 'volume': volumes}, index=index)  # DataFrame 생성
+    df = df[~df.index.duplicated(keep='last')]               # 중복 날짜 제거 (마지막 값 유지)
+    return df
 
 # -------------------------------------------------------------------
 # _fetch_df: 티커별 종가 및 거래량 수집
