@@ -207,10 +207,10 @@ def load_model() -> Optional[dict]:
 # ── 추론 ──
 
 def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
-    """오늘의 46피처 벡터로 crash/surge 점수 예측.
+    """오늘의 44피처 벡터로 crash/surge 점수 예측.
 
     Args:
-        X_today: shape (1, 46) numpy array (raw features, not scaled)
+        X_today: shape (1, 44) numpy array (raw features, not scaled)
         model_bundle: train_crash_surge() 반환값
 
     Returns:
@@ -236,14 +236,14 @@ def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
 
     result = {
         'date': str(datetime.date.today()),
-        'crash_score': round(crash_pctl, 1),
+        'crash_score': float(round(crash_pctl, 1)),           # numpy float32 → Python float 변환
         'crash_grade': grade(crash_pctl),
-        'surge_score': round(surge_pctl, 1),
+        'surge_score': float(round(surge_pctl, 1)),           # numpy float32 → Python float 변환
         'surge_grade': grade(surge_pctl),
-        'net_score': round(surge_pctl - crash_pctl, 1),  # 순방향 점수 (양수=급등 우세, 음수=폭락 우세)
-        'crash_raw': round(crash_raw, 2),
-        'surge_raw': round(surge_calibrated, 2),
-        'macro_f1': round(model_bundle['macro_f1'], 4),
+        'net_score': float(round(surge_pctl - crash_pctl, 1)),  # 순방향 점수 (양수=급등 우세, 음수=폭락 우세)
+        'crash_raw': float(round(crash_raw, 2)),              # numpy float32 → Python float 변환
+        'surge_raw': float(round(surge_calibrated, 2)),       # numpy float32 → Python float 변환
+        'macro_f1': float(round(model_bundle['macro_f1'], 4)),  # numpy float32 → Python float 변환
     }
 
     # 현재 피처값 저장 (46개 피처 모두)
@@ -259,9 +259,9 @@ def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
         shap_vals = explainer.shap_values(X_scaled)
 
         def _top_shap(sv, n=10):
-            pairs = [(ALL_FEATURES[i], float(sv[i])) for i in range(len(ALL_FEATURES))]
-            pairs.sort(key=lambda x: abs(x[1]), reverse=True)
-            return [{'name': p[0], 'value': round(p[1], 4)} for p in pairs[:n]]
+            pairs = [(ALL_FEATURES[i], float(sv[i])) for i in range(len(ALL_FEATURES))]  # numpy → float 변환
+            pairs.sort(key=lambda x: abs(x[1]), reverse=True)  # 절대값 기준 정렬
+            return [{'name': p[0], 'value': float(round(p[1], 4))} for p in pairs[:n]]  # round 후 float 보장
 
         # shap 버전에 따라 반환 형태가 다름:
         #   구버전: list of arrays [class0(1,F), class1(1,F), class2(1,F)]
@@ -300,9 +300,9 @@ def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
             'surge': _top_shap(surge_sv),
         }
 
-        imp = model.feature_importances_
-        imp_pairs = sorted(zip(ALL_FEATURES, imp), key=lambda x: x[1], reverse=True)[:10]
-        result['feature_importance'] = [{'name': n, 'value': round(float(v), 4)} for n, v in imp_pairs]
+        imp = model.feature_importances_                      # XGBoost feature importance (float32 배열)
+        imp_pairs = sorted(zip(ALL_FEATURES, imp), key=lambda x: x[1], reverse=True)[:10]  # 상위 10개
+        result['feature_importance'] = [{'name': n, 'value': float(round(float(v), 4))} for n, v in imp_pairs]  # float32 → float 변환
     except Exception as e:
         print(f'  [CrashSurge] SHAP 계산 실패: {e}')
         result['shap_values'] = None
