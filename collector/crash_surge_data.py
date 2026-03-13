@@ -1,7 +1,7 @@
-"""XGBoost Crash/Surge: 데이터 수집 + 46 피처 엔지니어링
+"""XGBoost Crash/Surge: 데이터 수집 + 44 피처 엔지니어링
 
 노트북 XGBoost_CrashSurge.ipynb Cell 1~3 로직을 production 코드로 변환.
-46개 일별 피처: 가격/변동성/옵션/신용/금리/크로스에셋/Tier2 보조
+44개 일별 피처: 가격/변동성/옵션/신용/금리/크로스에셋/Tier2 보조
 """
 
 import time
@@ -37,9 +37,6 @@ FRED_MAP = {
 # Cboe 지수
 CBOE_MAP = {'^VIX': 'VIX', '^VIX3M': 'VIX3M', '^VIX9D': 'VIX9D', '^VVIX': 'VVIX', '^SKEW': 'SKEW'}
 
-# Put/Call 비율
-PUTCALL_MAP = {'^PCALL': 'PUTCALL_TOTAL', '^EPCALL': 'PUTCALL_EQUITY'}
-
 # ── 피처 목록 ──
 CORE_FEATURES = [
     'SP500_LOGRET_1D', 'SP500_LOGRET_5D', 'SP500_LOGRET_10D', 'SP500_LOGRET_20D',
@@ -51,9 +48,9 @@ CORE_FEATURES = [
 
 AUX_FEATURES = [
     'VIX_LEVEL', 'VIX_CHANGE_1D', 'VIX_PCTL_252D',
-    'VXV_MINUS_VIX', 'SKEW_LEVEL', 'PUTCALL_TOTAL',
+    'VXV_MINUS_VIX', 'SKEW_LEVEL',
     'DTWEXBGS_RET_5D', 'WTI_RET_5D',
-    'VIX9D_MINUS_VIX', 'VVIX_LEVEL', 'PUTCALL_EQUITY',
+    'VIX9D_MINUS_VIX', 'VVIX_LEVEL',
     'VARIANCE_RISK_PREMIUM', 'PARKINSON_VOL_21D',
     'SP500_AMIHUD_ILLIQ_20D', 'SP500_DOLLAR_VOLUME_Z_20D',
     'DFII10_REAL10Y', 'T10YIE_BREAKEVEN',
@@ -105,10 +102,10 @@ def _strip_tz(obj):
 # ── 데이터 수집 ──
 
 def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
-    """원시 데이터 수집: SPY OHLCV + FRED 12개 + Cboe 5개 + Put/Call 2개.
+    """원시 데이터 수집: SPY OHLCV + FRED 12개 + Cboe 5개.
 
     Returns:
-        {'spy': DataFrame, 'fred': dict, 'cboe': dict, 'putcall': dict}
+        {'spy': DataFrame, 'fred': dict, 'cboe': dict}
     """
     # 1) SPY OHLCV
     print('  [CrashSurge] SPY OHLCV 수집...')
@@ -138,22 +135,12 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
             print(f'  [CrashSurge] {col}: 실패 — {e}')
             cboe[col] = pd.Series(dtype=float, name=col)
 
-    # 4) Put/Call 비율
-    putcall = {}
-    for ticker, name in PUTCALL_MAP.items():
-        try:
-            h = yf.Ticker(ticker).history(start=start, auto_adjust=True)
-            h = _strip_tz(h)
-            putcall[name] = h['Close'].rename(name)
-        except Exception:
-            putcall[name] = pd.Series(dtype=float, name=name)
-
-    return {'spy': spy, 'fred': fred, 'cboe': cboe, 'putcall': putcall}
+    return {'spy': spy, 'fred': fred, 'cboe': cboe}
 
 
 def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
     """경량 수집: 최근 N일치만 빠르게 가져옴 (30분 주기 예측용).
-    yfinance 장 중 호출 시 SPY/Cboe/PutCall은 실시간 데이터 포함.
+    yfinance 장 중 호출 시 SPY/Cboe는 실시간 데이터 포함.
     FRED는 일별 업데이트만 가능하므로 최신 확정값 사용.
     """
     # 1) SPY OHLCV — 장 중이면 실시간 가격 포함
@@ -183,24 +170,14 @@ def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
             print(f'  [CrashSurge-Light] {col}: 실패 — {e}')
             cboe[col] = pd.Series(dtype=float, name=col)  # 빈 Series
 
-    # 4) Put/Call 비율 — 장 중이면 실시간 포함
-    putcall = {}  # Put/Call 비율 저장용
-    for ticker, name in PUTCALL_MAP.items():  # Total, Equity
-        try:
-            h = yf.Ticker(ticker).history(period=f'{lookback_days}d', auto_adjust=True)  # 최근 N일
-            h = _strip_tz(h)  # 타임존 제거
-            putcall[name] = h['Close'].rename(name)  # 종가만 추출
-        except Exception:
-            putcall[name] = pd.Series(dtype=float, name=name)  # 빈 Series
-
     print(f'  [CrashSurge-Light] SPY: {len(spy)}행, 실시간 데이터 포함')
-    return {'spy': spy, 'fred': fred, 'cboe': cboe, 'putcall': putcall}  # 전체 데이터 반환
+    return {'spy': spy, 'fred': fred, 'cboe': cboe}  # 전체 데이터 반환
 
 
 # ── 피처 엔지니어링 ──
 
-def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict, putcall: dict) -> pd.DataFrame:
-    """46 피처 DataFrame 생성 (SPY index 기준, 일별)."""
+def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict) -> pd.DataFrame:
+    """44 피처 DataFrame 생성 (SPY index 기준, 일별)."""
     close = spy['Close']
     high = spy['High']
     low = spy['Low']
@@ -245,9 +222,6 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict, putcall: dict) -
     skew_s = cboe.get('SKEW', pd.Series(dtype=float))
     feat['SKEW_LEVEL'] = skew_s.reindex(spy.index).ffill()
 
-    pc_total = putcall.get('PUTCALL_TOTAL', pd.Series(dtype=float))
-    feat['PUTCALL_TOTAL'] = pc_total.reindex(spy.index).ffill()
-
     # ── 신용 (3개) ──
     for col in ['HY_OAS', 'BBB_OAS', 'CCC_OAS']:
         feat[col] = fred[col][col].reindex(spy.index).ffill()
@@ -269,9 +243,6 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict, putcall: dict) -
 
     vvix_s = cboe.get('VVIX', pd.Series(dtype=float))
     feat['VVIX_LEVEL'] = vvix_s.reindex(spy.index).ffill()
-
-    pc_eq = putcall.get('PUTCALL_EQUITY', pd.Series(dtype=float))
-    feat['PUTCALL_EQUITY'] = pc_eq.reindex(spy.index).ffill()
 
     vix_ann = (vix_s.reindex(spy.index).ffill() / 100)
     feat['VARIANCE_RISK_PREMIUM'] = vix_ann ** 2 - (feat['RV_21D'] / np.sqrt(252)) ** 2 * 252

@@ -105,7 +105,7 @@ def run_pipeline(light: bool = False) -> None:
             if cs_model is not None:
                 raw_light = fetch_crash_surge_light()  # 최근 데이터 경량 수집 (SPY/Cboe/PutCall 실시간 포함)
                 features_light = compute_features(raw_light['spy'], raw_light['fred'],
-                                                  raw_light['cboe'], raw_light['putcall'])  # 46 피처 계산
+                                                  raw_light['cboe'])  # 44 피처 계산
                 # Core 피처 NaN 제거, Aux fillna(0) 처리
                 from collector.crash_surge_data import CORE_FEATURES, AUX_FEATURES
                 import numpy as np
@@ -157,7 +157,7 @@ def run_pipeline(light: bool = False) -> None:
         print('\n[Step 7] 폭락/급등 전조 탐지...')
         try:
             raw = fetch_crash_surge_raw()
-            features = compute_features(raw['spy'], raw['fred'], raw['cboe'], raw['putcall'])
+            features = compute_features(raw['spy'], raw['fred'], raw['cboe'])
             labels = compute_labels(raw['spy']['Close'])
             datasets = prepare_datasets(features, labels, raw['spy']['Close'])
 

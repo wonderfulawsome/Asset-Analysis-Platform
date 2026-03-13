@@ -12,8 +12,8 @@ from scheduler.job import run_pipeline
 async def lifespan(_app: FastAPI):
     # 백그라운드 스레드에서 동작하는 스케줄러 인스턴스 생성
     scheduler = BackgroundScheduler()
-    # 경량 파이프라인: 30분마다 최근 데이터만 갱신 (거시지표 60일 + Fear&Greed + ETF 가격)
-    scheduler.add_job(run_pipeline, 'interval', minutes=30, id='light_pipeline', kwargs={'light': True})
+    # 경량 파이프라인: 10분마다 최근 데이터만 갱신 (거시지표 + ETF 가격 + 실시간 예측)
+    scheduler.add_job(run_pipeline, 'interval', minutes=10, id='light_pipeline', kwargs={'light': True})
     # 전체 파이프라인: 3시간마다 실행 (100년치 수집 + HMM/XGBoost 모델 학습)
     scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')
     # 서버 시작 30초 후 전체 파이프라인 1회 실행 (모델 학습 + 저장, Railway 재시작 대비)

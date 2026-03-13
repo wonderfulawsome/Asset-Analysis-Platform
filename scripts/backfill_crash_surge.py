@@ -33,7 +33,7 @@ def main():
     # 2) 원시 데이터 수집 + 피처 계산
     print('[백필] 데이터 수집 + 피처 계산...')
     raw = fetch_crash_surge_raw()
-    features = compute_features(raw['spy'], raw['fred'], raw['cboe'], raw['putcall'])
+    features = compute_features(raw['spy'], raw['fred'], raw['cboe'])
     labels = compute_labels(raw['spy']['Close'])
     datasets = prepare_datasets(features, labels, raw['spy']['Close'])
 
@@ -45,7 +45,7 @@ def main():
 
     # 4) 각 거래일에 대해 예측 + DB 저장
     for idx, row in recent.iterrows():
-        # 해당 날짜의 피처 벡터 (1, 46) 형태로 변환
+        # 해당 날짜의 피처 벡터 (1, 44) 형태로 변환
         X_row = row[ALL_FEATURES].values.reshape(1, -1)
         # 예측 실행
         result = predict_crash_surge(X_row, model_bundle)
