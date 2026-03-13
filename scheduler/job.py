@@ -48,34 +48,37 @@ def run_pipeline(light: bool = False) -> None:
     if not light:
         # Step 3: Noise vs Signal HMM 국면 판별
         print('\n[Step 3] Noise vs Signal 국면 판별...')
-        start_date = str(datetime.date.today() - datetime.timedelta(days=365 * 18 + 30))
+        try:
+            start_date = str(datetime.date.today() - datetime.timedelta(days=365 * 18 + 30))
 
-        # 3a: 데이터 수집
-        shiller = fetch_shiller()
-        fred = fetch_fred_regime()
-        stock_prices = fetch_sector_stocks(start_date)
-        amihud_data = fetch_amihud_stocks(start_date)
+            # 3a: 데이터 수집
+            shiller = fetch_shiller()
+            fred = fetch_fred_regime()
+            stock_prices = fetch_sector_stocks(start_date)
+            amihud_data = fetch_amihud_stocks(start_date)
 
-        # 3b: 월별 피처 계산
-        bundle = compute_monthly_features(shiller, fred, stock_prices, amihud_data)
+            # 3b: 월별 피처 계산
+            bundle = compute_monthly_features(shiller, fred, stock_prices, amihud_data)
 
-        # 3c: 모델 학습 또는 로드
-        model_bundle = load_model()
-        current_month = datetime.date.today().strftime('%Y-%m')
-        should_retrain = (model_bundle is None or
-                          model_bundle.get('train_month') != current_month)
-        if should_retrain:
-            print('[Step 3] 모델 재학습...')
-            model_bundle = train_hmm(bundle['features'], monthly_bundle=bundle)
-        else:
-            print(f'[Step 3] 기존 모델 사용 (학습 월: {model_bundle["train_month"]})')
+            # 3c: 모델 학습 또는 로드
+            model_bundle = load_model()
+            current_month = datetime.date.today().strftime('%Y-%m')
+            should_retrain = (model_bundle is None or
+                              model_bundle.get('train_month') != current_month)
+            if should_retrain:
+                print('[Step 3] 모델 재학습...')
+                model_bundle = train_hmm(bundle['features'], monthly_bundle=bundle)
+            else:
+                print(f'[Step 3] 기존 모델 사용 (학습 월: {model_bundle["train_month"]})')
 
-        # 3d: 일별 피처 계산 + 예측
-        daily_feat = compute_daily_features(bundle)
-        result = predict_regime(daily_feat, model_bundle)
+            # 3d: 일별 피처 계산 + 예측
+            daily_feat = compute_daily_features(bundle)
+            result = predict_regime(daily_feat, model_bundle)
 
-        # 3e: DB 저장
-        upsert_noise_regime(result)
+            # 3e: DB 저장
+            upsert_noise_regime(result)
+        except Exception as e:
+            print(f'[Step 3] Noise HMM 실패, 건너뜀: {e}')    # 실패해도 다음 Step 계속 진행
 
     # Step 4: Fear & Greed + PUT/CALL Ratio 수집 및 저장 (항상 실행)
     print('\n[Step 4] Fear & Greed 수집...')
@@ -138,53 +141,59 @@ def run_pipeline(light: bool = False) -> None:
     if not light:
         # Step 6: 섹터 경기국면 분석 (FRED 매크로 + 섹터 ETF + XGBoost)
         print('\n[Step 6] 섹터 경기국면 분석...')
-        sector_macro = fetch_sector_macro()
-        macro_records = to_sector_macro_records(sector_macro)
-        upsert_sector_macro(macro_records)
+        try:
+            sector_macro = fetch_sector_macro()
+            macro_records = to_sector_macro_records(sector_macro)
+            upsert_sector_macro(macro_records)
 
-        macro_start = str(sector_macro.index[0].date())
-        sector_ret, holding_ret = fetch_sector_etf_returns(macro_start)
-        cycle_result = run_sector_cycle(sector_macro, sector_ret, holding_ret)
-        upsert_sector_cycle(cycle_result)
+            macro_start = str(sector_macro.index[0].date())
+            sector_ret, holding_ret = fetch_sector_etf_returns(macro_start)
+            cycle_result = run_sector_cycle(sector_macro, sector_ret, holding_ret)
+            upsert_sector_cycle(cycle_result)
+        except Exception as e:
+            print(f'[Step 6] 섹터 경기국면 실패, 건너뜀: {e}')  # 실패해도 다음 Step 계속 진행
 
         # Step 7: XGBoost 폭락/급등 전조 탐지
         print('\n[Step 7] 폭락/급등 전조 탐지...')
-        raw = fetch_crash_surge_raw()
-        features = compute_features(raw['spy'], raw['fred'], raw['cboe'], raw['putcall'])
-        labels = compute_labels(raw['spy']['Close'])
-        datasets = prepare_datasets(features, labels, raw['spy']['Close'])
+        try:
+            raw = fetch_crash_surge_raw()
+            features = compute_features(raw['spy'], raw['fred'], raw['cboe'], raw['putcall'])
+            labels = compute_labels(raw['spy']['Close'])
+            datasets = prepare_datasets(features, labels, raw['spy']['Close'])
 
-        cs_model = load_crash_surge_model()
-        current_month = datetime.date.today().strftime('%Y-%m')
-        cs_should_retrain = (cs_model is None or
-                             cs_model.get('train_month') != current_month)
-        if cs_should_retrain:
-            print('[Step 7] 모델 재학습 (Optuna 50 trials)...')
-            X_tr, y_tr = datasets['train']
-            X_cal, y_cal = datasets['calib']
-            X_te, y_te = datasets['test']
-            X_dev, y_dev = datasets['dev']
-            X_full = datasets['df_full'][ALL_FEATURES].values
-            cs_model = train_crash_surge(X_tr, y_tr, X_cal, y_cal, X_te, y_te,
-                                         X_dev, y_dev, X_full, n_trials=50)
-        else:
-            print(f'[Step 7] 기존 모델 사용 (학습 월: {cs_model["train_month"]})')
+            cs_model = load_crash_surge_model()
+            current_month = datetime.date.today().strftime('%Y-%m')
+            cs_should_retrain = (cs_model is None or
+                                 cs_model.get('train_month') != current_month)
+            if cs_should_retrain:
+                print('[Step 7] 모델 재학습 (Optuna 50 trials)...')
+                X_tr, y_tr = datasets['train']
+                X_cal, y_cal = datasets['calib']
+                X_te, y_te = datasets['test']
+                X_dev, y_dev = datasets['dev']
+                X_full = datasets['df_full'][ALL_FEATURES].values
+                cs_model = train_crash_surge(X_tr, y_tr, X_cal, y_cal, X_te, y_te,
+                                             X_dev, y_dev, X_full, n_trials=50)
+            else:
+                print(f'[Step 7] 기존 모델 사용 (학습 월: {cs_model["train_month"]})')
 
-        latest_row = datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
-        cs_result = predict_crash_surge(latest_row, cs_model)
-        upsert_crash_surge(cs_result)
+            latest_row = datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
+            cs_result = predict_crash_surge(latest_row, cs_model)
+            upsert_crash_surge(cs_result)
 
-        # Step 7b: 전체 기간 crash/surge 점수 백필 (모델 학습/재학습 시에만)
-        if cs_should_retrain:
-            print('\n[Step 7b] 전체 기간 점수 백필...')
-            backfill_records = backfill_crash_surge(datasets['df_full'], cs_model)
-            # 100건씩 나눠서 upsert (Supabase 요청 크기 제한 대비)
-            batch_size = 100
-            for i in range(0, len(backfill_records), batch_size):
-                batch = backfill_records[i:i + batch_size]
-                for rec in batch:
-                    upsert_crash_surge(rec)
-            print(f'[Step 7b] 백필 완료: {len(backfill_records)}건 DB 저장')
+            # Step 7b: 전체 기간 crash/surge 점수 백필 (모델 학습/재학습 시에만)
+            if cs_should_retrain:
+                print('\n[Step 7b] 전체 기간 점수 백필...')
+                backfill_records = backfill_crash_surge(datasets['df_full'], cs_model)
+                # 100건씩 나눠서 upsert (Supabase 요청 크기 제한 대비)
+                batch_size = 100
+                for i in range(0, len(backfill_records), batch_size):
+                    batch = backfill_records[i:i + batch_size]
+                    for rec in batch:
+                        upsert_crash_surge(rec)
+                print(f'[Step 7b] 백필 완료: {len(backfill_records)}건 DB 저장')
+        except Exception as e:
+            print(f'[Step 7] 폭락/급등 전조 실패, 건너뜀: {e}')  # 실패해도 파이프라인 완료 처리
 
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')
