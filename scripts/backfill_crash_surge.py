@@ -33,7 +33,8 @@ def main():
     # 2) 원시 데이터 수집 + 피처 계산
     print('[백필] 데이터 수집 + 피처 계산...')
     raw = fetch_crash_surge_raw()
-    features = compute_features(raw['spy'], raw['fred'], raw['cboe'])
+    features = compute_features(raw['spy'], raw['fred'], raw['cboe'],
+                               raw['yahoo_macro'])
     labels = compute_labels(raw['spy']['Close'])
     datasets = prepare_datasets(features, labels, raw['spy']['Close'])
 

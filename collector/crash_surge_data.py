@@ -18,20 +18,24 @@ warnings.filterwarnings('ignore')
 HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 FRED_BASE = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id='
 
-# FRED 12개 시리즈
+# FRED 8개 시리즈 (Yahoo로 대체 불가능한 것만 유지)
 FRED_MAP = {
-    'BAMLH0A0HYM2': 'HY_OAS',
-    'BAMLC0A4CBBB': 'BBB_OAS',
-    'BAMLH0A3HYC':  'CCC_OAS',
-    'DGS10':        'DGS10',
-    'T10Y3M':       'T10Y3M',
-    'DFII10':       'DFII10',
-    'T10YIE':       'T10YIE',
-    'SOFR':         'SOFR',
-    'EFFR':         'EFFR',
-    'NFCI':         'NFCI',
-    'DTWEXBGS':     'DTWEXBGS',
-    'DCOILWTICO':   'WTI',
+    'BAMLH0A0HYM2': 'HY_OAS',   # HY 신용스프레드 (FRED 전용)
+    'BAMLC0A4CBBB': 'BBB_OAS',   # BBB 신용스프레드 (FRED 전용)
+    'BAMLH0A3HYC':  'CCC_OAS',   # CCC 신용스프레드 (FRED 전용)
+    'DFII10':       'DFII10',    # 10년 TIPS 실질금리 (FRED 전용)
+    'T10YIE':       'T10YIE',    # 10년 기대인플레 (FRED 전용)
+    'SOFR':         'SOFR',      # SOFR 금리 (FRED 전용)
+    'EFFR':         'EFFR',      # EFFR 금리 (FRED 전용)
+    'NFCI':         'NFCI',      # 금융여건지수 (FRED 전용)
+}
+
+# Yahoo Finance로 대체한 시리즈 (기존 FRED DGS10, T10Y3M, DTWEXBGS, DCOILWTICO)
+YAHOO_MACRO_MAP = {
+    '^TNX':      'DGS10',      # 10년 국채금리 (FRED DGS10 대체)
+    '^IRX':      'IRX_3M',     # 3개월 국채금리 (T10Y3M 계산용)
+    'DX-Y.NYB':  'DTWEXBGS',   # 달러인덱스 (FRED DTWEXBGS 대체)
+    'CL=F':      'WTI',        # WTI 원유선물 (FRED DCOILWTICO 대체)
 }
 
 # Cboe 지수
@@ -99,13 +103,30 @@ def _strip_tz(obj):
     return obj
 
 
+def _fetch_yahoo_macro(ticker: str, col_name: str, start: str = None,
+                       period: str = None) -> pd.Series:
+    """Yahoo Finance에서 매크로 시리즈 수집 (종가 기준)."""
+    try:
+        if start:  # 전체 수집 (fetch_crash_surge_raw)
+            h = yf.Ticker(ticker).history(start=start, auto_adjust=True)
+        else:  # 경량 수집 (fetch_crash_surge_light)
+            h = yf.Ticker(ticker).history(period=period, auto_adjust=True)
+        h = _strip_tz(h)  # 타임존 제거
+        s = h['Close'].rename(col_name)  # 종가만 추출
+        s = s[~s.index.duplicated(keep='last')]  # 중복 인덱스 제거
+        return s
+    except Exception as e:
+        print(f'  [Yahoo] {ticker}({col_name}): 실패 — {e}')
+        return pd.Series(dtype=float, name=col_name)  # 빈 Series 반환
+
+
 # ── 데이터 수집 ──
 
 def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
-    """원시 데이터 수집: SPY OHLCV + FRED 12개 + Cboe 5개.
+    """원시 데이터 수집: SPY OHLCV + FRED 8개 + Yahoo 매크로 4개 + Cboe 5개.
 
     Returns:
-        {'spy': DataFrame, 'fred': dict, 'cboe': dict}
+        {'spy': DataFrame, 'fred': dict, 'cboe': dict, 'yahoo_macro': dict}
     """
     # 1) SPY OHLCV
     print('  [CrashSurge] SPY OHLCV 수집...')
@@ -113,7 +134,7 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
     spy = _strip_tz(spy_raw)[['Open', 'High', 'Low', 'Close', 'Volume']]
     print(f'  [CrashSurge] SPY: {spy.index[0].date()} ~ {spy.index[-1].date()} ({len(spy)}행)')
 
-    # 2) FRED 12개
+    # 2) FRED 8개 (신용스프레드, 실질금리, 기대인플레, SOFR, EFFR, NFCI)
     fred = {}
     print('  [CrashSurge] FRED 시리즈 수집...')
     for sid, col in FRED_MAP.items():
@@ -123,7 +144,13 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
             print(f'  [CrashSurge] {col}: 실패 — {e}')
             fred[col] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))
 
-    # 3) Cboe 5개
+    # 3) Yahoo 매크로 4개 (금리, 달러, 원유 — FRED 대체)
+    yahoo_macro = {}  # Yahoo 매크로 시리즈 저장용
+    print('  [CrashSurge] Yahoo 매크로 수집...')
+    for ticker, col in YAHOO_MACRO_MAP.items():  # ^TNX, ^IRX, DX-Y.NYB, CL=F
+        yahoo_macro[col] = _fetch_yahoo_macro(ticker, col, start=start)  # 전체 기간 수집
+
+    # 4) Cboe 5개
     cboe = {}
     print('  [CrashSurge] Cboe 지수 수집...')
     for ticker, col in CBOE_MAP.items():
@@ -135,12 +162,12 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
             print(f'  [CrashSurge] {col}: 실패 — {e}')
             cboe[col] = pd.Series(dtype=float, name=col)
 
-    return {'spy': spy, 'fred': fred, 'cboe': cboe}
+    return {'spy': spy, 'fred': fred, 'cboe': cboe, 'yahoo_macro': yahoo_macro}
 
 
 def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
     """경량 수집: 최근 N일치만 빠르게 가져옴 (30분 주기 예측용).
-    yfinance 장 중 호출 시 SPY/Cboe는 실시간 데이터 포함.
+    yfinance 장 중 호출 시 SPY/Cboe/Yahoo매크로는 실시간 데이터 포함.
     FRED는 일별 업데이트만 가능하므로 최신 확정값 사용.
     """
     # 1) SPY OHLCV — 장 중이면 실시간 가격 포함
@@ -148,17 +175,23 @@ def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
     spy_raw = yf.Ticker('SPY').history(period=f'{lookback_days}d', auto_adjust=True)  # 최근 N일
     spy = _strip_tz(spy_raw)[['Open', 'High', 'Low', 'Close', 'Volume']]  # OHLCV만 추출
 
-    # 2) FRED 12개 — 일별 확정값 (실시간 불가)
+    # 2) FRED 8개 — 일별 확정값 (실시간 불가)
     fred = {}  # FRED 시리즈 저장용
     print('  [CrashSurge-Light] FRED 시리즈 수집...')
-    for sid, col in FRED_MAP.items():  # 12개 시리즈 순회
+    for sid, col in FRED_MAP.items():  # 8개 시리즈 순회
         try:
             fred[col] = _fetch_fred(sid, col)  # CSV 다운로드
         except Exception as e:
             print(f'  [CrashSurge-Light] {col}: 실패 — {e}')
             fred[col] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))  # 빈 DataFrame
 
-    # 3) Cboe 5개 — 장 중이면 실시간 가격 포함
+    # 3) Yahoo 매크로 4개 — 장 중이면 실시간 가격 포함
+    yahoo_macro = {}  # Yahoo 매크로 시리즈 저장용
+    print('  [CrashSurge-Light] Yahoo 매크로 수집...')
+    for ticker, col in YAHOO_MACRO_MAP.items():  # ^TNX, ^IRX, DX-Y.NYB, CL=F
+        yahoo_macro[col] = _fetch_yahoo_macro(ticker, col, period=f'{lookback_days}d')  # 최근 N일
+
+    # 4) Cboe 5개 — 장 중이면 실시간 가격 포함
     cboe = {}  # Cboe 지수 저장용
     print('  [CrashSurge-Light] Cboe 지수 수집...')
     for ticker, col in CBOE_MAP.items():  # VIX, VIX3M, VIX9D, VVIX, SKEW
@@ -171,13 +204,24 @@ def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
             cboe[col] = pd.Series(dtype=float, name=col)  # 빈 Series
 
     print(f'  [CrashSurge-Light] SPY: {len(spy)}행, 실시간 데이터 포함')
-    return {'spy': spy, 'fred': fred, 'cboe': cboe}  # 전체 데이터 반환
+    return {'spy': spy, 'fred': fred, 'cboe': cboe, 'yahoo_macro': yahoo_macro}  # 전체 데이터 반환
 
 
 # ── 피처 엔지니어링 ──
 
-def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict) -> pd.DataFrame:
-    """44 피처 DataFrame 생성 (SPY index 기준, 일별)."""
+def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict,
+                     yahoo_macro: dict = None) -> pd.DataFrame:
+    """44 피처 DataFrame 생성 (SPY index 기준, 일별).
+
+    Args:
+        spy: SPY OHLCV DataFrame
+        fred: FRED 시리즈 dict (8개)
+        cboe: Cboe 지수 dict (5개)
+        yahoo_macro: Yahoo 매크로 dict (4개: DGS10, IRX_3M, DTWEXBGS, WTI)
+    """
+    if yahoo_macro is None:  # 하위호환성 (기존 호출부 보호)
+        yahoo_macro = {}
+
     close = spy['Close']
     high = spy['High']
     low = spy['Low']
@@ -208,7 +252,7 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict) -> pd.DataFrame:
     feat['EWMA_VOL_L94'] = np.sqrt(ewma_var) * np.sqrt(252)
     feat['VOL_OF_VOL_21D'] = feat['RV_5D'].rolling(21).std()
 
-    # ── 옵션/내재변동성 (6개) ──
+    # ── 옵션/내재변동성 (5개) ──
     vix_s = cboe.get('VIX', pd.Series(dtype=float))
     feat['VIX_LEVEL'] = np.log(vix_s.reindex(spy.index).ffill().clip(lower=1))
     feat['VIX_CHANGE_1D'] = vix_s.reindex(spy.index).ffill().pct_change(1)
@@ -222,22 +266,28 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict) -> pd.DataFrame:
     skew_s = cboe.get('SKEW', pd.Series(dtype=float))
     feat['SKEW_LEVEL'] = skew_s.reindex(spy.index).ffill()
 
-    # ── 신용 (3개) ──
+    # ── 신용 (3개) — FRED 전용 ──
     for col in ['HY_OAS', 'BBB_OAS', 'CCC_OAS']:
         feat[col] = fred[col][col].reindex(spy.index).ffill()
 
-    # ── 금리 (2개) ──
-    feat['DGS10_LEVEL'] = fred['DGS10']['DGS10'].reindex(spy.index).ffill()
-    feat['T10Y3M_SLOPE'] = fred['T10Y3M']['T10Y3M'].reindex(spy.index).ffill()
+    # ── 금리 (2개) — Yahoo ^TNX, ^IRX 사용 ──
+    dgs10_s = yahoo_macro.get('DGS10', pd.Series(dtype=float))  # ^TNX (10년 금리)
+    irx_s = yahoo_macro.get('IRX_3M', pd.Series(dtype=float))   # ^IRX (3개월 금리)
+    feat['DGS10_LEVEL'] = dgs10_s.reindex(spy.index).ffill()    # 10년 국채금리
+    # T10Y3M = 10년 금리 - 3개월 금리 (수익률곡선 기울기)
+    feat['T10Y3M_SLOPE'] = (dgs10_s.reindex(spy.index).ffill()
+                            - irx_s.reindex(spy.index).ffill())
 
-    # ── 크로스에셋 (2개) ──
-    dxy_s = fred['DTWEXBGS']['DTWEXBGS'].reindex(spy.index).ffill()
-    feat['DTWEXBGS_RET_5D'] = np.log(dxy_s / dxy_s.shift(5))
+    # ── 크로스에셋 (2개) — Yahoo DX-Y.NYB, CL=F 사용 ──
+    dxy_s = yahoo_macro.get('DTWEXBGS', pd.Series(dtype=float))  # DX-Y.NYB (달러인덱스)
+    dxy_ff = dxy_s.reindex(spy.index).ffill()
+    feat['DTWEXBGS_RET_5D'] = np.log(dxy_ff / dxy_ff.shift(5))  # 달러 5일 수익률
 
-    wti_s = fred['WTI']['WTI'].reindex(spy.index).ffill()
-    feat['WTI_RET_5D'] = np.log(wti_s / wti_s.shift(5))
+    wti_s = yahoo_macro.get('WTI', pd.Series(dtype=float))  # CL=F (WTI 원유)
+    wti_ff = wti_s.reindex(spy.index).ffill()
+    feat['WTI_RET_5D'] = np.log(wti_ff / wti_ff.shift(5))  # WTI 5일 수익률
 
-    # ── Tier 2 보조 (12개) ──
+    # ── Tier 2 보조 ──
     vix9d_s = cboe.get('VIX9D', pd.Series(dtype=float))
     feat['VIX9D_MINUS_VIX'] = vix9d_s.reindex(spy.index).ffill() - vix_s.reindex(spy.index).ffill()
 
@@ -261,20 +311,21 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict) -> pd.DataFrame:
     dv_std = dv.rolling(20).std()
     feat['SP500_DOLLAR_VOLUME_Z_20D'] = (dv - dv_mean) / dv_std.replace(0, np.nan)
 
-    feat['DFII10_REAL10Y'] = fred['DFII10']['DFII10'].reindex(spy.index).ffill()
-    feat['T10YIE_BREAKEVEN'] = fred['T10YIE']['T10YIE'].reindex(spy.index).ffill()
+    feat['DFII10_REAL10Y'] = fred['DFII10']['DFII10'].reindex(spy.index).ffill()  # FRED 전용
+    feat['T10YIE_BREAKEVEN'] = fred['T10YIE']['T10YIE'].reindex(spy.index).ffill()  # FRED 전용
 
-    sofr_s = fred['SOFR']['SOFR'].reindex(spy.index).ffill()
-    effr_s = fred['EFFR']['EFFR'].reindex(spy.index).ffill()
+    sofr_s = fred['SOFR']['SOFR'].reindex(spy.index).ffill()  # FRED 전용
+    effr_s = fred['EFFR']['EFFR'].reindex(spy.index).ffill()  # FRED 전용
     feat['SOFR_MINUS_EFFR'] = sofr_s - effr_s
 
-    nfci_s = fred['NFCI']['NFCI'].reindex(spy.index).ffill()
+    nfci_s = fred['NFCI']['NFCI'].reindex(spy.index).ffill()  # FRED 전용
     feat['NFCI_LEVEL'] = nfci_s
 
-    dgs10_chg = fred['DGS10']['DGS10'].reindex(spy.index).ffill().diff()
-    feat['CORR_EQ_DGS10_60D'] = daily_ret.rolling(60).corr(dgs10_chg)
+    # CORR_EQ_DGS10_60D — Yahoo ^TNX 사용
+    dgs10_chg = dgs10_s.reindex(spy.index).ffill().diff()  # 10년 금리 일변화
+    feat['CORR_EQ_DGS10_60D'] = daily_ret.rolling(60).corr(dgs10_chg)  # 주식-금리 상관관계
 
-    # ── v2: 크레딧 스프레드 변화율 (6개) ──
+    # ── v2: 크레딧 스프레드 변화율 (6개) — FRED 전용 ──
     for col in ['HY_OAS', 'BBB_OAS', 'CCC_OAS']:
         s = fred[col][col].reindex(spy.index).ffill()
         feat[f'{col}_CHG_5D'] = s.diff(5)
