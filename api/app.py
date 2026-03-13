@@ -16,10 +16,10 @@ async def lifespan(_app: FastAPI):
     scheduler.add_job(run_pipeline, 'interval', minutes=30, id='light_pipeline', kwargs={'light': True})
     # 전체 파이프라인: 3시간마다 실행 (100년치 수집 + HMM/XGBoost 모델 학습)
     scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')
-    # 서버 시작 30초 후 경량 파이프라인 1회 실행 (Windows 소켓 충돌 방지)
+    # 서버 시작 30초 후 전체 파이프라인 1회 실행 (모델 학습 + 저장, Railway 재시작 대비)
     from datetime import datetime, timedelta
     scheduler.add_job(run_pipeline, 'date', run_date=datetime.now() + timedelta(seconds=30),
-                      id='init_pipeline', kwargs={'light': True})
+                      id='init_pipeline')
     scheduler.start()
     # FastAPI 앱 실행 구간 (요청 처리)
     yield
