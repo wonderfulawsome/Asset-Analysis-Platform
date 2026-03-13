@@ -39,12 +39,16 @@ FEATURE_NAMES = [
     'realized_vol',
 ]
 
-# FRED 시리즈 ID
+# FRED 시리즈 ID (VIX/VIX3M은 Yahoo Finance로 대체)
 FRED_SERIES = {
     'DFII10': 'tips_rate',       # 10년 TIPS 실질금리
-    'VIXCLS': 'vix',             # VIX 일별
-    'VXVCLS': 'vix3m',           # VIX3M 일별
     'BAMLH0A0HYM2': 'hy_spread', # ICE BofA HY OAS
+}
+
+# Yahoo Finance로 수집하는 변동성 지수 (FRED 대체)
+YAHOO_VOL_TICKERS = {
+    '^VIX': 'vix',               # VIX 일별 (FRED VIXCLS 대체)
+    '^VIX3M': 'vix3m',           # VIX3M 일별 (FRED VXVCLS 대체)
 }
 
 
@@ -84,6 +88,27 @@ def _fetch_yahoo_monthly(ticker: str, years: int = 3) -> pd.Series:
     closes = result['indicators']['adjclose'][0]['adjclose']
     index = pd.to_datetime(timestamps, unit='s').normalize()
     return pd.Series(closes, index=index, name='P')
+
+
+def _fetch_yahoo_daily(ticker: str, years: int = 20) -> pd.DataFrame:
+    """Yahoo Finance v8 API로 일별 종가 DataFrame 반환 (VIX/VIX3M용)."""
+    today = datetime.date.today()                        # 오늘 날짜
+    from_date = today - datetime.timedelta(days=365 * years)  # 시작일
+    epoch = datetime.datetime(1970, 1, 1)                # Unix epoch
+    from_ts = int((datetime.datetime.combine(from_date, datetime.time()) - epoch).total_seconds())  # 시작 timestamp
+    to_ts = int((datetime.datetime.combine(today, datetime.time()) - epoch).total_seconds())  # 종료 timestamp
+    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}'  # API URL
+    params = {'interval': '1d', 'period1': from_ts, 'period2': to_ts}  # 일봉, 기간
+    resp = requests.get(url, params=params, headers=HEADERS, timeout=15)  # HTTP 요청
+    resp.raise_for_status()                              # 에러 시 예외
+    result = resp.json()['chart']['result'][0]           # 차트 데이터
+    timestamps = result['timestamp']                     # 타임스탬프 배열
+    closes = result['indicators']['adjclose'][0]['adjclose']  # 수정 종가 배열
+    index = pd.to_datetime(timestamps, unit='s').normalize()  # 날짜 인덱스
+    col_name = YAHOO_VOL_TICKERS.get(ticker, ticker)     # 내부 컬럼명 매핑
+    df = pd.DataFrame({col_name: closes}, index=index)   # DataFrame 생성
+    df = df[~df.index.duplicated(keep='last')]           # 중복 날짜 제거
+    return df
 
 
 def _strip_tz(s: pd.Series) -> pd.Series:
@@ -175,14 +200,25 @@ def fetch_shiller() -> pd.DataFrame:
 
 
 def fetch_fred_regime() -> dict:
-    """FRED 4개 시리즈 수집 → dict[str, DataFrame] 반환."""
+    """FRED 2개(TIPS, HY) + Yahoo 2개(VIX, VIX3M) 수집 → dict[str, DataFrame] 반환."""
+    result = {}                                          # 결과 딕셔너리
+
+    # ── FRED 시리즈 수집 (TIPS 실질금리, HY 스프레드) ──
     print('[NoiseHMM] FRED 데이터 수집 중...')
-    result = {}
-    for series_id, col_name in FRED_SERIES.items():
-        df = _fetch_fred(series_id, col_name)
-        result[col_name] = df
-        monthly = df[col_name].resample('MS').last().dropna()
+    for series_id, col_name in FRED_SERIES.items():      # DFII10, BAMLH0A0HYM2
+        df = _fetch_fred(series_id, col_name)            # CSV 다운로드
+        result[col_name] = df                            # 결과에 저장
+        monthly = df[col_name].resample('MS').last().dropna()  # 월별 집계
         print(f'  {series_id} ({col_name}): {len(monthly)}개월')
+
+    # ── Yahoo Finance로 VIX/VIX3M 수집 (FRED 대체) ──
+    print('[NoiseHMM] Yahoo Finance VIX/VIX3M 수집 중...')
+    for ticker, col_name in YAHOO_VOL_TICKERS.items():   # ^VIX, ^VIX3M
+        df = _fetch_yahoo_daily(ticker)                  # Yahoo v8 API 호출
+        result[col_name] = df                            # 결과에 저장
+        monthly = df[col_name].resample('MS').last().dropna()  # 월별 집계
+        print(f'  {ticker} ({col_name}): {len(monthly)}개월')
+
     return result
 
 
@@ -548,18 +584,19 @@ def fetch_noise_regime_light(model_bundle: dict, lookback_days: int = 60) -> np.
     else:
         ami_val = 0.0                                    # 폴백값
 
-    # ── ⑤ FRED 실시간: VIX, VIX3M, HY_OAS ──
-    print('  [NoiseHMM-Light] FRED 실시간 지표 수집...')
+    # ── ⑤ Yahoo Finance 실시간: VIX, VIX3M ──
+    print('  [NoiseHMM-Light] Yahoo VIX/VIX3M 수집...')
     try:
-        vix_df = _fetch_fred('VIXCLS', 'vix')           # VIX 일별
-        vix3m_df = _fetch_fred('VXVCLS', 'vix3m')       # VIX3M 일별
-        latest_vix = float(vix_df['vix'].dropna().iloc[-1])  # 최신 VIX
-        latest_vix3m = float(vix3m_df['vix3m'].dropna().iloc[-1])  # 최신 VIX3M
+        vix_hist = yf.Ticker('^VIX').history(period='5d', auto_adjust=True)  # VIX 최근 5일
+        vix3m_hist = yf.Ticker('^VIX3M').history(period='5d', auto_adjust=True)  # VIX3M 최근 5일
+        latest_vix = float(vix_hist['Close'].dropna().iloc[-1])  # 최신 VIX 종가
+        latest_vix3m = float(vix3m_hist['Close'].dropna().iloc[-1])  # 최신 VIX3M 종가
         vt_val = latest_vix / latest_vix3m               # VIX 텀 스트럭처 = VIX/VIX3M
     except Exception as e:
         print(f'    VIX term 실패, 캐시 사용: {e}')      # 실패 시 캐시 사용
         vt_val = vt_val_cached                           # 모델 번들의 캐시값
 
+    # ── ⑤-B FRED 실시간: HY_OAS (Yahoo 대체 불가) ──
     try:
         hy_df = _fetch_fred('BAMLH0A0HYM2', 'hy_spread')  # HY OAS 수집
         hy_val = float(hy_df['hy_spread'].dropna().iloc[-1])  # 최신 HY 스프레드
