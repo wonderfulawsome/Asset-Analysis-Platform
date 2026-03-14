@@ -684,7 +684,7 @@ function switchTab(idx, addHistory) {
     window._signalLoaded = true;
     loadCrashSurge();
     loadDirection();
-    loadCrashSurgeHistory();
+    loadCrashSurgeChart();
   }
   // 거시경제 탭 최초 진입 시 데이터 로드
   if (idx === 2 && typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
@@ -829,6 +829,168 @@ async function loadCrashSurge() {
     }
   } catch (e) {
     console.error('Crash/Surge load error:', e);
+  }
+}
+
+// ── SVG 꺾은선 그래프 공용 함수 ──
+function renderLineChart(containerId, points, options = {}) {
+  const el = document.getElementById(containerId);                // 컨테이너 요소
+  if (!el || points.length < 2) {                                  // 데이터 부족 시 안내
+    if (el) el.innerHTML = '<div style="text-align:center;font-size:13px;color:var(--sub);padding:8px 0">데이터 없음</div>';
+    return;
+  }
+
+  const W = el.clientWidth - 2;                                    // SVG 너비 (패딩 고려)
+  const H = options.height || 140;                                 // SVG 높이
+  const pad = { top: 12, right: 12, bottom: 22, left: 36 };       // 축 라벨 여백
+  const cW = W - pad.left - pad.right;                             // 차트 영역 너비
+  const cH = H - pad.top - pad.bottom;                             // 차트 영역 높이
+
+  const vals = points.map(p => p.value);                           // Y값 배열 추출
+  const rawMin = Math.min(...vals);                                // Y 최솟값
+  const rawMax = Math.max(...vals);                                // Y 최댓값
+  const hasZero = options.zeroLine !== false;                      // 0 기준선 표시 여부
+  const yMin = hasZero ? Math.min(rawMin, 0) - 5 : rawMin - Math.abs(rawMax - rawMin) * 0.1; // Y축 하한
+  const yMax = hasZero ? Math.max(rawMax, 0) + 5 : rawMax + Math.abs(rawMax - rawMin) * 0.1; // Y축 상한
+  const yRange = yMax - yMin || 1;                                 // Y축 범위 (0 방지)
+
+  const x = i => pad.left + (i / (points.length - 1)) * cW;       // X좌표 계산 함수
+  const y = v => pad.top + (1 - (v - yMin) / yRange) * cH;        // Y좌표 계산 함수
+
+  // 꺾은선 경로 생성
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  // 영역 채우기 경로 (선 아래쪽)
+  const zeroY = hasZero ? y(0) : y(yMin);                         // 기준선 Y좌표
+  const areaPath = linePath + ` L${x(points.length - 1).toFixed(1)},${zeroY.toFixed(1)} L${x(0).toFixed(1)},${zeroY.toFixed(1)} Z`;
+
+  const lineColor = options.color || 'var(--accent)';              // 선 색상
+  const gradId = containerId + '-grad';                            // 그라데이션 ID
+
+  // X축 라벨 (7개 균등 배치)
+  const labelCount = Math.min(7, points.length);                   // 라벨 개수
+  const labelStep = Math.max(1, Math.floor((points.length - 1) / (labelCount - 1))); // 라벨 간격
+  let xLabels = '';                                                // X축 라벨 SVG
+  for (let i = 0; i < points.length; i += labelStep) {
+    xLabels += `<text class="chart-label" x="${x(i).toFixed(1)}" y="${H - 2}" text-anchor="middle">${points[i].label}</text>`;
+  }
+
+  // Y축 라벨 (5개 균등)
+  let yLabels = '';                                                // Y축 라벨 SVG
+  let gridLines = '';                                              // 격자선 SVG
+  for (let i = 0; i <= 4; i++) {
+    const val = yMin + (yRange * i) / 4;                           // Y값 계산
+    const yPos = y(val);                                           // Y좌표
+    yLabels += `<text class="chart-label" x="${pad.left - 4}" y="${yPos.toFixed(1)}" text-anchor="end" dominant-baseline="middle">${val.toFixed(0)}</text>`;
+    gridLines += `<line class="chart-grid-line" x1="${pad.left}" y1="${yPos.toFixed(1)}" x2="${W - pad.right}" y2="${yPos.toFixed(1)}"/>`;
+  }
+
+  // 0 기준선
+  let zeroLineStr = '';                                            // 0 기준선 SVG
+  if (hasZero && yMin < 0 && yMax > 0) {
+    zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(0).toFixed(1)}" x2="${W - pad.right}" y2="${y(0).toFixed(1)}"/>`;
+  }
+
+  // 데이터 포인트 (점)
+  const dots = points.map((p, i) => {
+    const dotColor = options.dotColor ? options.dotColor(p.value) : lineColor;  // 점 색상
+    return `<circle class="chart-dot" cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" fill="${dotColor}" data-idx="${i}"/>`;
+  }).join('');
+
+  // SVG 조립
+  el.innerHTML = `<div class="line-chart-wrap">
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${lineColor}" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
+      </linearGradient></defs>
+      ${gridLines}
+      ${zeroLineStr}
+      <path class="chart-area" d="${areaPath}" fill="url(#${gradId})"/>
+      <path class="chart-line" d="${linePath}" stroke="${lineColor}"/>
+      ${dots}
+      ${xLabels}
+      ${yLabels}
+    </svg>
+    <div class="chart-tooltip" id="${containerId}-tip"></div>
+  </div>`;
+
+  // 터치/호버 툴팁
+  const wrap = el.querySelector('.line-chart-wrap');                // 래퍼 요소
+  const tip = document.getElementById(containerId + '-tip');       // 툴팁 요소
+  const svg = wrap.querySelector('svg');                           // SVG 요소
+  const showTip = (idx) => {                                       // 툴팁 표시 함수
+    const p = points[idx];                                         // 해당 데이터
+    const sign = p.value > 0 ? '+' : '';                           // 양수 부호
+    tip.textContent = `${p.fullLabel || p.label}: ${sign}${p.value.toFixed(1)}`;  // 텍스트
+    const cx = x(idx);                                             // X좌표
+    tip.style.left = `${cx}px`;                                    // 위치 지정
+    tip.style.top = `${y(p.value) - 28}px`;                        // 점 위에 표시
+    tip.style.transform = 'translateX(-50%)';                      // 중앙 정렬
+    tip.style.opacity = '1';                                       // 표시
+  };
+  const hideTip = () => { tip.style.opacity = '0'; };             // 툴팁 숨김
+  svg.querySelectorAll('.chart-dot').forEach(dot => {              // 각 점에 이벤트
+    dot.addEventListener('mouseenter', () => showTip(+dot.dataset.idx));  // 마우스 진입
+    dot.addEventListener('mouseleave', hideTip);                          // 마우스 이탈
+  });
+  svg.addEventListener('touchstart', e => {                        // 터치 이벤트
+    const rect = svg.getBoundingClientRect();                      // SVG 위치
+    const tx = (e.touches[0].clientX - rect.left) / rect.width * W;  // 터치 X좌표
+    let closest = 0, minDist = Infinity;                           // 가장 가까운 점 탐색
+    points.forEach((_, i) => { const d = Math.abs(x(i) - tx); if (d < minDist) { minDist = d; closest = i; } });
+    showTip(closest);                                              // 가장 가까운 점 툴팁
+  }, { passive: true });
+  svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });  // 터치 종료 후 숨김
+}
+
+// ── Crash/Surge Net Score 30일 그래프 ──
+async function loadCrashSurgeChart() {
+  try {
+    const res = await fetch('/api/crash-surge/history?days=30');    // 30일 히스토리 요청
+    const list = await res.json();                                  // JSON 파싱
+    if (!Array.isArray(list) || list.length < 2) return;            // 데이터 부족 시 종료
+
+    const sorted = list.slice().sort((a, b) => a.date.localeCompare(b.date));  // 날짜 오름차순 정렬
+    const points = sorted.map(r => ({                              // 그래프 포인트 변환
+      label: r.date.slice(5),                                      // MM-DD 형식 라벨
+      fullLabel: r.date,                                           // 전체 날짜 (툴팁용)
+      value: r.net_score || 0,                                     // net_score 값
+    }));
+
+    const lastVal = points[points.length - 1].value;               // 최신 값
+    const lineColor = lastVal >= 0 ? 'var(--green)' : 'var(--red)';  // 양수 초록, 음수 빨강
+
+    renderLineChart('cs-chart', points, {                          // 그래프 렌더링
+      color: lineColor,                                            // 선 색상
+      zeroLine: true,                                              // 0 기준선 표시
+      dotColor: v => v >= 0 ? 'var(--green)' : 'var(--red)',       // 점 색상 (값 기반)
+    });
+  } catch (e) {
+    console.error('CS chart error:', e);                           // 에러 로그
+  }
+}
+
+// ── Noise Score 30일 그래프 ──
+async function loadNoiseChart() {
+  try {
+    const res = await fetch('/api/regime/history?days=30');         // 30일 국면 히스토리 요청
+    const list = await res.json();                                  // JSON 파싱
+    if (!Array.isArray(list) || list.length < 2) return;            // 데이터 부족 시 종료
+
+    const sorted = list.slice().sort((a, b) => a.date.localeCompare(b.date));  // 날짜 오름차순 정렬
+    const points = sorted.map(r => ({                              // 그래프 포인트 변환
+      label: r.date.slice(5),                                      // MM-DD 형식 라벨
+      fullLabel: r.date,                                           // 전체 날짜 (툴팁용)
+      value: r.noise_score != null ? r.noise_score : 0,            // noise_score 값
+    }));
+
+    renderLineChart('nr-chart', points, {                          // 그래프 렌더링
+      color: 'var(--accent)',                                      // 보라색 선
+      zeroLine: true,                                              // 0 기준선 표시
+      dotColor: v => v >= 0 ? 'var(--red)' : 'var(--green)',       // 양수(노이즈↑) 빨강, 음수(펀더멘털) 초록
+    });
+  } catch (e) {
+    console.error('NR chart error:', e);                           // 에러 로그
   }
 }
 
@@ -1175,7 +1337,7 @@ function dismissSplash() {
   const safetyTimer = setTimeout(safeDismiss, 6000);
 
   try {
-    await Promise.allSettled([loadRegime(), loadMacro(), loadFeed(), loadMarketOverview()]);
+    await Promise.allSettled([loadRegime(), loadMacro(), loadFeed(), loadMarketOverview(), loadNoiseChart()]);
   } catch (e) {
     console.error('Init load error:', e);
   }

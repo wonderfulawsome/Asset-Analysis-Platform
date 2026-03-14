@@ -1247,6 +1247,59 @@ body {
   transform: translateX(-50%) translateY(0);       /* 원래 위치로 이동 */
 }
 
+/* ── 꺾은선 그래프 (SVG Line Chart) ─────────── */
+.line-chart-wrap {
+  position: relative;                            /* 툴팁 기준점 */
+  width: 100%;                                   /* 부모 너비에 맞춤 */
+  margin: 8px 0 12px;                            /* 상하 여백 */
+}
+.line-chart-wrap svg {
+  display: block;                                /* 인라인 갭 제거 */
+  width: 100%;                                   /* 반응형 */
+}
+.line-chart-wrap .chart-grid-line {
+  stroke: var(--sep);                            /* 격자선 색상 */
+  stroke-width: 0.5;                             /* 얇은 격자선 */
+}
+.line-chart-wrap .chart-zero-line {
+  stroke: var(--sub2);                           /* 0 기준선 색상 */
+  stroke-width: 1;                               /* 기준선 두께 */
+  stroke-dasharray: 4 3;                         /* 점선 패턴 */
+}
+.line-chart-wrap .chart-line {
+  fill: none;                                    /* 채우기 없음 */
+  stroke-width: 2;                               /* 선 두께 */
+  stroke-linecap: round;                         /* 선 끝 둥글게 */
+  stroke-linejoin: round;                        /* 꺾임 둥글게 */
+}
+.line-chart-wrap .chart-area {
+  opacity: 0.10;                                 /* 영역 반투명 */
+}
+.line-chart-wrap .chart-dot {
+  r: 3;                                          /* 점 반지름 */
+  stroke: var(--card);                           /* 점 테두리 흰색 */
+  stroke-width: 1.5;                             /* 점 테두리 두께 */
+}
+.line-chart-wrap .chart-label {
+  font-size: 10px;                               /* 축 라벨 크기 */
+  fill: var(--sub);                              /* 축 라벨 색상 */
+}
+.line-chart-wrap .chart-tooltip {
+  position: absolute;                            /* 절대 위치 */
+  background: var(--card);                       /* 카드 배경 */
+  border: 1px solid var(--sep);                  /* 테두리 */
+  border-radius: 8px;                            /* 둥근 모서리 */
+  padding: 4px 8px;                              /* 안쪽 여백 */
+  font-size: 11px;                               /* 텍스트 크기 */
+  color: var(--text);                            /* 텍스트 색상 */
+  pointer-events: none;                          /* 마우스 이벤트 무시 */
+  white-space: nowrap;                           /* 줄바꿈 방지 */
+  box-shadow: var(--shadow);                     /* 그림자 */
+  opacity: 0;                                    /* 기본 숨김 */
+  transition: opacity 0.15s;                     /* 페이드 전환 */
+  z-index: 10;                                   /* 상위 표시 */
+}
+
 /* ── 탭 전환 애니메이션 ──────────────────────── */
 .content {
   animation: tabFadeIn 0.25s ease-out;            /* 탭 전환 시 페이드인 */
