@@ -850,8 +850,8 @@ function renderLineChart(containerId, points, options = {}) {
   const rawMin = Math.min(...vals);                                // Y 최솟값
   const rawMax = Math.max(...vals);                                // Y 최댓값
   const hasZero = options.zeroLine !== false;                      // 0 기준선 표시 여부
-  const yMin = hasZero ? Math.min(rawMin, 0) - 5 : rawMin - Math.abs(rawMax - rawMin) * 0.1; // Y축 하한
-  const yMax = hasZero ? Math.max(rawMax, 0) + 5 : rawMax + Math.abs(rawMax - rawMin) * 0.1; // Y축 상한
+  const yMin = rawMin;                                             // Y축 하한: 데이터 최솟값
+  const yMax = rawMax;                                             // Y축 상한: 데이터 최댓값
   const yRange = yMax - yMin || 1;                                 // Y축 범위 (0 방지)
 
   const x = i => pad.left + (i / (points.length - 1)) * cW;       // X좌표 계산 함수
