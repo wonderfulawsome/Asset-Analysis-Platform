@@ -1,5 +1,4 @@
 import datetime       # 날짜/시간 처리용 표준 라이브러리
-import time           # 현재 Unix 타임스탬프 조회용
 import requests       # HTTP 요청을 보내기 위한 라이브러리
 
 # Yahoo Finance API 호출 시 브라우저처럼 보이게 하는 헤더 (차단 방지)
@@ -35,26 +34,21 @@ def fetch_index_prices() -> list[dict]:
             resp = requests.get(url, params=params, headers=HEADERS, timeout=15)  # API 호출 (15초 타임아웃)
             resp.raise_for_status()                      # HTTP 에러 시 예외 발생
             data   = resp.json()['chart']['result'][0]   # JSON 응답에서 차트 데이터 추출
-            meta   = data['meta']                        # 메타 정보 (실시간 가격 포함)
+            meta   = data['meta']                        # 메타 정보 (실시간/최종 체결가 포함)
             closes = data['indicators']['adjclose'][0]['adjclose']  # 수정 종가 리스트
             closes = [c for c in closes if c is not None]  # None 값 제거 (거래 없는 날)
 
-            if len(closes) < 1:                          # 데이터가 없으면 건너뜀
-                continue
+            # regularMarketPrice: 장 중엔 실시간가, 장 마감 후엔 최종 종가
+            realtime_price = meta.get('regularMarketPrice')  # 최종 체결가 (항상 존재)
+            prev_close = meta.get('chartPreviousClose') or meta.get('previousClose')  # 전일 종가
 
-            # currentTradingPeriod로 장 중 여부 판단 (가장 정확)
-            now_ts = int(time.time())                    # 현재 Unix 타임스탬프
-            trading = meta.get('currentTradingPeriod', {}).get('regular', {})  # 정규장 시간대
-            is_market_open = trading.get('start', 0) <= now_ts <= trading.get('end', 0)  # 정규장 범위 내인지
-
-            realtime_price = meta.get('regularMarketPrice')  # 실시간 현재가
-            if is_market_open and realtime_price:        # 장 중이면 실시간 가격 사용
-                prev = closes[-2] if len(closes) >= 2 else closes[-1]  # 전일 종가 (adjclose에 당일 미확정 포함될 수 있음)
-                curr = realtime_price                    # 실시간 현재가
-            else:                                        # 장 마감이면 확정 종가 사용
+            if realtime_price and prev_close and prev_close > 0:  # meta 기반 우선 사용
+                curr = realtime_price                    # 현재가 (장 중/장 후 모두 유효)
+                prev = prev_close                        # 전일 종가
+            else:                                        # fallback: adjclose 배열 사용
                 if len(closes) < 2:                      # 최소 2일치 필요
                     continue
-                prev, curr = closes[-2], closes[-1]      # 전일 종가, 당일 확정 종가
+                prev, curr = closes[-2], closes[-1]      # 전일 종가, 당일 종가
 
             if prev and curr and prev > 0:               # 유효한 값인지 확인
                 result.append({
