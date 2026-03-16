@@ -1003,8 +1003,8 @@ async function loadNoiseChart() {
       color: 'var(--accent)',                                      // 보라색 선
       zeroLine: true,                                              // 0 기준선 표시
       dotColor: v => v >= 0 ? 'var(--red)' : 'var(--green)',       // 양수(노이즈↑) 빨강, 음수(펀더멘털) 초록
-      yTopLabel: '불일치 ↑',                                       // Y축 상단: 노이즈 높음
-      yBottomLabel: '일치 ↓',                                      // Y축 하단: 펀더멘털 반영
+      yTopLabel: '불일치',                                          // Y축 상단: 노이즈 높음
+      yBottomLabel: '일치',                                         // Y축 하단: 펀더멘털 반영
     });
   } catch (e) {
     console.error('NR chart error:', e);                           // 에러 로그
