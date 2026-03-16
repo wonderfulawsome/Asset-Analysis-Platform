@@ -1285,9 +1285,9 @@ body {
   fill: var(--sub);                              /* 축 라벨 색상 */
 }
 .line-chart-wrap .chart-side-label {
-  font-size: 10px;                               /* 좌측 라벨 크기 */
-  fill: var(--sub);                              /* 좌측 라벨 색상 */
-  font-weight: 700;                              /* 굵은 글씨 */
+  font-size: 10px;                               /* Y축 라벨 크기 */
+  fill: var(--text);                             /* 본문 색상 (더 진하게) */
+  font-weight: 800;                              /* 더 굵은 글씨 */
 }
 .line-chart-wrap .chart-tooltip {
   position: absolute;                            /* 절대 위치 */
