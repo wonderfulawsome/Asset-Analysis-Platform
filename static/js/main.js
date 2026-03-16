@@ -94,7 +94,7 @@ const NR_FEATURE_DESC = {
   'realized_vol':    { label: '실현 변동성', desc: '실제 주가 변동 크기. 변동성이 높은 구간은 투자자들이 이성보다 감정으로 거래하는 전형적 노이즈 국면' },
 };
 
-// 폭락 전조 등급 스타일 (높을수록 위험 = 빨강)
+// 하락 전조 등급 스타일 (높을수록 위험 = 빨강)
 const CS_GRADE_STYLE = {
   '낮음': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
   '보통': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
@@ -102,7 +102,7 @@ const CS_GRADE_STYLE = {
   '경고': { cls: 'badge-red', color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
   '위험': { cls: 'badge-red', color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
 };
-// 급등 전조 등급 스타일 (높을수록 상승 기대 = 초록)
+// 상승 전조 등급 스타일 (높을수록 상승 기대 = 초록)
 const SURGE_GRADE_STYLE = {
   '낮음': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
   '보통': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
@@ -784,7 +784,7 @@ async function loadCrashSurge() {
       <div class="cs-row">
         <div class="cs-item">
           <div class="cs-item-header">
-            <span class="cs-item-label">폭락 전조</span>
+            <span class="cs-item-label">하락 전조</span>
             <span class="badge ${crashS.cls}" style="font-size:10px">${d.crash_grade}</span>
           </div>
           <div class="cs-score" style="color:${crashS.color}">
@@ -797,7 +797,7 @@ async function loadCrashSurge() {
         <div class="cs-divider"></div>
         <div class="cs-item">
           <div class="cs-item-header">
-            <span class="cs-item-label">급등 전조</span>
+            <span class="cs-item-label">상승 전조</span>
             <span class="badge ${surgeS.cls}" style="font-size:10px">${d.surge_grade}</span>
           </div>
           <div class="cs-score" style="color:${surgeS.color}">
@@ -825,7 +825,7 @@ async function loadCrashSurge() {
     const card = el.closest('.card');
     if (card && !card.classList.contains('card-tappable')) {
       card.classList.add('card-tappable');
-      card.addEventListener('click', () => openDetail('폭락/급등 전조 분석', renderCrashSurgeDetail));
+      card.addEventListener('click', () => openDetail('하락/상승 전조 분석', renderCrashSurgeDetail));
     }
   } catch (e) {
     console.error('Crash/Surge load error:', e);
@@ -1008,8 +1008,8 @@ async function loadCrashSurgeHistory() {
     el.innerHTML = `<div class="cs-hist-table">
       <div class="cs-hist-header">
         <span class="cs-hist-cell cs-hist-date-col">날짜</span>
-        <span class="cs-hist-cell">폭락</span>
-        <span class="cs-hist-cell">급등</span>
+        <span class="cs-hist-cell">하락</span>
+        <span class="cs-hist-cell">상승</span>
         <span class="cs-hist-cell">방향</span>
       </div>
       ${list.map((r, i) => {
@@ -1096,7 +1096,7 @@ async function loadDirection() {
 
     el.innerHTML = `
       <div style="text-align:center;padding:8px 0 4px">
-        <div style="font-size:11px;color:var(--sub);margin-bottom:4px">순방향 점수 (급등 − 폭락)</div>
+        <div style="font-size:11px;color:var(--sub);margin-bottom:4px">순방향 점수 (상승 − 하락)</div>
         <div style="font-size:28px;font-weight:800;color:${netColor}">${netSign}${d.current_net_score}</div>
         ${pctlText ? `<div style="font-size:12px;color:var(--sub);margin-top:2px">과거 대비 <b style="color:${netColor}">${pctlText}</b></div>` : ''}
         <div style="font-size:20px;margin-top:2px">${ds.icon}</div>
@@ -1211,12 +1211,12 @@ function renderCrashSurgeDetail(body) {
   const surgeS = SURGE_GRADE_STYLE[d.surge_grade] || SURGE_GRADE_STYLE['보통'];
   body.innerHTML = `<div style="display:flex;gap:16px;margin-bottom:8px">
     <div style="flex:1;text-align:center">
-      <div style="font-size:12px;color:var(--sub);font-weight:600">폭락 전조</div>
+      <div style="font-size:12px;color:var(--sub);font-weight:600">하락 전조</div>
       <div style="font-size:28px;font-weight:800;color:${crashS.color}">${d.crash_score.toFixed(1)}</div>
       <span class="badge ${crashS.cls}">${d.crash_grade}</span>
     </div>
     <div style="flex:1;text-align:center">
-      <div style="font-size:12px;color:var(--sub);font-weight:600">급등 전조</div>
+      <div style="font-size:12px;color:var(--sub);font-weight:600">상승 전조</div>
       <div style="font-size:28px;font-weight:800;color:${surgeS.color}">${d.surge_score.toFixed(1)}</div>
       <span class="badge ${surgeS.cls}">${d.surge_grade}</span>
     </div>
@@ -1230,7 +1230,7 @@ function renderCrashSurgeDetail(body) {
     const shapItems = d.shap_values[mainType] || [];
     if (shapItems.length > 0) {
       const maxAbs = Math.max(...shapItems.map(s => Math.abs(s.value)), 0.001);
-      body.innerHTML += `<div class="feat-section-title">SHAP 기여도 (${mainType === 'crash' ? '폭락' : '급등'} 방향)</div>`;
+      body.innerHTML += `<div class="feat-section-title">SHAP 기여도 (${mainType === 'crash' ? '하락' : '상승'} 방향)</div>`;
       renderBarChart(body, shapItems, maxAbs, CS_FEATURE_DESC);
     }
   }
