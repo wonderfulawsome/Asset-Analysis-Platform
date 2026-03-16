@@ -14,7 +14,6 @@ SYMBOLS = {
     '^VIX':     'vix',     # 변동성 지수
     '^TNX':     'tnx',     # 10년 국채 수익률
     '^IRX':     'irx',     # 3개월 국채 수익률
-    'DX-Y.NYB': 'dxy',    # 달러 인덱스
     '^NDX':     'ndx',     # 나스닥 100 지수
     '^SOX':     'sox',     # 필라델피아 반도체 지수
 }
@@ -85,20 +84,12 @@ def fetch_macro(days: int = 0) -> pd.DataFrame:
 
     # 거시 지표 수집전 수집 날짜 정의
 
-    # 7개 티커 데이터를 각각 수집 (필수 티커 실패 시 예외, 선택 티커 실패 시 빈 DF)
-    OPTIONAL_TICKERS = {'DX-Y.NYB'}                        # 실패해도 파이프라인 계속 진행할 티커
+    # 6개 티커 데이터를 각각 수집
     raw = {}
     for ticker in SYMBOLS:
-        try:
-            raw[ticker] = _fetch_df(ticker, from_ts, to_ts)  # 티커별 API 호출
-            if raw[ticker].empty:
-                raise RuntimeError(f'빈 데이터')             # 빈 데이터도 실패 처리
-        except Exception as e:
-            if ticker in OPTIONAL_TICKERS:                   # 선택 티커면 빈 DF로 대체
-                print(f'[Collector] {ticker} 수집 실패 (무시): {e}')
-                raw[ticker] = pd.DataFrame(columns=['close', 'volume'])  # 빈 DF
-            else:
-                raise RuntimeError(f'[Collector] 데이터 수집 실패: {ticker} → {e}')
+        raw[ticker] = _fetch_df(ticker, from_ts, to_ts)    # 티커별 API 호출
+        if raw[ticker].empty:
+            raise RuntimeError(f'[Collector] 데이터 수집 실패: {ticker}')
     # 티커 순회 하며 정의 한 날자에 맞춰 데이터 수집
     ### raw 에 데이터 저장
 
@@ -119,10 +110,7 @@ def fetch_macro(days: int = 0) -> pd.DataFrame:
     df['tnx']          = raw['^TNX']['close']              # 10년 국채 수익률
     df['irx']          = raw['^IRX']['close']              # 3개월 국채 수익률
     df['yield_spread'] = df['tnx'] - df['irx']            # 장단기 금리차 (10년 - 3개월)
-    if not raw['DX-Y.NYB'].empty:                                 # 달러지수 데이터가 있으면
-        df['dxy_return'] = raw['DX-Y.NYB']['close'].pct_change(5)  # 달러지수 5일 수익률
-    else:
-        df['dxy_return'] = 0.0                                     # 수집 실패 시 0으로 대체
+    df['dxy_return']   = 0.0                                 # 달러지수 수익률 (DX-Y.NYB 제거, 미사용)
 
     # ── 나스닥 100 피처 ──
     ndx_c = raw['^NDX']['close']                           # 나스닥 100 종가
