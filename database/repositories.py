@@ -94,13 +94,13 @@ def fetch_macro_latest() -> Optional[dict]:
 
 
 def fetch_macro_latest2() -> list:
-    """최근 거시 지표 2건을 조회합니다 (전일 대비용)."""
+    """최근 거시 지표 5건을 조회합니다 (주말/공휴일 폴백 대비)."""
     client = get_client()
     response = (
         client.table("macro_raw")
         .select("*")
         .order("date", desc=True)
-        .limit(2)
+        .limit(5)                                            # 주말+공휴일 고려하여 5건 조회
         .execute()
     )
     return response.data

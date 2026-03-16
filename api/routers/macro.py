@@ -86,13 +86,17 @@ def get_latest():
         prev = rows[1]
         current['prev_vix'] = prev.get('vix')
         current['prev_sp500_vol20'] = prev.get('sp500_vol20')
-    # 이중 안전장치: vix/vol이 0이면 이전 레코드 값으로 폴백 (장후 adjclose=0 대비)
-    if len(rows) >= 2:
-        prev_fb = rows[1]                                    # 이전 날짜 레코드
-        if not current.get('vix') and prev_fb.get('vix'):    # vix가 0/None이면
-            current['vix'] = prev_fb['vix']                  # 전일 VIX로 대체
-        if not current.get('sp500_vol20') and prev_fb.get('sp500_vol20'):  # vol이 0/None이면
-            current['sp500_vol20'] = prev_fb['sp500_vol20']  # 전일 거래량 비율로 대체
+    # 이중 안전장치: vix/vol이 0이면 유효한 과거 레코드에서 폴백 (주말/장후 대비)
+    if not current.get('vix'):                               # vix가 0/None이면
+        for prev_fb in rows[1:]:                             # 과거 레코드 순회
+            if prev_fb.get('vix') and prev_fb['vix'] > 0:   # 유효한 값 찾을 때까지
+                current['vix'] = prev_fb['vix']              # 유효한 VIX로 대체
+                break
+    if not current.get('sp500_vol20'):                       # vol이 0/None이면
+        for prev_fb in rows[1:]:                             # 과거 레코드 순회
+            if prev_fb.get('sp500_vol20') and prev_fb['sp500_vol20'] > 0:  # 유효한 값 찾을 때까지
+                current['sp500_vol20'] = prev_fb['sp500_vol20']  # 유효한 거래량 비율로 대체
+                break
     # 실시간 동시간대 거래량 비율 (장중이면 덮어쓰기)
     rt_vol = _realtime_vol_ratio()
     if rt_vol is not None:
