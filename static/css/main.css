@@ -114,6 +114,17 @@ body {
   transform: scale(0.95);                          /* 클릭 시 축소 효과 */
 }
 
+/* ── 면책 문구 ─────────────────────────────────── */
+.disclaimer {
+  margin-top: 32px;                                /* 콘텐츠와 간격 */
+  padding: 16px 4px;                               /* 상하 여백 */
+  font-size: 11px;                                 /* 작은 글씨 */
+  line-height: 1.6;                                /* 줄 간격 */
+  color: var(--sub);                               /* 보조 텍스트 색상 */
+  text-align: center;                              /* 중앙 정렬 */
+  opacity: 0.5;                                    /* 반투명 처리 */
+}
+
 /* ── Tab Bar ─────────────────────────────────── */
 .tab-bar {
   flex-shrink: 0;

@@ -159,6 +159,9 @@ const I18N = {
     // ── 토스트 ──
     'toast.backExit': '한 번 더 누르면 종료됩니다', // 뒤로가기 토스트
 
+    // ── 면책 ──
+    'disclaimer.text': '본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.', // 면책 문구
+
     // ── 방향성 에러/대기 ──
     'dir.loading': '백필 데이터 대기 중...',       // 대기 중
     'dir.loadError': '방향성 분석 로딩 실패',      // 로딩 실패
@@ -519,6 +522,9 @@ const I18N = {
 
     // ── Toast ──
     'toast.backExit': 'Press back again to exit',
+
+    // ── Disclaimer ──
+    'disclaimer.text': 'This information is not intended as investment advice. Investment decisions are the sole responsibility of the user. Data and analysis are for reference only and accuracy is not guaranteed.', // 면책 문구
 
     // ── Direction Error/Loading ──
     'dir.loading': 'Waiting for backfill data...',

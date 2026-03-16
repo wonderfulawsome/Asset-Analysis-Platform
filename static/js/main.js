@@ -677,17 +677,14 @@ window.addEventListener('popstate', (e) => {
     history.pushState({ tab: 0 }, '');                     // 히스토리 보충
     return;
   }
-  // 4. 시장 탭에서 뒤로가기 → 앱이면 2번 눌러야 종료
-  if (_isApp) {
-    const now = Date.now();
-    if (now - _lastBackTime < 2000) {                      // 2초 이내 두 번째 뒤로가기
-      return;                                              // 브라우저 기본 동작 (앱 종료)
-    }
-    _lastBackTime = now;                                   // 첫 번째 뒤로가기 시간 기록
-    history.pushState({ tab: 0 }, '');                     // 히스토리 보충 (종료 방지)
-    showBackToast();                                       // 토스트 메시지 표시
+  // 4. 시장 탭에서 뒤로가기 → 2번 눌러야 종료 (모든 환경)
+  const now = Date.now();
+  if (now - _lastBackTime < 2000) {                        // 2초 이내 두 번째 뒤로가기
+    return;                                                // 브라우저 기본 동작 (종료/이탈)
   }
-  // 웹에서는 그대로 브라우저 기본 동작 (페이지 이탈)
+  _lastBackTime = now;                                     // 첫 번째 뒤로가기 시간 기록
+  history.pushState({ tab: 0 }, '');                       // 히스토리 보충 (종료 방지)
+  showBackToast();                                         // 토스트 메시지 표시
 });
 
 // 초기 히스토리 상태 설정
@@ -706,6 +703,76 @@ function showBackToast() {
   toast.classList.add('show');                              // 토스트 표시
   setTimeout(() => toast.classList.remove('show'), 2000);  // 2초 후 숨기기
 }
+
+// ── 탭 스와이프 제스처 ──
+function setupTabSwipe() {
+  const wrap = document.querySelector('.scroll-wrap');       // 스크롤 영역
+  if (!wrap) return;
+
+  const THRESHOLD_X = 50;                                    // 스와이프 최소 거리 (px)
+  const MAX_VISUAL  = 80;                                    // 드래그 시 최대 이동량 (px)
+  const MAX_TIME    = 500;                                   // 스와이프 최대 시간 (ms)
+  const DIR_LOCK_PX = 10;                                    // 방향 결정 최소 이동 (px)
+  const MAX_VERT    = 30;                                    // 수직 스크롤 판정 임계 (px)
+
+  let startX = 0, startY = 0, startTime = 0;                // 터치 시작 좌표/시간
+  let dirLocked = false, isSwipe = null;                     // 방향 상태
+  let activeEl = null, lastX = 0;                            // 활성 엘리먼트, 마지막 X
+
+  wrap.addEventListener('touchstart', (e) => {
+    const overlay = document.getElementById('detail-overlay');
+    if (overlay && overlay.classList.contains('open')) return;
+    startX = e.touches[0].clientX;
+    startY = e.touches[0].clientY;
+    lastX = startX;
+    startTime = Date.now();
+    dirLocked = false;
+    isSwipe = null;
+    activeEl = document.getElementById(TAB_IDS[_currentTabIdx]);
+    if (activeEl) activeEl.style.transition = 'none';
+  }, { passive: true });
+
+  wrap.addEventListener('touchmove', (e) => {
+    if (isSwipe === false || !activeEl) return;
+    const cx = e.touches[0].clientX;
+    const cy = e.touches[0].clientY;
+    lastX = cx;
+    const dx = cx - startX, dy = cy - startY;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+
+    if (!dirLocked) {
+      if (adx < DIR_LOCK_PX && ady < DIR_LOCK_PX) return;
+      if (ady > MAX_VERT && adx < ady) { isSwipe = false; return; }
+      if (adx > ady * 2) { isSwipe = true; dirLocked = true; }
+      else if (ady > adx) { isSwipe = false; dirLocked = true; return; }
+      else return;
+    }
+
+    e.preventDefault();
+    let clampedDx = Math.max(-MAX_VISUAL, Math.min(MAX_VISUAL, dx));
+    if ((_currentTabIdx === 0 && dx > 0) || (_currentTabIdx === TAB_IDS.length - 1 && dx < 0)) {
+      clampedDx = clampedDx / 3;
+    }
+    activeEl.style.transform = `translateX(${clampedDx}px)`;
+  }, { passive: false });
+
+  wrap.addEventListener('touchend', () => {
+    if (!activeEl) return;
+    activeEl.style.transition = 'transform 0.2s ease-out';
+    activeEl.style.transform = '';
+    if (isSwipe !== true) return;
+
+    const dx = lastX - startX;
+    const elapsed = Date.now() - startTime;
+    if (Math.abs(dx) >= THRESHOLD_X && elapsed < MAX_TIME) {
+      const newIdx = dx < 0
+        ? Math.min(_currentTabIdx + 1, TAB_IDS.length - 1)
+        : Math.max(_currentTabIdx - 1, 0);
+      if (newIdx !== _currentTabIdx) switchTab(newIdx, true);
+    }
+  }, { passive: true });
+}
+setupTabSwipe();
 
 // ── Crash/Surge 전조 탐지 ──
 async function loadCrashSurge() {
