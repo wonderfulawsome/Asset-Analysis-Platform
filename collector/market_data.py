@@ -38,12 +38,17 @@ def _fetch_df(ticker: str, from_ts: int, to_ts: int) -> pd.DataFrame:
     resp = requests.get(url, params=params, headers=HEADERS, timeout=15)  # HTTP 요청
     resp.raise_for_status()                                # 에러 시 예외 발생
     result = resp.json()['chart']['result'][0]             # JSON에서 차트 데이터 추출
+    meta = result['meta']                                  # 메타 정보 (최종 체결가 포함)
     timestamps = result['timestamp']                       # Unix 타임스탬프 배열
     closes  = result['indicators']['adjclose'][0]['adjclose']  # 수정 종가 배열
     volumes = result['indicators']['quote'][0]['volume']    # 거래량 배열
     index = pd.to_datetime(timestamps, unit='s').normalize()  # 타임스탬프 → 날짜 인덱스
     df = pd.DataFrame({'close': closes, 'volume': volumes}, index=index)  # DataFrame 생성
     df = df[~df.index.duplicated(keep='last')]               # 중복 날짜 제거 (마지막 값 유지)
+    # 마지막 행의 종가가 None이면 meta의 regularMarketPrice로 보정 (장 마감 후 대비)
+    rmp = meta.get('regularMarketPrice')                   # 최종 체결가 (장 중/장 후 모두 유효)
+    if rmp and len(df) > 0 and pd.isna(df['close'].iloc[-1]):
+        df.iloc[-1, df.columns.get_loc('close')] = rmp    # None → 최종 체결가로 대체
     return df
 
 # -------------------------------------------------------------------
