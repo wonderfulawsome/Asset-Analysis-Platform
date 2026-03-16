@@ -30,11 +30,11 @@ FRED_MAP = {
     'NFCI':         'NFCI',      # 금융여건지수 (FRED 전용)
 }
 
-# Yahoo Finance로 대체한 시리즈 (기존 FRED DGS10, T10Y3M, DTWEXBGS, DCOILWTICO)
+# Yahoo Finance로 대체한 시리즈 (기존 FRED DGS10, T10Y3M, DCOILWTICO)
+# DX-Y.NYB(달러인덱스)는 Yahoo 500 에러로 제거 — DTWEXBGS_RET_5D는 0으로 채움
 YAHOO_MACRO_MAP = {
     '^TNX':      'DGS10',      # 10년 국채금리 (FRED DGS10 대체)
     '^IRX':      'IRX_3M',     # 3개월 국채금리 (T10Y3M 계산용)
-    'DX-Y.NYB':  'DTWEXBGS',   # 달러인덱스 (FRED DTWEXBGS 대체)
     'CL=F':      'WTI',        # WTI 원유선물 (FRED DCOILWTICO 대체)
 }
 
@@ -147,7 +147,7 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
     # 3) Yahoo 매크로 4개 (금리, 달러, 원유 — FRED 대체)
     yahoo_macro = {}  # Yahoo 매크로 시리즈 저장용
     print('  [CrashSurge] Yahoo 매크로 수집...')
-    for ticker, col in YAHOO_MACRO_MAP.items():  # ^TNX, ^IRX, DX-Y.NYB, CL=F
+    for ticker, col in YAHOO_MACRO_MAP.items():  # ^TNX, ^IRX, CL=F
         yahoo_macro[col] = _fetch_yahoo_macro(ticker, col, start=start)  # 전체 기간 수집
 
     # 4) Cboe 5개
@@ -188,7 +188,7 @@ def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
     # 3) Yahoo 매크로 4개 — 장 중이면 실시간 가격 포함
     yahoo_macro = {}  # Yahoo 매크로 시리즈 저장용
     print('  [CrashSurge-Light] Yahoo 매크로 수집...')
-    for ticker, col in YAHOO_MACRO_MAP.items():  # ^TNX, ^IRX, DX-Y.NYB, CL=F
+    for ticker, col in YAHOO_MACRO_MAP.items():  # ^TNX, ^IRX, CL=F
         yahoo_macro[col] = _fetch_yahoo_macro(ticker, col, period=f'{lookback_days}d')  # 최근 N일
 
     # 4) Cboe 5개 — 장 중이면 실시간 가격 포함
@@ -278,10 +278,13 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict,
     feat['T10Y3M_SLOPE'] = (dgs10_s.reindex(spy.index).ffill()
                             - irx_s.reindex(spy.index).ffill())
 
-    # ── 크로스에셋 (2개) — Yahoo DX-Y.NYB, CL=F 사용 ──
-    dxy_s = yahoo_macro.get('DTWEXBGS', pd.Series(dtype=float))  # DX-Y.NYB (달러인덱스)
-    dxy_ff = dxy_s.reindex(spy.index).ffill()
-    feat['DTWEXBGS_RET_5D'] = np.log(dxy_ff / dxy_ff.shift(5))  # 달러 5일 수익률
+    # ── 크로스에셋 (2개) — DX-Y.NYB 제거, CL=F 사용 ──
+    dxy_s = yahoo_macro.get('DTWEXBGS', pd.Series(dtype=float))  # 달러인덱스 (DX-Y.NYB 제거됨)
+    if dxy_s.empty:                                                # DX-Y.NYB 미수집 시
+        feat['DTWEXBGS_RET_5D'] = 0.0                             # 0으로 채움 (피처 순서 유지)
+    else:                                                          # 혹시 복구되면 정상 계산
+        dxy_ff = dxy_s.reindex(spy.index).ffill()                  # 영업일 기준 정렬
+        feat['DTWEXBGS_RET_5D'] = np.log(dxy_ff / dxy_ff.shift(5))  # 달러 5일 수익률
 
     wti_s = yahoo_macro.get('WTI', pd.Series(dtype=float))  # CL=F (WTI 원유)
     wti_ff = wti_s.reindex(spy.index).ffill()
