@@ -842,7 +842,8 @@ function renderLineChart(containerId, points, options = {}) {
 
   const W = el.clientWidth - 2;                                    // SVG 너비 (패딩 고려)
   const H = options.height || 140;                                 // SVG 높이
-  const pad = { top: 12, right: 12, bottom: 22, left: 36 };       // 축 라벨 여백
+  const hasYSideLabels = options.yTopLabel || options.yBottomLabel; // Y축 사이드 라벨 존재 여부
+  const pad = { top: 12, right: 12, bottom: 22, left: hasYSideLabels ? 56 : 36 }; // 라벨 있으면 좌측 패딩 확장
   const cW = W - pad.left - pad.right;                             // 차트 영역 너비
   const cH = H - pad.top - pad.bottom;                             // 차트 영역 높이
 
