@@ -40,15 +40,14 @@ def fetch_index_prices() -> list[dict]:
 
             # regularMarketPrice: 장 중엔 실시간가, 장 마감 후엔 최종 종가
             realtime_price = meta.get('regularMarketPrice')  # 최종 체결가 (항상 존재)
-            prev_close = meta.get('chartPreviousClose') or meta.get('previousClose')  # 전일 종가
 
-            if realtime_price and prev_close and prev_close > 0:  # meta 기반 우선 사용
+            if realtime_price and len(closes) >= 2:      # 실시간가 + 전일 종가 모두 있을 때
                 curr = realtime_price                    # 현재가 (장 중/장 후 모두 유효)
-                prev = prev_close                        # 전일 종가
-            else:                                        # fallback: adjclose 배열 사용
-                if len(closes) < 2:                      # 최소 2일치 필요
-                    continue
+                prev = closes[-2]                        # 전 거래일 종가 (adjclose 배열 기반)
+            elif len(closes) >= 2:                       # fallback: adjclose 배열만 사용
                 prev, curr = closes[-2], closes[-1]      # 전일 종가, 당일 종가
+            else:                                        # 데이터 부족 시 건너뜀
+                continue
 
             if prev and curr and prev > 0:               # 유효한 값인지 확인
                 result.append({
