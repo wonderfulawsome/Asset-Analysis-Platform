@@ -784,7 +784,7 @@ async function loadCrashSurge() {
       <div class="cs-row">
         <div class="cs-item">
           <div class="cs-item-header">
-            <span class="cs-item-label">하락 전조</span>
+            <span class="cs-item-label">하락 위험도</span>
             <span class="badge ${crashS.cls}" style="font-size:10px">${d.crash_grade}</span>
           </div>
           <div class="cs-score" style="color:${crashS.color}">
@@ -797,7 +797,7 @@ async function loadCrashSurge() {
         <div class="cs-divider"></div>
         <div class="cs-item">
           <div class="cs-item-header">
-            <span class="cs-item-label">상승 전조</span>
+            <span class="cs-item-label">상승 기대도</span>
             <span class="badge ${surgeS.cls}" style="font-size:10px">${d.surge_grade}</span>
           </div>
           <div class="cs-score" style="color:${surgeS.color}">
@@ -825,7 +825,7 @@ async function loadCrashSurge() {
     const card = el.closest('.card');
     if (card && !card.classList.contains('card-tappable')) {
       card.classList.add('card-tappable');
-      card.addEventListener('click', () => openDetail('하락/상승 전조 분석', renderCrashSurgeDetail));
+      card.addEventListener('click', () => openDetail('하락/상승 가능성 분석', renderCrashSurgeDetail));
     }
   } catch (e) {
     console.error('Crash/Surge load error:', e);
@@ -1228,12 +1228,12 @@ function renderCrashSurgeDetail(body) {
   const surgeS = SURGE_GRADE_STYLE[d.surge_grade] || SURGE_GRADE_STYLE['보통'];
   body.innerHTML = `<div style="display:flex;gap:16px;margin-bottom:8px">
     <div style="flex:1;text-align:center">
-      <div style="font-size:12px;color:var(--sub);font-weight:600">하락 전조</div>
+      <div style="font-size:12px;color:var(--sub);font-weight:600">하락 위험도</div>
       <div style="font-size:28px;font-weight:800;color:${crashS.color}">${d.crash_score.toFixed(1)}</div>
       <span class="badge ${crashS.cls}">${d.crash_grade}</span>
     </div>
     <div style="flex:1;text-align:center">
-      <div style="font-size:12px;color:var(--sub);font-weight:600">상승 전조</div>
+      <div style="font-size:12px;color:var(--sub);font-weight:600">상승 기대도</div>
       <div style="font-size:28px;font-weight:800;color:${surgeS.color}">${d.surge_score.toFixed(1)}</div>
       <span class="badge ${surgeS.cls}">${d.surge_grade}</span>
     </div>
