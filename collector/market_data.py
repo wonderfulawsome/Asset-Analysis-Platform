@@ -32,24 +32,36 @@ def _rsi(series: pd.Series, period: int = 14) -> pd.Series:
 
 
 def _fetch_df(ticker: str, from_ts: int, to_ts: int) -> pd.DataFrame:
-    """Yahoo Finance v8 API로 종가/거래량 DataFrame을 반환합니다."""
-    url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}'  # API 엔드포인트
-    params = {'interval': '1d', 'period1': from_ts, 'period2': to_ts}   # 일봉, 기간
-    resp = requests.get(url, params=params, headers=HEADERS, timeout=15)  # HTTP 요청
-    resp.raise_for_status()                                # 에러 시 예외 발생
-    result = resp.json()['chart']['result'][0]             # JSON에서 차트 데이터 추출
-    meta = result['meta']                                  # 메타 정보 (최종 체결가 포함)
-    timestamps = result['timestamp']                       # Unix 타임스탬프 배열
-    closes  = result['indicators']['adjclose'][0]['adjclose']  # 수정 종가 배열
-    volumes = result['indicators']['quote'][0]['volume']    # 거래량 배열
-    index = pd.to_datetime(timestamps, unit='s').normalize()  # 타임스탬프 → 날짜 인덱스
-    df = pd.DataFrame({'close': closes, 'volume': volumes}, index=index)  # DataFrame 생성
-    df = df[~df.index.duplicated(keep='last')]               # 중복 날짜 제거 (마지막 값 유지)
-    # 마지막 행의 종가가 None이면 meta의 regularMarketPrice로 보정 (장 마감 후 대비)
-    rmp = meta.get('regularMarketPrice')                   # 최종 체결가 (장 중/장 후 모두 유효)
-    if rmp and len(df) > 0 and pd.isna(df['close'].iloc[-1]):
-        df.iloc[-1, df.columns.get_loc('close')] = rmp    # None → 최종 체결가로 대체
-    return df
+    """Yahoo Finance v8 API로 종가/거래량 DataFrame을 반환합니다.
+    100년치 요청 실패 시 50년 → 30년으로 기간을 줄여 재시도합니다."""
+    fallback_days = [0, 365*50, 365*30]                    # 원본, 50년, 30년 순서로 시도
+    for i, alt_days in enumerate(fallback_days):
+        try:
+            p1 = from_ts if alt_days == 0 else int(to_ts - alt_days * 86400)  # 대체 시작일 계산
+            url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}'  # API 엔드포인트
+            params = {'interval': '1d', 'period1': p1, 'period2': to_ts}   # 일봉, 기간
+            resp = requests.get(url, params=params, headers=HEADERS, timeout=15)  # HTTP 요청
+            resp.raise_for_status()                            # 에러 시 예외 발생
+            result = resp.json()['chart']['result'][0]         # JSON에서 차트 데이터 추출
+            meta = result['meta']                              # 메타 정보 (최종 체결가 포함)
+            timestamps = result['timestamp']                   # Unix 타임스탬프 배열
+            closes  = result['indicators']['adjclose'][0]['adjclose']  # 수정 종가 배열
+            volumes = result['indicators']['quote'][0]['volume']    # 거래량 배열
+            index = pd.to_datetime(timestamps, unit='s').normalize()  # 타임스탬프 → 날짜 인덱스
+            df = pd.DataFrame({'close': closes, 'volume': volumes}, index=index)  # DataFrame 생성
+            df = df[~df.index.duplicated(keep='last')]           # 중복 날짜 제거 (마지막 값 유지)
+            # 마지막 행의 종가가 None이면 meta의 regularMarketPrice로 보정 (장 마감 후 대비)
+            rmp = meta.get('regularMarketPrice')               # 최종 체결가 (장 중/장 후 모두 유효)
+            if rmp and len(df) > 0 and pd.isna(df['close'].iloc[-1]):
+                df.iloc[-1, df.columns.get_loc('close')] = rmp  # None → 최종 체결가로 대체
+            if alt_days > 0:
+                print(f'[Collector] {ticker}: 기간 축소 재시도 성공 ({alt_days//365}년)')  # 재시도 성공 로그
+            return df
+        except Exception as e:
+            if i < len(fallback_days) - 1:                     # 마지막 시도가 아니면 재시도
+                print(f'[Collector] {ticker}: 수집 실패, 기간 축소 재시도... ({e})')
+            else:
+                raise                                          # 마지막 시도도 실패하면 예외 전파
 
 # -------------------------------------------------------------------
 # _fetch_df: 티커별 종가 및 거래량 수집
