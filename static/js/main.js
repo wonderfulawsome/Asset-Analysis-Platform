@@ -890,6 +890,15 @@ function renderLineChart(containerId, points, options = {}) {
     zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(0).toFixed(1)}" x2="${W - pad.right}" y2="${y(0).toFixed(1)}"/>`;
   }
 
+  // Y축 우측 상단/하단 라벨 (옵션)
+  let yAxisSideLabels = '';                                        // 우측 라벨 SVG
+  if (options.yTopLabel) {                                         // 상단 라벨 존재 시
+    yAxisSideLabels += `<text class="chart-side-label" x="${W - pad.right - 2}" y="${pad.top + 10}" text-anchor="end">${options.yTopLabel}</text>`;
+  }
+  if (options.yBottomLabel) {                                      // 하단 라벨 존재 시
+    yAxisSideLabels += `<text class="chart-side-label" x="${W - pad.right - 2}" y="${pad.top + cH - 4}" text-anchor="end">${options.yBottomLabel}</text>`;
+  }
+
   // 데이터 포인트 (점)
   const dots = points.map((p, i) => {
     const dotColor = options.dotColor ? options.dotColor(p.value) : lineColor;  // 점 색상
@@ -910,6 +919,7 @@ function renderLineChart(containerId, points, options = {}) {
       ${dots}
       ${xLabels}
       ${yLabels}
+      ${yAxisSideLabels}
     </svg>
     <div class="chart-tooltip" id="${containerId}-tip"></div>
   </div>`;
@@ -992,6 +1002,8 @@ async function loadNoiseChart() {
       color: 'var(--accent)',                                      // 보라색 선
       zeroLine: true,                                              // 0 기준선 표시
       dotColor: v => v >= 0 ? 'var(--red)' : 'var(--green)',       // 양수(노이즈↑) 빨강, 음수(펀더멘털) 초록
+      yTopLabel: '불일치 ↑',                                       // Y축 상단: 노이즈 높음
+      yBottomLabel: '일치 ↓',                                      // Y축 하단: 펀더멘털 반영
     });
   } catch (e) {
     console.error('NR chart error:', e);                           // 에러 로그
