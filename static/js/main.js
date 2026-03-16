@@ -841,8 +841,10 @@ function renderLineChart(containerId, points, options = {}) {
   }
 
   const W = el.clientWidth - 2;                                    // SVG 너비 (패딩 고려)
-  const H = options.height || 140;                                 // SVG 높이
-  const pad = { top: 12, right: 12, bottom: 22, left: 36 };       // 축 라벨 여백
+  const hasTopLabel = !!options.yTopLabel;                          // 상단 라벨 존재 여부
+  const hasBtmLabel = !!options.yBottomLabel;                      // 하단 라벨 존재 여부
+  const H = options.height || (140 + (hasTopLabel ? 14 : 0) + (hasBtmLabel ? 14 : 0));  // 라벨 공간 포함 높이
+  const pad = { top: hasTopLabel ? 24 : 12, right: 12, bottom: hasBtmLabel ? 36 : 22, left: 36 };  // 라벨 여백 확장
   const cW = W - pad.left - pad.right;                             // 차트 영역 너비
   const cH = H - pad.top - pad.bottom;                             // 차트 영역 높이
 
@@ -890,13 +892,13 @@ function renderLineChart(containerId, points, options = {}) {
     zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(0).toFixed(1)}" x2="${W - pad.right}" y2="${y(0).toFixed(1)}"/>`;
   }
 
-  // Y축 우측 상단/하단 라벨 (옵션)
-  let yAxisSideLabels = '';                                        // 우측 라벨 SVG
+  // Y축 좌측 상단/하단 라벨 (옵션)
+  let yAxisSideLabels = '';                                        // 좌측 라벨 SVG
   if (options.yTopLabel) {                                         // 상단 라벨 존재 시
-    yAxisSideLabels += `<text class="chart-side-label" x="${W - pad.right - 2}" y="${pad.top + 10}" text-anchor="end">${options.yTopLabel}</text>`;
+    yAxisSideLabels += `<text class="chart-side-label" x="${pad.left + 2}" y="${pad.top - 8}" text-anchor="start">${options.yTopLabel}</text>`;
   }
   if (options.yBottomLabel) {                                      // 하단 라벨 존재 시
-    yAxisSideLabels += `<text class="chart-side-label" x="${W - pad.right - 2}" y="${pad.top + cH - 4}" text-anchor="end">${options.yBottomLabel}</text>`;
+    yAxisSideLabels += `<text class="chart-side-label" x="${pad.left + 2}" y="${H - 6}" text-anchor="start">${options.yBottomLabel}</text>`;
   }
 
   // 데이터 포인트 (점)
