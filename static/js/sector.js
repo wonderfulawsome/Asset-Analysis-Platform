@@ -28,49 +28,34 @@ const PHASE_COLORS = {
   '침체': '#2196F3',
 };
 const PHASE_GAP_POS = { '회복': 12, '확장': 37, '둔화': 63, '침체': 88 };
-const PHASE_SUB = {
-  '회복': '경기 저점을 지나 반등이 시작되는 구간',
-  '확장': '경기가 활발하게 성장하는 구간',
-  '둔화': '성장 속도가 줄어들기 시작하는 구간',
-  '침체': '경기가 위축되고 수요가 감소하는 구간',
-};
+// PHASE_SUB는 i18n에서 동적 조회 (tPhaseSub 함수 사용)
 
-const MACRO_LABELS = {
-  pmi:              'PMI',
-  yield_spread:     '금리차 (10Y-3M)',
-  anfci:            '금융환경 (ANFCI)',
-  icsa_yoy:         '실업급여 YoY',
-  permit_yoy:       '건축허가 YoY',
-  real_retail_yoy:  '실질소매판매 YoY',
-  capex_yoy:        '자본재주문 YoY',
-  real_income_yoy:  '실질소득 YoY',
-  pmi_chg3m:        'PMI 3개월변화',
-  capex_yoy_chg3m:  '자본재 3개월변화',
-};
+// 매크로 라벨 (i18n 동적 조회)
+function getMacroLabels() {                        // 매크로 라벨 사전 생성
+  const keys = ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy','pmi_chg3m','capex_yoy_chg3m'];
+  const obj = {};
+  keys.forEach(k => { obj[k] = t('macro.' + k); });
+  return obj;
+}
 
-const SECTOR_LABELS = {
-  XLF:  '금융',
-  XLE:  '에너지',
-  XLK:  '기술',
-  XLV:  '헬스케어',
-  XLB:  '소재',
-  XLP:  '필수소비재',
-  XLU:  '유틸리티',
-  XLI:  '산업재',
-  XLRE: '부동산',
-  SOXX: '반도체',
-};
+// 섹터 라벨 (i18n 동적 조회)
+function getSectorLabels() {                       // 섹터 라벨 사전 생성
+  const keys = ['XLF','XLE','XLK','XLV','XLB','XLP','XLU','XLI','XLRE','SOXX'];
+  const obj = {};
+  keys.forEach(k => { obj[k] = t('sector.' + k); });
+  return obj;
+}
 
 function signStr(v) { return v >= 0 ? `+${v.toFixed(2)}` : v.toFixed(2); }
 
-function heatColor(val) {
+function heatColor(val) {                          // 히트맵 색상 계산
   if (val > 0) {
-    const t = Math.min(val / 4, 1);
-    const g = Math.round(200 + 55 * (1 - t));
-    return `rgba(76, ${g}, 80, ${0.15 + t * 0.55})`;
+    const r = Math.min(val / 4, 1);                // 양수: 초록 강도
+    const g = Math.round(200 + 55 * (1 - r));
+    return `rgba(76, ${g}, 80, ${0.15 + r * 0.55})`;
   } else {
-    const t = Math.min(Math.abs(val) / 3, 1);
-    return `rgba(255, 59, 48, ${0.1 + t * 0.5})`;
+    const r = Math.min(Math.abs(val) / 3, 1);     // 음수: 빨강 강도
+    return `rgba(255, 59, 48, ${0.1 + r * 0.5})`;
   }
 }
 
@@ -81,10 +66,10 @@ async function loadSectorCycle() {
 
   // ── 현재 경기국면 갭 바 ──
   const phaseEl = document.getElementById('sc-phase-card');
-  const phases = ['회복', '확장', '둔화', '침체'];
+  const phases = ['회복', '확장', '둔화', '침체'];    // API 한글 키 (내부 조회용)
   const color = PHASE_COLORS[d.phase_name] || '#999';
   const pos   = PHASE_GAP_POS[d.phase_name] ?? 50;
-  const sub   = PHASE_SUB[d.phase_name] || '';
+  const sub   = tPhaseSub(d.phase_name);             // 국면 설명 (i18n)
   const softBg = PHASE_SOFT_BG[d.phase_name] || 'rgba(0,0,0,0.05)';
   phaseEl.innerHTML = `
     <div class="sc-phase-status">
@@ -92,17 +77,17 @@ async function loadSectorCycle() {
         ${phaseIcon(d.phase_name, 26, 2.2)}
       </div>
       <div>
-        <div class="sc-phase-name">${d.phase_name}</div>
-        <div class="sc-phase-date">${d.date} 기준</div>
+        <div class="sc-phase-name">${tPhase(d.phase_name)}</div>
+        <div class="sc-phase-date">${d.date} ${t('cs.asOf')}</div>
       </div>
     </div>
     <div class="sc-phase-sub">${sub}</div>
     <div class="sc-phase-gap">
       <div class="sc-phase-gap-labels">
-        <span>회복</span>
-        <span>확장</span>
-        <span>둔화</span>
-        <span>침체</span>
+        <span>${tPhase('회복')}</span>
+        <span>${tPhase('확장')}</span>
+        <span>${tPhase('둔화')}</span>
+        <span>${tPhase('침체')}</span>
       </div>
       <div class="sc-phase-gap-track">
         <div class="sc-phase-gap-fill" style="width:${pos}%;background:${color}"></div>
@@ -113,11 +98,11 @@ async function loadSectorCycle() {
   // ── TOP3 섹터 (숫자 뱃지) ──
   const topEl  = document.getElementById('sc-top3');
   const topSub = document.getElementById('sc-top-sub');
-  topSub.innerHTML = `${phaseIcon(d.phase_name, 14, 2)} ${d.phase_name} 국면`;
+  topSub.innerHTML = `${phaseIcon(d.phase_name, 14, 2)} ${tPhase(d.phase_name)} ${t('sector.phase')}`;
   const perf = d.phase_sector_perf[d.phase_name] || {};
   topEl.innerHTML = (d.top3_sectors || []).map((s, i) => {
     const ret = perf[s] || 0;
-    const label = SECTOR_LABELS[s] || s;
+    const label = getSectorLabels()[s] || s;
     const rankCls = i === 0 ? 'rank-1' : (i === 1 ? 'rank-2' : 'rank-3');
     return `
       <div class="sc-top-item">
@@ -135,15 +120,16 @@ async function loadSectorCycle() {
 
   // ── 국면×섹터 히트맵 ──
   const hmEl = document.getElementById('sc-heatmap');
-  const sectors = Object.keys(SECTOR_LABELS);
+  const sectors = Object.keys(getSectorLabels());
   let hmHTML = '<div class="sc-hm-table"><div class="sc-hm-row sc-hm-header"><div class="sc-hm-cell sc-hm-corner"></div>';
-  sectors.forEach(s => { hmHTML += `<div class="sc-hm-cell sc-hm-col">${s}<br><span class="sc-hm-col-kr">${SECTOR_LABELS[s]}</span></div>`; });
+  const _sLabels = getSectorLabels();                // 섹터 라벨 캐시
+  sectors.forEach(s => { hmHTML += `<div class="sc-hm-cell sc-hm-col">${s}<br><span class="sc-hm-col-kr">${_sLabels[s]}</span></div>`; });
   hmHTML += '</div>';
   phases.forEach(ph => {
     const row = d.phase_sector_perf[ph] || {};
     const phColor = PHASE_COLORS[ph] || '#999';
     const phSoftBg = PHASE_SOFT_BG[ph] || 'rgba(0,0,0,0.03)';
-    hmHTML += `<div class="sc-hm-row"><div class="sc-hm-cell sc-hm-rowlabel"><span class="sc-icon-sm" style="background:${phSoftBg};color:${phColor};margin-right:4px">${phaseIcon(ph, 15, 2)}</span>${ph}</div>`;
+    hmHTML += `<div class="sc-hm-row"><div class="sc-hm-cell sc-hm-rowlabel"><span class="sc-icon-sm" style="background:${phSoftBg};color:${phColor};margin-right:4px">${phaseIcon(ph, 15, 2)}</span>${tPhase(ph)}</div>`;
     sectors.forEach(s => {
       const v = row[s] ?? 0;
       hmHTML += `<div class="sc-hm-cell sc-hm-val" style="background:${heatColor(v)}">${v.toFixed(1)}</div>`;
@@ -161,7 +147,7 @@ async function loadSectorCycle() {
   if (phaseCard && !phaseCard.classList.contains('card-tappable')) {
     // 터치 가능 힌트 + 클릭 이벤트 등록
     phaseCard.classList.add('card-tappable');
-    phaseCard.addEventListener('click', () => openDetail('거시경제 상세', renderSectorDetail));
+    phaseCard.addEventListener('click', () => openDetail(t('sector.detailTitle'), renderSectorDetail));
   }
 
   // ── 보유 종목 성과 ──
@@ -173,29 +159,29 @@ async function loadSectorCycle() {
   } catch { userHoldings = null; }
 
   if (!userHoldings || userHoldings.length === 0) {
-    holdEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:13px">보유종목을 설정하면 현재 국면 성과를 확인할 수 있습니다</div>';
+    holdEl.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:13px">${t('sector.holdNoSetup')}</div>`;
   } else {
     const currentPhase = d.phase_name;
     const row = holdPerf[currentPhase] || {};
-    const holdTickers = userHoldings.filter(t => row[t] !== undefined);
+    const holdTickers = userHoldings.filter(tk => row[tk] !== undefined);
 
     if (holdTickers.length === 0) {
-      holdEl.innerHTML = '<div style="text-align:center;padding:16px;color:var(--sub);font-size:13px">현재 국면의 보유종목 데이터가 없습니다</div>';
+      holdEl.innerHTML = `<div style="text-align:center;padding:16px;color:var(--sub);font-size:13px">${t('sector.holdNoData')}</div>`;
     } else {
       let maxAbs = 0;
-      holdTickers.forEach(t => { maxAbs = Math.max(maxAbs, Math.abs(row[t] || 0)); });
+      holdTickers.forEach(tk => { maxAbs = Math.max(maxAbs, Math.abs(row[tk] || 0)); });
       if (maxAbs < 0.1) maxAbs = 1;
 
       const phSoftBg = PHASE_SOFT_BG[currentPhase] || 'rgba(0,0,0,0.03)';
       const phColor = PHASE_COLORS[currentPhase] || '#999';
-      let holdHTML = `<div class="sc-hold-phase-name"><span class="sc-icon-sm" style="background:${phSoftBg};color:${phColor};margin-right:4px">${phaseIcon(currentPhase, 15, 2)}</span>${currentPhase} 국면 평균 수익률</div>`;
+      let holdHTML = `<div class="sc-hold-phase-name"><span class="sc-icon-sm" style="background:${phSoftBg};color:${phColor};margin-right:4px">${phaseIcon(currentPhase, 15, 2)}</span>${tPhase(currentPhase)} ${t('sector.phaseAvgReturn')}</div>`;
       holdHTML += '<div class="sc-hold-items">';
-      holdTickers.forEach(t => {
-        const v = row[t] || 0;
+      holdTickers.forEach(tk => {
+        const v = row[tk] || 0;
         const w = Math.round(Math.abs(v) / maxAbs * 100);
         const barColor = v >= 0 ? 'var(--green)' : 'var(--red)';
         holdHTML += `<div class="sc-hold-bar-row">
-          <span class="sc-hold-ticker">${t}</span>
+          <span class="sc-hold-ticker">${tk}</span>
           <div class="sc-hold-bar-track"><div class="sc-hold-bar-fill" style="width:${w}%;background:${barColor}"></div></div>
           <span class="sc-hold-ret" style="color:${barColor}">${signStr(v)}%</span>
         </div>`;
@@ -227,30 +213,25 @@ const MACRO_NEUTRAL = {
 };
 
 // ── 매크로 지표 설명 (상세 페이지에서 표시) ──
-const MACRO_DESC = {
-  pmi:              '제조업 경기를 나타내는 구매관리자지수 (50 이상 확장)',
-  yield_spread:     '장단기 금리차 (10년-3개월, 역전 시 침체 신호)',
-  anfci:            '시카고 연준 금융환경지수 (음수=완화, 양수=긴축)',
-  icsa_yoy:         '신규 실업급여 청구건수 전년비 변화율',
-  permit_yoy:       '건축허가 전년비 변화율 (부동산 선행지표)',
-  real_retail_yoy:  '실질 소매판매 전년비 변화율 (소비 지표)',
-  capex_yoy:        '비국방 자본재 주문 전년비 변화율 (기업투자)',
-  real_income_yoy:  '실질 개인소득 전년비 변화율',
-  pmi_chg3m:        'PMI 3개월 변화량 (모멘텀)',
-  capex_yoy_chg3m:  '자본재 주문 YoY 3개월 변화량',
-};
+// 매크로 설명 (i18n 동적 조회)
+function getMacroDesc() {                          // 매크로 설명 사전 생성
+  const keys = ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy','pmi_chg3m','capex_yoy_chg3m'];
+  const obj = {};
+  keys.forEach(k => { obj[k] = t('macroDesc.' + k); });
+  return obj;
+}
 
 
 // ── 거시경제 상세페이지 렌더 ──
 function renderSectorDetail(body) {
   // 캐시된 섹터 데이터 확인
   const d = window._sectorData;
-  if (!d) { body.innerHTML = '<p style="color:var(--sub)">데이터 없음</p>'; return; }
+  if (!d) { body.innerHTML = `<p style="color:var(--sub)">${t('detail.noData')}</p>`; return; }
 
   // 현재 경기국면 색상·아이콘 설정
   const color = PHASE_COLORS[d.phase_name] || '#999';
   const softBg = PHASE_SOFT_BG[d.phase_name] || 'rgba(0,0,0,0.05)';
-  const sub = PHASE_SUB[d.phase_name] || '';
+  const sub = tPhaseSub(d.phase_name);                // 국면 설명 (i18n)
   const pos = PHASE_GAP_POS[d.phase_name] ?? 50;
 
   // ── 1) 현재 국면 요약 ──
@@ -258,16 +239,16 @@ function renderSectorDetail(body) {
     <div style="display:inline-flex;align-items:center;justify-content:center;gap:8px;
                 background:${softBg};color:${color};padding:10px 20px;border-radius:14px;margin-bottom:8px">
       ${phaseIcon(d.phase_name, 28, 2.2)}
-      <span style="font-size:24px;font-weight:800">${d.phase_name}</span>
+      <span style="font-size:24px;font-weight:800">${tPhase(d.phase_name)}</span>
     </div>
     <div style="font-size:13px;color:var(--sub);margin-top:6px">${sub}</div>
-    <div style="font-size:11px;color:var(--sub2);margin-top:2px">${d.date} 기준</div>
+    <div style="font-size:11px;color:var(--sub2);margin-top:2px">${d.date} ${t('cs.asOf')}</div>
   </div>`;
 
   // ── 2) 경기국면 갭 바 ──
   body.innerHTML += `<div style="margin-bottom:24px;padding:0 8px">
     <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--sub);margin-bottom:6px">
-      <span>회복</span><span>확장</span><span>둔화</span><span>침체</span>
+      <span>${tPhase('회복')}</span><span>${tPhase('확장')}</span><span>${tPhase('둔화')}</span><span>${tPhase('침체')}</span>
     </div>
     <div style="position:relative;height:6px;background:var(--bg2);border-radius:3px">
       <div style="position:absolute;left:0;top:0;height:100%;width:${pos}%;background:${color};border-radius:3px;transition:width 0.6s"></div>
@@ -279,15 +260,15 @@ function renderSectorDetail(body) {
   // ── 3) 매크로 스냅샷 ──
   const snap = d.macro_snapshot || {};
   // 스냅샷 데이터가 있는 경우에만 렌더링
-  const macroKeys = Object.keys(MACRO_LABELS).filter(k => snap[k] !== undefined);
+  const macroKeys = Object.keys(getMacroLabels()).filter(k => snap[k] !== undefined);
   if (macroKeys.length > 0) {
-    body.innerHTML += `<div class="feat-section-title">매크로 스냅샷</div>`;
+    body.innerHTML += `<div class="feat-section-title">${t('sector.macroSnapshot')}</div>`;
     // 그리드 레이아웃으로 매크로 지표 표시
     let macroHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:20px">';
     macroKeys.forEach(key => {
       // 지표 값 추출
       const val = snap[key];
-      const label = MACRO_LABELS[key];
+      const label = getMacroLabels()[key];
       // 표시 형식 결정 (PMI: 소수1자리, ANFCI: 소수2자리, 나머지: ±%형식)
       const display = key === 'pmi' ? val.toFixed(1)
                     : key === 'anfci' ? val.toFixed(2)
@@ -311,11 +292,11 @@ function renderSectorDetail(body) {
 
   // ── 4) 매크로 지표 설명 ──
   if (macroKeys.length > 0) {
-    body.innerHTML += `<div class="feat-section-title">매크로 지표 설명</div>`;
+    body.innerHTML += `<div class="feat-section-title">${t('sector.macroDesc')}</div>`;
     let descHtml = '<div style="display:flex;flex-direction:column;gap:6px;margin-bottom:20px">';
     macroKeys.forEach(key => {
-      const label = MACRO_LABELS[key];
-      const desc = MACRO_DESC[key] || '';
+      const label = getMacroLabels()[key];
+      const desc = getMacroDesc()[key] || '';
       descHtml += `<div style="padding:10px 12px;background:var(--card);border-radius:10px;box-shadow:var(--shadow)">
         <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px">${label}</div>
         <div style="font-size:11px;color:var(--sub);line-height:1.5">${desc}</div>
@@ -327,8 +308,8 @@ function renderSectorDetail(body) {
 
   // ── 5) 국면별 섹터 히트맵 ──
   const phases = ['회복', '확장', '둔화', '침체'];
-  const sectors = Object.keys(SECTOR_LABELS);
-  body.innerHTML += `<div class="feat-section-title">국면별 섹터 수익률</div>`;
+  const sectors = Object.keys(getSectorLabels());
+  body.innerHTML += `<div class="feat-section-title">${t('sector.phasePerf')}</div>`;
   // 각 국면에 대해 가로 바 차트 렌더링
   let hmHtml = '<div style="margin-bottom:20px">';
   phases.forEach(ph => {
@@ -345,8 +326,8 @@ function renderSectorDetail(body) {
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px">
         <span style="display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
                       border-radius:6px;background:${phSoftBg};color:${phColor}">${phaseIcon(ph, 15, 2)}</span>
-        <span style="font-size:13px;font-weight:700;color:var(--text)">${ph}</span>
-        ${ph === d.phase_name ? '<span style="font-size:10px;color:' + phColor + ';font-weight:600;background:' + phSoftBg + ';padding:2px 8px;border-radius:8px">현재</span>' : ''}
+        <span style="font-size:13px;font-weight:700;color:var(--text)">${tPhase(ph)}</span>
+        ${ph === d.phase_name ? `<span style="font-size:10px;color:${phColor};font-weight:600;background:${phSoftBg};padding:2px 8px;border-radius:8px">${t('sector.current')}</span>` : ''}
       </div>`;
     // 각 섹터별 바
     sectors.forEach(s => {
@@ -370,11 +351,11 @@ function renderSectorDetail(body) {
   // ── 6) TOP3 추천 섹터 ──
   if (d.top3_sectors && d.top3_sectors.length > 0) {
     const perf = d.phase_sector_perf[d.phase_name] || {};
-    body.innerHTML += `<div class="feat-section-title">현재 국면 추천 섹터</div>`;
+    body.innerHTML += `<div class="feat-section-title">${t('sector.topSectors')}</div>`;
     let topHtml = '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px">';
     d.top3_sectors.forEach((s, i) => {
       const ret = perf[s] || 0;
-      const label = SECTOR_LABELS[s] || s;
+      const label = getSectorLabels()[s] || s;
       // 순위별 배경색 (1위: 금, 2위: 은, 3위: 동)
       const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
       topHtml += `<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;

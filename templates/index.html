@@ -66,18 +66,18 @@
   <!-- Holdings Setup -->
   <div id="holdings-setup" class="holdings-setup" style="display:none;">
     <div class="holdings-inner">
-      <button id="holdings-back" class="holdings-back-btn">← 뒤로</button>
-      <div class="holdings-header">보유 종목 설정</div>
-      <div class="holdings-desc">투자 중인 ETF를 선택해주세요</div>
+      <button id="holdings-back" class="holdings-back-btn" data-i18n="holdings.back">← 뒤로</button>
+      <div class="holdings-header" data-i18n="holdings.title">보유 종목 설정</div>
+      <div class="holdings-desc" data-i18n="holdings.desc">투자 중인 ETF를 선택해주세요</div>
       <div class="holdings-search-wrap">
-        <input id="holdings-search" type="text" class="holdings-search" placeholder="ETF 검색 (예: QQQ, SPY...)" autocomplete="off" />
+        <input id="holdings-search" type="text" class="holdings-search" placeholder="ETF 검색 (예: QQQ, SPY...)" data-i18n-placeholder="holdings.search" autocomplete="off" />
       </div>
       <div id="holdings-chips" class="holdings-chips"></div>
       <div class="holdings-selected-wrap">
-        <span class="holdings-selected-label">선택된 종목</span>
+        <span class="holdings-selected-label" data-i18n="holdings.selectedLabel">선택된 종목</span>
         <div id="holdings-selected" class="holdings-selected"></div>
       </div>
-      <button id="holdings-confirm" class="holdings-confirm-btn" disabled>시작하기</button>
+      <button id="holdings-confirm" class="holdings-confirm-btn" data-i18n="holdings.confirm" disabled>시작하기</button>
     </div>
   </div>
 
@@ -93,14 +93,17 @@
         <h1 class="app-title">Passive</h1>
       </div>
     </div>
-    <div id="btn-edit-holdings" class="settings-btn">⚙️</div>
+    <div class="header-right">
+      <button id="btn-lang" class="lang-btn">EN</button>
+      <div id="btn-edit-holdings" class="settings-btn">⚙️</div>
+    </div>
   </header>
 
   <!-- Tab Bar -->
   <div class="tab-bar">
-    <button class="tab active" data-idx="0">시장</button>
-    <button class="tab" data-idx="1">신호</button>
-    <button class="tab" data-idx="2">거시경제</button>
+    <button class="tab active" data-idx="0" data-i18n="tab.market">시장</button>
+    <button class="tab" data-idx="1" data-i18n="tab.signal">신호</button>
+    <button class="tab" data-idx="2" data-i18n="tab.macro">거시경제</button>
   </div>
 
   <!-- Ticker Feed -->
@@ -128,7 +131,7 @@
 
       <!-- Noise Score 30일 추이 그래프 -->
       <div class="fade-target">
-        <div class="section-label">펀더멘털·주가 추이 (30일)</div>
+        <div class="section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (30일)</div>
         <div id="nr-chart" class="card" style="padding:14px 16px"></div>
       </div>
 
@@ -194,7 +197,7 @@
       <!-- Crash/Surge 현재 상태 -->
       <div class="card fade-target">
         <div class="card-head">
-          <span class="card-label">하락/상승 가능성</span>
+          <span class="card-label" data-i18n="cs.cardLabel">하락/상승 가능성</span>
           <span id="cs-badge" class="badge"></span>
         </div>
         <div id="cs-card"></div>
@@ -203,7 +206,7 @@
       <!-- 방향성 분석 -->
       <div class="card fade-target">
         <div class="card-head">
-          <span class="card-label">향후 방향성</span>
+          <span class="card-label" data-i18n="dir.cardLabel">향후 방향성</span>
           <span id="dir-badge" class="badge"></span>
         </div>
         <div id="cs-direction"></div>
@@ -211,7 +214,7 @@
 
       <!-- Crash/Surge Net Score 30일 추이 그래프 -->
       <div class="fade-target">
-        <div class="section-label">방향성 추이 (30일)</div>
+        <div class="section-label" data-i18n="section.csChart">방향성 추이 (30일)</div>
         <div id="cs-chart" class="card" style="padding:14px 16px"></div>
       </div>
 
@@ -222,13 +225,24 @@
   <!-- Detail Page Overlay -->
   <div id="detail-overlay" class="detail-overlay">
     <div class="detail-header">
-      <button id="detail-back" class="detail-back-btn">← 뒤로</button>
+      <button id="detail-back" class="detail-back-btn" data-i18n="detail.back">← 뒤로</button>
       <span id="detail-title" class="detail-title"></span>
     </div>
     <div id="detail-body" class="detail-body"></div>
   </div>
 
-  <script src="/static/js/main.js?v=16"></script>
-  <script src="/static/js/sector.js?v=4"></script>
+  <script src="/static/js/i18n.js?v=1"></script>
+  <script>
+    // 페이지 로드 시 저장된 언어 설정 적용
+    applyI18n();                                   // data-i18n 정적 텍스트 번역
+    updateLangButton();                            // 언어 버튼 텍스트 설정
+    // 날짜 포맷 적용
+    var _dateEl = document.getElementById('app-date');
+    if (_dateEl) _dateEl.textContent = formatDate(new Date());
+    // 언어 전환 버튼 이벤트
+    document.getElementById('btn-lang').addEventListener('click', switchLang);
+  </script>
+  <script src="/static/js/main.js?v=17"></script>
+  <script src="/static/js/sector.js?v=5"></script>
 </body>
 </html>

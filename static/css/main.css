@@ -89,6 +89,31 @@ body {
   background: var(--sep);
 }
 
+/* ── Header Right (언어 + 설정 버튼 그룹) ──── */
+.header-right {
+  display: flex;                                   /* 가로 배치 */
+  align-items: center;                             /* 수직 중앙 정렬 */
+  gap: 8px;                                        /* 버튼 간격 */
+}
+
+/* ── Language Toggle Button ──────────────────── */
+.lang-btn {
+  font-size: 12px;                                 /* 폰트 크기 */
+  font-weight: 700;                                /* 굵게 */
+  padding: 4px 10px;                               /* 내부 여백 */
+  border-radius: 8px;                              /* 둥근 모서리 */
+  border: 1.5px solid var(--sep);                  /* 테두리 */
+  background: var(--card);                         /* 배경색 */
+  color: var(--text);                              /* 글자색 */
+  cursor: pointer;                                 /* 포인터 커서 */
+  transition: background 0.15s, transform 0.15s;   /* 호버 전환 효과 */
+  letter-spacing: 0.5px;                           /* 자간 */
+}
+.lang-btn:active {
+  background: var(--sep);                          /* 클릭 시 배경 */
+  transform: scale(0.95);                          /* 클릭 시 축소 효과 */
+}
+
 /* ── Tab Bar ─────────────────────────────────── */
 .tab-bar {
   flex-shrink: 0;
@@ -1204,7 +1229,7 @@ body {
   padding-bottom: 38px;
 }
 .card-tappable::after {
-  content: '클릭하여 자세히 보기';
+  content: '클릭하여 자세히 보기';                  /* 기본 한국어 텍스트 */
   position: absolute;
   bottom: 14px;
   right: 18px;
@@ -1212,6 +1237,9 @@ body {
   font-weight: 600;
   color: var(--accent);
   opacity: 0.7;
+}
+html[lang="en"] .card-tappable::after {
+  content: 'Tap for details';                      /* 영어 전환 시 텍스트 */
 }
 
 /* ── Skeleton ────────────────────────────────── */
