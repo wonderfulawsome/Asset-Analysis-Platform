@@ -59,10 +59,15 @@ def run_pipeline(light: bool = False) -> None:
             shiller = fetch_shiller()
             fred = fetch_fred_regime()
             # Step 3에서 수집한 FRED 데이터를 캐시에 저장 (Step 7에서 재사용)
+            # 컬럼명을 Step 7 형식(FRED_MAP의 value)으로 변환하여 저장
             if 'hy_spread' in fred:                          # BAMLH0A0HYM2 → HY_OAS
-                fred_cache['HY_OAS'] = fred['hy_spread']     # Noise의 hy_spread = CrashSurge의 HY_OAS
+                hy_df = fred['hy_spread'].copy()             # DataFrame 복사
+                hy_df.columns = ['HY_OAS']                   # 컬럼명 변환: hy_spread → HY_OAS
+                fred_cache['HY_OAS'] = hy_df                 # Step 7 형식으로 캐시 저장
             if 'tips_rate' in fred:                          # DFII10 → DFII10
-                fred_cache['DFII10'] = fred['tips_rate']     # Noise의 tips_rate = CrashSurge의 DFII10
+                tips_df = fred['tips_rate'].copy()           # DataFrame 복사
+                tips_df.columns = ['DFII10']                 # 컬럼명 변환: tips_rate → DFII10
+                fred_cache['DFII10'] = tips_df               # Step 7 형식으로 캐시 저장
             stock_prices = fetch_sector_stocks(start_date)
             amihud_data = fetch_amihud_stocks(start_date)
 
