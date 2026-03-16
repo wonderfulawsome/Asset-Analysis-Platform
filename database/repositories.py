@@ -318,6 +318,19 @@ def fetch_noise_regime_history(days: int = 30) -> list[dict]:
     return [_parse_json_fields(r, _NR_JSON_FIELDS) for r in response.data]
 
 
+def fetch_noise_regime_all() -> list[dict]:
+    """noise_regime 테이블의 전체 레코드를 조회합니다. (백필 시 기존 날짜 확인용)"""
+    client = get_client()                              # Supabase 클라이언트
+    response = (
+        client.table("noise_regime")
+        .select("date")                                # 날짜 컬럼만 조회 (경량)
+        .order("date", desc=True)                      # 최신순 정렬
+        .limit(1000)                                   # 최대 1000건
+        .execute()
+    )
+    return response.data                               # [{date: '2026-03-16'}, ...] 반환
+
+
 # ── crash_surge_result ──────────────────────────────────────────
 
 _CS_JSON_FIELDS = ['shap_values', 'feature_importance', 'feature_values']

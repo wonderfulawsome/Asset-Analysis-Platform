@@ -11,8 +11,8 @@ from collector.noise_regime_data import (
 )
 from database.repositories import (upsert_macro, upsert_noise_regime, upsert_fear_greed,
                                    upsert_index_prices, upsert_sector_macro, upsert_sector_cycle,
-                                   upsert_crash_surge, fetch_crash_surge_all)
-from processor.feature1_regime import train_hmm, load_model, predict_regime
+                                   upsert_crash_surge, fetch_crash_surge_all, fetch_noise_regime_all)
+from processor.feature1_regime import train_hmm, load_model, predict_regime, backfill_noise_regime
 from processor.feature2_sector_cycle import run_sector_cycle
 from collector.crash_surge_data import (
     fetch_crash_surge_raw, fetch_crash_surge_light,
@@ -77,6 +77,18 @@ def run_pipeline(light: bool = False) -> None:
 
             # 3e: DB 저장
             upsert_noise_regime(result)
+
+            # 3f: 신규 날짜만 백필 (기존 히스토리 보존)
+            if should_retrain:
+                print('[Step 3f] Noise Regime 백필...')
+                backfill_records = backfill_noise_regime(bundle, model_bundle, days=60)  # 최근 60 영업일 계산
+                existing = fetch_noise_regime_all()                                      # 기존 DB 날짜 조회
+                existing_dates = {r['date'] for r in existing}                           # 기존 날짜 set 변환
+                new_records = [r for r in backfill_records if r['date'] not in existing_dates]  # 신규 날짜만 필터
+                print(f'[Step 3f] 전체 {len(backfill_records)}건 중 신규 {len(new_records)}건 백필')
+                for rec in new_records:                                                  # 신규 레코드만 저장
+                    upsert_noise_regime(rec)
+                print(f'[Step 3f] 백필 완료: {len(new_records)}건 DB 저장')
         except Exception as e:
             print(f'[Step 3] Noise HMM 실패, 건너뜀: {e}')    # 실패해도 다음 Step 계속 진행
 

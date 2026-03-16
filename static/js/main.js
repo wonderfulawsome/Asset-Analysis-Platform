@@ -950,7 +950,9 @@ async function loadCrashSurgeChart() {
     const list = await res.json();                                  // JSON 파싱
     if (!Array.isArray(list) || list.length < 2) return;            // 데이터 부족 시 종료
 
-    const sorted = list.slice().sort((a, b) => a.date.localeCompare(b.date));  // 날짜 오름차순 정렬
+    const sorted = list.slice()
+      .sort((a, b) => a.date.localeCompare(b.date))                // 날짜 오름차순 정렬
+      .filter(r => { const d = new Date(r.date + 'T00:00:00').getDay(); return d !== 0 && d !== 6; });  // 주말 제외 (0=일, 6=토)
     const points = sorted.map(r => ({                              // 그래프 포인트 변환
       label: r.date.slice(5),                                      // MM-DD 형식 라벨
       fullLabel: r.date,                                           // 전체 날짜 (툴팁용)
@@ -977,7 +979,9 @@ async function loadNoiseChart() {
     const list = await res.json();                                  // JSON 파싱
     if (!Array.isArray(list) || list.length < 2) return;            // 데이터 부족 시 종료
 
-    const sorted = list.slice().sort((a, b) => a.date.localeCompare(b.date));  // 날짜 오름차순 정렬
+    const sorted = list.slice()
+      .sort((a, b) => a.date.localeCompare(b.date))                // 날짜 오름차순 정렬
+      .filter(r => { const d = new Date(r.date + 'T00:00:00').getDay(); return d !== 0 && d !== 6; });  // 주말 제외 (0=일, 6=토)
     const points = sorted.map(r => ({                              // 그래프 포인트 변환
       label: r.date.slice(5),                                      // MM-DD 형식 라벨
       fullLabel: r.date,                                           // 전체 날짜 (툴팁용)
