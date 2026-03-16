@@ -49,10 +49,11 @@ def _fetch_df(ticker: str, from_ts: int, to_ts: int) -> pd.DataFrame:
             index = pd.to_datetime(timestamps, unit='s').normalize()  # 타임스탬프 → 날짜 인덱스
             df = pd.DataFrame({'close': closes, 'volume': volumes}, index=index)  # DataFrame 생성
             df = df[~df.index.duplicated(keep='last')]           # 중복 날짜 제거 (마지막 값 유지)
-            # 마지막 행의 종가가 None이면 meta의 regularMarketPrice로 보정 (장 마감 후 대비)
+            # 마지막 행의 종가가 None 또는 0이면 meta의 regularMarketPrice로 보정 (장 마감 후 대비)
             rmp = meta.get('regularMarketPrice')               # 최종 체결가 (장 중/장 후 모두 유효)
-            if rmp and len(df) > 0 and pd.isna(df['close'].iloc[-1]):
-                df.iloc[-1, df.columns.get_loc('close')] = rmp  # None → 최종 체결가로 대체
+            last_close = df['close'].iloc[-1] if len(df) > 0 else None  # 마지막 종가
+            if rmp and len(df) > 0 and (pd.isna(last_close) or last_close == 0):  # None 또는 0이면 보정
+                df.iloc[-1, df.columns.get_loc('close')] = rmp  # None/0 → 최종 체결가로 대체
             if alt_days > 0:
                 print(f'[Collector] {ticker}: 기간 축소 재시도 성공 ({alt_days//365}년)')  # 재시도 성공 로그
             return df
