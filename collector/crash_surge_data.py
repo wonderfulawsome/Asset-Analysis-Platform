@@ -75,24 +75,24 @@ SURGE_THRESHOLD = 0.10
 
 # ── 헬퍼 ──
 
-def _fetch_fred(series_id: str, col_name: str, retries: int = 4, timeout: int = 30) -> pd.DataFrame:
-    """FRED CSV 다운로드 (지수 백오프 재시도)."""
-    url = FRED_BASE + series_id
-    for attempt in range(retries):
+def _fetch_fred(series_id: str, col_name: str, retries: int = 4, timeout: int = 60) -> pd.DataFrame:
+    """FRED CSV 다운로드 (지수 백오프 재시도, 60초 타임아웃)."""
+    url = FRED_BASE + series_id                              # FRED CSV 다운로드 URL
+    for attempt in range(retries):                           # 최대 retries번 시도
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)
-            resp.raise_for_status()
-            df = pd.read_csv(StringIO(resp.text), index_col=0, parse_dates=True)
-            df.columns = [col_name]
-            df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
-            return df
+            resp = requests.get(url, headers=HEADERS, timeout=timeout)  # 60초 타임아웃
+            resp.raise_for_status()                          # 4xx/5xx 에러 시 예외
+            df = pd.read_csv(StringIO(resp.text), index_col=0, parse_dates=True)  # CSV 파싱
+            df.columns = [col_name]                          # 컬럼명 설정
+            df[col_name] = pd.to_numeric(df[col_name], errors='coerce')  # 숫자 변환
+            return df                                        # 성공 시 반환
         except Exception:
-            if attempt < retries - 1:
-                wait = 2 ** attempt
+            if attempt < retries - 1:                        # 마지막 시도 전이면
+                wait = 5 * (3 ** attempt)                    # 5초, 15초, 45초 대기
                 print(f'  [{series_id}] 재시도 {attempt+1}/{retries} ({wait}초 대기)...')
-                time.sleep(wait)
+                time.sleep(wait)                             # 대기 후 재시도
             else:
-                raise
+                raise                                        # 최종 실패 시 예외
 
 
 def _strip_tz(obj):
@@ -120,10 +120,44 @@ def _fetch_yahoo_macro(ticker: str, col_name: str, start: str = None,
         return pd.Series(dtype=float, name=col_name)  # 빈 Series 반환
 
 
+# ── FRED 파일 캐시 (경량 파이프라인에서 FRED 호출 스킵용) ──
+
+import pickle                                               # 캐시 직렬화용
+import os                                                    # 파일 경로용
+
+FRED_CACHE_PATH = os.path.join(os.path.dirname(__file__), '..', 'models', 'fred_cache.pkl')  # 캐시 파일 경로
+
+
+def save_fred_cache(fred: dict) -> None:
+    """전체 파이프라인에서 수집한 FRED 데이터를 파일 캐시로 저장."""
+    try:
+        os.makedirs(os.path.dirname(FRED_CACHE_PATH), exist_ok=True)  # models 디렉토리 생성
+        with open(FRED_CACHE_PATH, 'wb') as f:               # 바이너리 쓰기
+            pickle.dump(fred, f)                              # dict[str, DataFrame] 저장
+        print(f'  [FRED-Cache] 캐시 저장 완료: {len(fred)}개 시리즈')
+    except Exception as e:
+        print(f'  [FRED-Cache] 캐시 저장 실패: {e}')         # 실패해도 파이프라인 계속
+
+
+def _load_fred_cache() -> dict | None:
+    """파일 캐시에서 FRED 데이터 로드. 없으면 None 반환."""
+    try:
+        if os.path.exists(FRED_CACHE_PATH):                  # 캐시 파일이 있으면
+            with open(FRED_CACHE_PATH, 'rb') as f:           # 바이너리 읽기
+                return pickle.load(f)                        # dict 반환
+    except Exception as e:
+        print(f'  [FRED-Cache] 캐시 로드 실패: {e}')         # 실패 시 None 반환
+    return None                                              # 캐시 없으면 None
+
+
 # ── 데이터 수집 ──
 
-def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
+def fetch_crash_surge_raw(start: str = '2000-01-01', fred_cache: dict = None) -> dict:
     """원시 데이터 수집: SPY OHLCV + FRED 8개 + Yahoo 매크로 4개 + Cboe 5개.
+
+    Args:
+        start: 수집 시작일
+        fred_cache: 이미 수집된 FRED 데이터 캐시 (중복 호출 방지용)
 
     Returns:
         {'spy': DataFrame, 'fred': dict, 'cboe': dict, 'yahoo_macro': dict}
@@ -134,15 +168,22 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
     spy = _strip_tz(spy_raw)[['Open', 'High', 'Low', 'Close', 'Volume']]
     print(f'  [CrashSurge] SPY: {spy.index[0].date()} ~ {spy.index[-1].date()} ({len(spy)}행)')
 
-    # 2) FRED 8개 (신용스프레드, 실질금리, 기대인플레, SOFR, EFFR, NFCI)
-    fred = {}
+    # 2) FRED 8개 (캐시에 있으면 재사용, 없으면 새로 수집)
+    fred = {}                                                # FRED 시리즈 저장용
+    if fred_cache is None:                                   # 캐시가 없으면
+        fred_cache = {}                                      # 빈 캐시 생성
     print('  [CrashSurge] FRED 시리즈 수집...')
-    for sid, col in FRED_MAP.items():
-        try:
-            fred[col] = _fetch_fred(sid, col)
-        except Exception as e:
-            print(f'  [CrashSurge] {col}: 실패 — {e}')
-            fred[col] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))
+    for sid, col in FRED_MAP.items():                        # 8개 시리즈 순회
+        if col in fred_cache:                                # 캐시에 이미 있으면
+            fred[col] = fred_cache[col]                      # 캐시에서 가져옴
+            print(f'  [CrashSurge] {col}: 캐시 사용')       # 캐시 사용 로그
+        else:                                                # 캐시에 없으면
+            try:
+                fred[col] = _fetch_fred(sid, col)            # FRED에서 새로 수집
+                fred_cache[col] = fred[col]                  # 캐시에 저장
+            except Exception as e:
+                print(f'  [CrashSurge] {col}: 실패 — {e}')  # 실패 로그
+                fred[col] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))  # 빈 DataFrame
 
     # 3) Yahoo 매크로 4개 (금리, 달러, 원유 — FRED 대체)
     yahoo_macro = {}  # Yahoo 매크로 시리즈 저장용
@@ -168,22 +209,26 @@ def fetch_crash_surge_raw(start: str = '2000-01-01') -> dict:
 def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
     """경량 수집: 최근 N일치만 빠르게 가져옴 (30분 주기 예측용).
     yfinance 장 중 호출 시 SPY/Cboe/Yahoo매크로는 실시간 데이터 포함.
-    FRED는 일별 업데이트만 가능하므로 최신 확정값 사용.
+    FRED는 일별 업데이트이므로 파일 캐시를 우선 사용, 없을 때만 새로 수집.
     """
     # 1) SPY OHLCV — 장 중이면 실시간 가격 포함
     print('  [CrashSurge-Light] SPY OHLCV 수집...')
     spy_raw = yf.Ticker('SPY').history(period=f'{lookback_days}d', auto_adjust=True)  # 최근 N일
     spy = _strip_tz(spy_raw)[['Open', 'High', 'Low', 'Close', 'Volume']]  # OHLCV만 추출
 
-    # 2) FRED 8개 — 일별 확정값 (실시간 불가)
-    fred = {}  # FRED 시리즈 저장용
-    print('  [CrashSurge-Light] FRED 시리즈 수집...')
-    for sid, col in FRED_MAP.items():  # 8개 시리즈 순회
-        try:
-            fred[col] = _fetch_fred(sid, col)  # CSV 다운로드
-        except Exception as e:
-            print(f'  [CrashSurge-Light] {col}: 실패 — {e}')
-            fred[col] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))  # 빈 DataFrame
+    # 2) FRED 8개 — 파일 캐시 우선, 없으면 새로 수집
+    fred = _load_fred_cache()                                # 파일 캐시 로드 시도
+    if fred is not None:                                     # 캐시가 있으면
+        print('  [CrashSurge-Light] FRED 파일 캐시 사용 (FRED 호출 스킵)')
+    else:                                                    # 캐시가 없으면
+        fred = {}                                            # FRED 시리즈 저장용
+        print('  [CrashSurge-Light] FRED 시리즈 수집 (캐시 없음)...')
+        for sid, col in FRED_MAP.items():                    # 8개 시리즈 순회
+            try:
+                fred[col] = _fetch_fred(sid, col)            # CSV 다운로드
+            except Exception as e:
+                print(f'  [CrashSurge-Light] {col}: 실패 — {e}')
+                fred[col] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))  # 빈 DataFrame
 
     # 3) Yahoo 매크로 4개 — 장 중이면 실시간 가격 포함
     yahoo_macro = {}  # Yahoo 매크로 시리즈 저장용

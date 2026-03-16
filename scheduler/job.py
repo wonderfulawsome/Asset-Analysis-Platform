@@ -17,6 +17,7 @@ from processor.feature2_sector_cycle import run_sector_cycle
 from collector.crash_surge_data import (
     fetch_crash_surge_raw, fetch_crash_surge_light,
     compute_features, compute_labels, prepare_datasets, ALL_FEATURES,
+    save_fred_cache,                                         # FRED 파일 캐시 저장 함수
 )
 from processor.feature3_crash_surge import (
     train_crash_surge, load_model as load_crash_surge_model, predict_crash_surge,
@@ -44,6 +45,9 @@ def run_pipeline(light: bool = False) -> None:
     records = to_macro_records(df)  # DataFrame → dict 리스트 변환
     upsert_macro(records)  # Supabase에 upsert
 
+    # FRED 캐시: Step 3에서 수집한 데이터를 Step 7에서 재사용 (중복 호출 방지)
+    fred_cache = {}                                          # FRED 시리즈 공유 캐시
+
     # 경량 모드가 아닐 때만 무거운 작업 실행
     if not light:
         # Step 3: Noise vs Signal HMM 국면 판별
@@ -54,6 +58,11 @@ def run_pipeline(light: bool = False) -> None:
             # 3a: 데이터 수집
             shiller = fetch_shiller()
             fred = fetch_fred_regime()
+            # Step 3에서 수집한 FRED 데이터를 캐시에 저장 (Step 7에서 재사용)
+            if 'hy_spread' in fred:                          # BAMLH0A0HYM2 → HY_OAS
+                fred_cache['HY_OAS'] = fred['hy_spread']     # Noise의 hy_spread = CrashSurge의 HY_OAS
+            if 'tips_rate' in fred:                          # DFII10 → DFII10
+                fred_cache['DFII10'] = fred['tips_rate']     # Noise의 tips_rate = CrashSurge의 DFII10
             stock_prices = fetch_sector_stocks(start_date)
             amihud_data = fetch_amihud_stocks(start_date)
 
@@ -169,7 +178,8 @@ def run_pipeline(light: bool = False) -> None:
         # Step 7: XGBoost 폭락/급등 전조 탐지
         print('\n[Step 7] 폭락/급등 전조 탐지...')
         try:
-            raw = fetch_crash_surge_raw()
+            raw = fetch_crash_surge_raw(fred_cache=fred_cache)  # Step 3 캐시 재사용
+            save_fred_cache(raw['fred'])                      # 경량 파이프라인용 파일 캐시 저장
             features = compute_features(raw['spy'], raw['fred'], raw['cboe'],
                                                   raw['yahoo_macro'])
             labels = compute_labels(raw['spy']['Close'])

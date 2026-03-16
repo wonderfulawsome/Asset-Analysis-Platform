@@ -24,24 +24,24 @@ FRED_SERIES = {
 }
 
 # 데이터 요청이 실패했을 때 최대 4번까지 재시도 / 타임아웃은 30초
-def _fetch_fred(series_id: str, col_name: str, retries: int = 4, timeout: int = 30) -> pd.DataFrame:
-    """FRED CSV 다운로드 (지수 백오프 재시도)"""
+def _fetch_fred(series_id: str, col_name: str, retries: int = 4, timeout: int = 60) -> pd.DataFrame:
+    """FRED CSV 다운로드 (지수 백오프 재시도, 60초 타임아웃)"""
     url = FRED_BASE + series_id                          # 다운로드할 URL 생성
     for attempt in range(retries):                       # 최대 retries번 시도
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)  # HTTP GET 요청
+            resp = requests.get(url, headers=HEADERS, timeout=timeout)  # 60초 타임아웃
             resp.raise_for_status()                      # 4xx/5xx 에러 시 예외 발생
-            df = pd.read_csv(StringIO(resp.text), index_col=0, parse_dates=True)  # CSV → DataFrame 변환 (날짜를 인덱스로)
-            df.columns = [col_name]                      # 컬럼명을 지정한 이름으로 변경
-            df[col_name] = pd.to_numeric(df[col_name], errors='coerce')  # 숫자 변환 (변환 불가 → NaN)
-            return df                                    # 성공 시 DataFrame 반환
+            df = pd.read_csv(StringIO(resp.text), index_col=0, parse_dates=True)  # CSV → DataFrame 변환
+            df.columns = [col_name]                      # 컬럼명 설정
+            df[col_name] = pd.to_numeric(df[col_name], errors='coerce')  # 숫자 변환
+            return df                                    # 성공 시 반환
         except Exception:
-            if attempt < retries - 1:                    # 마지막 시도가 아니면
-                wait = 2 ** attempt                      # 지수 백오프: 1초, 2초, 4초...
+            if attempt < retries - 1:                    # 마지막 시도 전이면
+                wait = 5 * (3 ** attempt)                # 5초, 15초, 45초 대기
                 print(f'  [{series_id}] 재시도 {attempt+1}/{retries} ({wait}초 대기)...')
                 time.sleep(wait)                         # 대기 후 재시도
             else:
-                raise                                    # 마지막 시도도 실패하면 예외 발생
+                raise                                    # 최종 실패 시 예외
 # -------------------------------------------------------------------
 # 다운로드한 데이터를 전처리하는 함수(데이터프레임 변환, 이름변경, 숫자변환)
 # -------------------------------------------------------------------

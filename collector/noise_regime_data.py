@@ -52,24 +52,24 @@ YAHOO_VOL_TICKERS = {
 }
 
 
-def _fetch_fred(series_id: str, col_name: str, retries: int = 4, timeout: int = 30) -> pd.DataFrame:
-    """FRED CSV 다운로드 (지수 백오프 재시도)."""
-    url = FRED_BASE + series_id
-    for attempt in range(retries):
+def _fetch_fred(series_id: str, col_name: str, retries: int = 4, timeout: int = 60) -> pd.DataFrame:
+    """FRED CSV 다운로드 (지수 백오프 재시도, 60초 타임아웃)."""
+    url = FRED_BASE + series_id                              # FRED CSV 다운로드 URL
+    for attempt in range(retries):                           # 최대 retries번 시도
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)
-            resp.raise_for_status()
-            df = pd.read_csv(StringIO(resp.text), index_col=0, parse_dates=True)
-            df.columns = [col_name]
-            df[col_name] = pd.to_numeric(df[col_name], errors='coerce')
-            return df
+            resp = requests.get(url, headers=HEADERS, timeout=timeout)  # 60초 타임아웃
+            resp.raise_for_status()                          # 4xx/5xx 에러 시 예외
+            df = pd.read_csv(StringIO(resp.text), index_col=0, parse_dates=True)  # CSV 파싱
+            df.columns = [col_name]                          # 컬럼명 설정
+            df[col_name] = pd.to_numeric(df[col_name], errors='coerce')  # 숫자 변환
+            return df                                        # 성공 시 반환
         except Exception:
-            if attempt < retries - 1:
-                wait = 2 ** attempt
+            if attempt < retries - 1:                        # 마지막 시도 전이면
+                wait = 5 * (3 ** attempt)                    # 5초, 15초, 45초 대기
                 print(f'  [{series_id}] 재시도 {attempt+1}/{retries} ({wait}초 대기)...')
-                time.sleep(wait)
+                time.sleep(wait)                             # 대기 후 재시도
             else:
-                raise
+                raise                                        # 최종 실패 시 예외
 
 
 def _fetch_yahoo_monthly(ticker: str, years: int = 3) -> pd.Series:
@@ -596,13 +596,10 @@ def fetch_noise_regime_light(model_bundle: dict, lookback_days: int = 60) -> np.
         print(f'    VIX term 실패, 캐시 사용: {e}')      # 실패 시 캐시 사용
         vt_val = vt_val_cached                           # 모델 번들의 캐시값
 
-    # ── ⑤-B FRED 실시간: HY_OAS (Yahoo 대체 불가) ──
-    try:
-        hy_df = _fetch_fred('BAMLH0A0HYM2', 'hy_spread')  # HY OAS 수집
-        hy_val = float(hy_df['hy_spread'].dropna().iloc[-1])  # 최신 HY 스프레드
-    except Exception as e:
-        print(f'    HY spread 실패, 캐시 사용: {e}')     # 실패 시 캐시 사용
-        hy_val = hy_val_cached                           # 모델 번들의 캐시값
+    # ── ⑤-B HY_OAS: 모델 번들 캐시값 사용 (경량 모드에서 FRED 호출 스킵)
+    # FRED는 일별 업데이트이므로 10분 주기 호출 불필요, 캐시값으로 충분
+    hy_val = hy_val_cached                               # 모델 번들의 캐시값 사용
+    print(f'    HY spread: 캐시 사용 ({hy_val:.4f})')    # 캐시값 로그
 
     # ── ⑥ realized_vol: 최근 20일 SPY 수익률 기반 ──
     if spy_ret is not None and len(spy_ret) >= 20:       # SPY 데이터가 충분하면
