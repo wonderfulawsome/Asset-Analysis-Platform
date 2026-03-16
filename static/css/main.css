@@ -1144,7 +1144,8 @@ body {
   top: 0;
   padding: 16px 20px 12px;
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;                                   /* 2줄 배치 허용 */
+  gap: 4px 8px;                                      /* 행간 4px, 열간 8px */
   align-items: center;
   background: var(--bg);
   z-index: 1;
@@ -1164,10 +1165,10 @@ body {
   font-weight: 700;
 }
 .detail-subtitle {
-  font-size: 11px;                                 /* 작은 글씨 */
+  width: 100%;                                     /* 전체 너비 → 줄바꿈 */
+  font-size: 13px;                                 /* 잘 보이는 크기 */
   color: var(--sub);                               /* 보조 텍스트 색상 */
-  font-weight: 500;                                /* 중간 굵기 */
-  margin-top: 2px;                                 /* 제목과 간격 */
+  font-weight: 600;                                /* 굵게 */
   padding-left: 2px;                               /* 좌측 약간 들여쓰기 */
 }
 .detail-body {
