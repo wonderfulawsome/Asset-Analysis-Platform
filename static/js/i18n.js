@@ -143,6 +143,7 @@ const I18N = {
 
     // ── 상세 페이지 ──
     'detail.back': '← 뒤로',                     // 뒤로
+    'detail.mlLabel': '머신러닝 학습 지표',        // 상세페이지 서브타이틀
     'detail.noData': '데이터 없음',               // 데이터 없음
     'detail.currentPhase': '현재 국면',           // 현재 국면
     'detail.noiseScore': 'Noise Score:',          // 노이즈 점수
@@ -507,6 +508,7 @@ const I18N = {
 
     // ── Detail Page ──
     'detail.back': '← Back',
+    'detail.mlLabel': 'ML-Based Indicators',
     'detail.noData': 'No Data',
     'detail.currentPhase': 'Current Phase',
     'detail.noiseScore': 'Noise Score:',

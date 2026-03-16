@@ -1151,6 +1151,7 @@ function openDetail(title, renderFn) {
   const titleEl = document.getElementById('detail-title');
   const body = document.getElementById('detail-body');
   titleEl.textContent = title;                             // 제목 설정
+  document.getElementById('detail-subtitle').textContent = t('detail.mlLabel'); // 서브타이틀 설정
   body.innerHTML = '';                                     // 본문 초기화
   renderFn(body);                                          // 컨텐츠 렌더링
   history.pushState({ detail: true }, '');                  // 히스토리에 상세 상태 추가
