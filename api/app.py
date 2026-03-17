@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse            # 텍스트 응답 (robots.txt 등)
 from fastapi.middleware.cors import CORSMiddleware        # CORS 미들웨어 (앱에서 API 호출용)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -55,6 +56,29 @@ app.include_router(market_summary.router, prefix='/api/market-summary', tags=['�
 @app.get('/')
 def root(request: Request):
     return templates.TemplateResponse('index.html', {'request': request})
+
+# 사이트 도메인 (sitemap, robots.txt에서 사용)
+SITE_URL = 'https://passive-financial-data-analysis-production.up.railway.app'
+
+# robots.txt: 검색엔진 크롤러 허용 규칙 + sitemap 위치
+@app.get('/robots.txt', response_class=PlainTextResponse)
+def robots_txt():
+    return (                                               # 모든 크롤러 허용, API 경로는 차단
+        'User-agent: *\n'
+        'Allow: /\n'
+        'Disallow: /api/\n'
+        f'Sitemap: {SITE_URL}/sitemap.xml\n'
+    )
+
+# sitemap.xml: 검색엔진에 크롤링 대상 URL 제공
+@app.get('/sitemap.xml', response_class=PlainTextResponse)
+def sitemap_xml():
+    return (                                               # XML 형식 사이트맵
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f'  <url><loc>{SITE_URL}/</loc><priority>1.0</priority></url>\n'
+        '</urlset>\n'
+    )
 
 # -------------------------------------------------------------------
 ### 3시간 스케줄링
