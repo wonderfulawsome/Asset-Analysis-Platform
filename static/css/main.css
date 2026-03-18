@@ -1522,3 +1522,149 @@ html[lang="en"] .card-tappable::after {
   from { opacity: 0; transform: translateY(8px); }  /* 아래에서 위로 */
   to   { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Candlestick Chart Tab ───────────────── */
+.chart-ticker-bar {
+  margin-bottom: 8px;
+}
+.chart-ticker-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 0;
+}
+.chart-ticker-chips::-webkit-scrollbar { display: none; }
+.chart-tk-chip {
+  flex-shrink: 0;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid var(--sep);
+  background: var(--card);
+  color: var(--sub);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.chart-tk-chip.active {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+[data-theme="dark"] .chart-tk-chip.active {
+  background: #FF8C00;
+  color: #000;
+  border-color: #FF8C00;
+}
+
+.chart-interval-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.chart-iv-btn {
+  flex: 1;
+  padding: 8px 0;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid var(--sep);
+  background: var(--card);
+  color: var(--sub);
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.chart-iv-btn.active {
+  background: #1a1a1a;
+  color: #fff;
+  border-color: #1a1a1a;
+}
+[data-theme="dark"] .chart-iv-btn.active {
+  background: #FF8C00;
+  color: #000;
+  border-color: #FF8C00;
+}
+
+.candle-svg-wrap, .volume-chart-wrap {
+  position: relative;
+}
+.candle-svg-wrap svg, .volume-chart-wrap svg {
+  width: 100%;
+  display: block;
+}
+.candle-vol-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sub);
+  margin-bottom: 4px;
+  padding-left: 4px;
+}
+.candle-crosshair {
+  stroke: var(--sub2);
+  stroke-width: 0.5;
+  stroke-dasharray: 3 3;
+}
+.candle-tooltip {
+  position: absolute;
+  background: var(--card);
+  border: 1px solid var(--sep);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+  box-shadow: var(--shadow);
+  min-width: 130px;
+}
+.ct-date {
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+.ct-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--sub);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.ct-row span {
+  color: var(--text);
+}
+
+/* Summary Grid */
+.chart-summary {
+  margin-top: 10px;
+}
+.chart-sum-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.chart-sum-item {
+  background: var(--card);
+  border-radius: 14px;
+  padding: 12px;
+  text-align: center;
+}
+.chart-sum-label {
+  font-size: 11px;
+  color: var(--sub);
+  margin-bottom: 4px;
+}
+.chart-sum-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+[data-theme="dark"] .chart-sum-item {
+  background: #1C1C20;
+}

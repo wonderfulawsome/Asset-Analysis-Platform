@@ -651,6 +651,11 @@ function switchTab(idx, addHistory) {
     window._sectorLoaded = true;
     loadSectorCycle();
   }
+  // 차트 탭 최초 진입 시 초기화
+  if (idx === 3 && typeof initChartTab === 'function' && !window._chartLoaded) {
+    window._chartLoaded = true;
+    initChartTab();
+  }
   // 히스토리에 상태 추가 (뒤로가기 지원)
   if (addHistory && idx !== _currentTabIdx) {
     history.pushState({ tab: idx }, '');
@@ -659,7 +664,7 @@ function switchTab(idx, addHistory) {
 }
 
 // ── 탭 전환 ──
-const TAB_IDS = ['tab-market', 'tab-signal', 'tab-sector'];
+const TAB_IDS = ['tab-market', 'tab-signal', 'tab-sector', 'tab-chart'];
 const tabs = document.querySelectorAll('.tab');
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
