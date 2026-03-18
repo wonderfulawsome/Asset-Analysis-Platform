@@ -182,43 +182,37 @@ def fetch_index_prices_latest() -> list[dict]:
     실제 거래 데이터가 있는 가장 최근 날짜를 반환합니다.
     """
     client = get_client()
-    # 최근 날짜 조회 (31개 티커 × 5일 = 155행으로 충분한 날짜 확보)
-    dates = (
+    # change_pct != 0 인 행에서 가장 최근 날짜를 직접 찾기
+    nz = (
         client.table("index_price_raw")
         .select("date")
+        .neq("change_pct", 0)
         .order("date", desc=True)
-        .limit(155)
+        .limit(1)
         .execute()
     )
-    if not dates.data:
-        return []
-    # 중복 제거 후 최신순 유지
-    seen = []
-    for row in dates.data:
-        if row["date"] not in seen:
-            seen.append(row["date"])
-
-    for candidate_date in seen:
-        response = (
+    if nz.data:
+        target_date = nz.data[0]["date"]
+    else:
+        # 전부 0이면 가장 최근 날짜 사용
+        latest = (
             client.table("index_price_raw")
-            .select("*")
-            .eq("date", candidate_date)
+            .select("date")
+            .order("date", desc=True)
+            .limit(1)
             .execute()
         )
-        rows = response.data
-        if not rows:
-            continue
-        # change_pct가 하나라도 0이 아닌 값이 있으면 유효한 거래일
-        if any(r.get("change_pct", 0) != 0 for r in rows):
-            return rows
-    # 모든 날짜가 0이면 가장 최근 데이터라도 반환
-    fallback = (
+        if not latest.data:
+            return []
+        target_date = latest.data[0]["date"]
+
+    response = (
         client.table("index_price_raw")
         .select("*")
-        .eq("date", seen[0])
+        .eq("date", target_date)
         .execute()
     )
-    return fallback.data
+    return response.data
 
 # ── sector_macro_raw ──────────────────────────────────────────
 
