@@ -25,7 +25,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=2">
+  <link rel="stylesheet" href="/static/css/main.css?v=3">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
@@ -70,7 +70,13 @@
   <!-- Holdings Setup -->
   <div id="holdings-setup" class="holdings-setup" style="display:none;">
     <div class="holdings-inner">
-      <button id="holdings-back" class="holdings-back-btn" data-i18n="holdings.back">← 뒤로</button>
+      <div class="holdings-top-bar">
+        <button id="holdings-back" class="holdings-back-btn" data-i18n="holdings.back">← 뒤로</button>
+        <div class="holdings-top-actions">
+          <button id="setup-theme" class="setup-toggle-btn" aria-label="Toggle dark mode">🌙</button>
+          <button id="setup-lang" class="setup-toggle-btn setup-lang-btn">EN</button>
+        </div>
+      </div>
       <div class="holdings-header" data-i18n="holdings.title">보유 종목 설정</div>
       <div class="holdings-desc" data-i18n="holdings.desc">투자 중인 ETF를 선택해주세요</div>
       <div class="holdings-search-wrap">
@@ -246,30 +252,29 @@
     <div id="detail-body" class="detail-body"></div>
   </div>
 
-  <script src="/static/js/i18n.js?v=1"></script>
+  <script src="/static/js/i18n.js?v=2"></script>
   <script>
-    // ── 다크모드 토글 ──
-    function initThemeToggle() {
-      var btn = document.getElementById('btn-theme');
-      if (!btn) return;
-      function updateIcon() {
-        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        btn.textContent = isDark ? '☀️' : '🌙';
-      }
-      updateIcon();
-      btn.addEventListener('click', function() {
-        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-        if (isDark) {
-          document.documentElement.removeAttribute('data-theme');
-          localStorage.setItem('theme', 'light');
-        } else {
-          document.documentElement.setAttribute('data-theme', 'dark');
-          localStorage.setItem('theme', 'dark');
-        }
-        updateIcon();
-      });
+    // ── 다크모드 토글 (헤더 + setup 화면 동기화) ──
+    function updateAllThemeIcons() {
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      var icon = isDark ? '☀️' : '🌙';
+      var btns = [document.getElementById('btn-theme'), document.getElementById('setup-theme')];
+      btns.forEach(function(b) { if (b) b.textContent = icon; });
     }
-    initThemeToggle();
+    function toggleTheme() {
+      var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if (isDark) {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('theme', 'light');
+      } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      }
+      updateAllThemeIcons();
+    }
+    updateAllThemeIcons();
+    document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+    document.getElementById('setup-theme').addEventListener('click', toggleTheme);
 
     // 페이지 로드 시 저장된 언어 설정 적용
     applyI18n();                                   // data-i18n 정적 텍스트 번역
@@ -279,6 +284,7 @@
     if (_dateEl) _dateEl.textContent = formatDate(new Date());
     // 언어 전환 버튼 이벤트
     document.getElementById('btn-lang').addEventListener('click', switchLang);
+    document.getElementById('setup-lang').addEventListener('click', switchLang);
   </script>
   <script src="/static/js/main.js?v=17"></script>
   <script src="/static/js/sector.js?v=5"></script>

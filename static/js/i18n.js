@@ -878,8 +878,11 @@ function applyI18n() {
 
 // ── 언어 전환 버튼 텍스트 업데이트 ──
 function updateLangButton() {
-  const btn = document.getElementById('btn-lang'); // 언어 버튼 요소
-  if (btn) btn.textContent = t('lang.btn');        // 현재 언어의 반대 표시
+  const txt = t('lang.btn');
+  ['btn-lang', 'setup-lang'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.textContent = txt;
+  });
 }
 
 // ── 언어 전환 (메인 함수) ──
@@ -917,4 +920,7 @@ function reRenderDynamic() {
   if (window._sectorLoaded) {
     if (typeof loadSectorCycle === 'function') loadSectorCycle(); // 섹터 경기국면
   }
+
+  // 보유종목 설정 화면 칩 재렌더 (열려있을 때)
+  if (typeof window._rerenderSetupChips === 'function') window._rerenderSetupChips();
 }
