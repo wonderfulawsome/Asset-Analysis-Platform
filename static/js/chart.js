@@ -156,11 +156,19 @@ function renderMALegend() {
   };
 }
 
+// ── Y축 라벨 포맷 (깔끔한 정수 표시) ──
+function fmtYLabel(val) {
+  if (val >= 10000) return (val / 1000).toFixed(0) + 'k';
+  if (val === Math.round(val)) return val.toFixed(0);       // 정수면 소수점 없이
+  if (val >= 100) return val.toFixed(1);
+  return val.toFixed(2);
+}
+
 // ── 캔들스틱 SVG 렌더링 ──
 function renderCandlestickChart(el, candles, allCandles) {
   const W = el.clientWidth - 2;
   const H = 300;
-  const pad = { top: 14, right: 52, bottom: 22, left: 8 };
+  const pad = { top: 14, right: 48, bottom: 28, left: 8 };
   const cW = W - pad.left - pad.right;
   const cH = H - pad.top - pad.bottom;
   const n = candles.length;
@@ -200,27 +208,32 @@ function renderCandlestickChart(el, candles, allCandles) {
   const x = i => pad.left + gap * i + gap / 2;
   const y = v => pad.top + (1 - (v - yMin) / yRange) * cH;
 
-  // Y축 격자 + 라벨 (오른쪽 배치)
+  // 현재가 정보 (먼저 계산 → Y축 라벨 충돌 체크용)
+  const lastC = candles[n - 1].c;
+  const lastColor = candles[n - 1].c >= candles[n - 1].o ? '#10B981' : '#EF4444';
+  const lastY = y(lastC);
+
+  // Y축 격자 + 라벨 (오른쪽 배치, 현재가와 겹치는 tick 숨기기)
   let yLabels = '', gridLines = '';
   scale.ticks.forEach(val => {
     const yPos = y(val);
     if (yPos < pad.top - 2 || yPos > pad.top + cH + 2) return;
-    const label = val >= 10000 ? (val / 1000).toFixed(0) + 'k'
-      : val >= 1000 ? val.toFixed(0)
-      : val >= 100 ? val.toFixed(1)
-      : val.toFixed(2);
-    yLabels += `<text class="chart-label chart-y-label" x="${W - pad.right + 6}" y="${yPos.toFixed(1)}" text-anchor="start" dominant-baseline="middle">${label}</text>`;
+    // 현재가 라벨과 너무 가까우면 이 tick 라벨 숨기기 (격자선은 유지)
+    const tooClose = Math.abs(yPos - lastY) < 14;
     gridLines += `<line class="chart-grid-line" x1="${pad.left}" y1="${yPos.toFixed(1)}" x2="${W - pad.right}" y2="${yPos.toFixed(1)}"/>`;
+    if (!tooClose) {
+      yLabels += `<text class="chart-label chart-y-label" x="${W - pad.right + 6}" y="${yPos.toFixed(1)}" text-anchor="start" dominant-baseline="middle">${fmtYLabel(val)}</text>`;
+    }
   });
 
   // X축 라벨
   let xLabels = '';
-  const labelCount = Math.min(6, n);
+  const labelCount = Math.min(5, n);
   const labelStep = Math.max(1, Math.floor((n - 1) / (labelCount - 1)));
   for (let i = 0; i < n; i += labelStep) {
     const d = candles[i].d;
     const lbl = _chartInterval === '1mo' ? d.substring(2, 7) : d.substring(5);
-    xLabels += `<text class="chart-label" x="${x(i).toFixed(1)}" y="${H - 3}" text-anchor="middle">${lbl}</text>`;
+    xLabels += `<text class="chart-label chart-x-label" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${lbl}</text>`;
   }
 
   // 캔들 SVG
@@ -260,12 +273,12 @@ function renderCandlestickChart(el, candles, allCandles) {
     touchZones += `<rect x="${(x(i) - gap / 2).toFixed(1)}" y="${pad.top}" width="${gap.toFixed(1)}" height="${cH}" fill="transparent" data-idx="${i}" class="candle-touch"/>`;
   });
 
-  // 현재가 라벨
-  const lastC = candles[n - 1].c;
-  const lastColor = candles[n - 1].c >= candles[n - 1].o ? '#10B981' : '#EF4444';
+  // 현재가: 점선 + 오른쪽 작은 라벨
   const priceLabel = lastC >= 1000 ? lastC.toFixed(0) : lastC.toFixed(2);
-  const priceLabelSvg = `<rect x="${W - pad.right + 1}" y="${y(lastC) - 8}" width="${pad.right - 4}" height="16" rx="3" fill="${lastColor}"/>
-    <text x="${W - pad.right + pad.right / 2 - 1}" y="${y(lastC) + 0.5}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="9" font-weight="700">${priceLabel}</text>`;
+  const priceLabelSvg = `
+    <line x1="${pad.left}" y1="${lastY.toFixed(1)}" x2="${W - pad.right}" y2="${lastY.toFixed(1)}" stroke="${lastColor}" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.6"/>
+    <rect x="${W - pad.right + 2}" y="${lastY - 7}" width="${pad.right - 6}" height="14" rx="3" fill="${lastColor}"/>
+    <text x="${W - pad.right + pad.right / 2 - 1}" y="${lastY + 0.5}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="8" font-weight="700">${priceLabel}</text>`;
 
   el.innerHTML = `<div class="candle-svg-wrap">
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
@@ -344,7 +357,7 @@ function renderCandlestickChart(el, candles, allCandles) {
 function renderVolumeChart(el, candles) {
   const W = el.clientWidth - 2;
   const H = 60;
-  const pad = { top: 2, right: 52, bottom: 0, left: 8 };
+  const pad = { top: 2, right: 48, bottom: 0, left: 8 };
   const cW = W - pad.left - pad.right;
   const cH = H - pad.top - pad.bottom;
   const n = candles.length;
