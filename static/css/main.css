@@ -1700,7 +1700,7 @@ html[lang="en"] .card-tappable::after {
 .candle-yaxis {
   flex-shrink: 0;
   display: block;
-  background: var(--bg);
+  background: var(--card);
 }
 .vol-scroll-wrap {
   display: flex;
@@ -1730,9 +1730,11 @@ html[lang="en"] .card-tappable::after {
 }
 .chart-y-label {
   font-size: 9px;
+  fill: var(--sub);
 }
 .chart-x-label {
   font-size: 9px;
+  fill: var(--sub);
 }
 .chart-zoom-btns {
   position: absolute;
