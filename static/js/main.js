@@ -743,9 +743,9 @@ function setupTabSwipe() {
     startTime = Date.now();
     dirLocked = false;
     isSwipe = null;
-    // 차트 스크롤 영역 안이면 탭 스와이프 비활성화
+    // 횡스크롤 영역 안이면 탭 스와이프 비활성화
     const t = e.target;
-    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll'))) {
+    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips'))) {
       isSwipe = false;
       return;
     }
@@ -1379,53 +1379,80 @@ async function refreshCurrentTab() {
 }
 
 // ── Pull-to-refresh ──
+// 스크롤이 최상단에 도달한 후 추가로 한번 더 당겨야 새로고침
 function setupPullToRefresh() {
   const indicator = document.getElementById('ptr-indicator');
   const spinner = document.getElementById('ptr-spinner');
   if (!indicator || !spinner) return;
 
-  let startY = 0, pulling = false, refreshing = false;
-  const THRESHOLD = 70;
+  let pulling = false, refreshing = false;
+  let startY = 0;
+  let atTopOnStart = false;   // 터치 시작 시 최상단이었는지
+  let overscrollStartY = 0;   // 최상단 도달 후 추가 당김 시작점
+  let overscrolling = false;  // 실제 overscroll 구간 진입
+  const THRESHOLD = 80;       // 새로고침 트리거 거리
 
   document.addEventListener('touchstart', e => {
     if (refreshing) return;
-    // 차트 스크롤 영역이면 무시
-    if (e.target.closest && (e.target.closest('.candle-scroll') || e.target.closest('.volume-scroll'))) return;
-    // 상세 오버레이 열려있으면 무시
+    // 횡스크롤 영역이면 무시
+    if (e.target.closest && (e.target.closest('.candle-scroll') || e.target.closest('.volume-scroll') || e.target.closest('.chart-ticker-chips'))) return;
     const overlay = document.getElementById('detail-overlay');
     if (overlay && overlay.classList.contains('open')) return;
-    // 페이지가 최상단일 때만
-    if (window.scrollY <= 0) {
-      startY = e.touches[0].clientY;
-      pulling = true;
-    }
+
+    startY = e.touches[0].clientY;
+    atTopOnStart = (window.scrollY <= 0);
+    overscrolling = false;
+    overscrollStartY = 0;
+    pulling = true;
   }, { passive: true });
 
   document.addEventListener('touchmove', e => {
     if (!pulling || refreshing) return;
-    const dy = e.touches[0].clientY - startY;
-    if (dy < 0) { pulling = false; return; }
-    // 페이지가 아래로 스크롤되면 취소
-    if (window.scrollY > 0) { pulling = false; indicator.style.top = '-50px'; indicator.classList.remove('visible'); return; }
+    const cy = e.touches[0].clientY;
+    const dy = cy - startY;
 
-    const progress = Math.min(dy / THRESHOLD, 1);
-    const topPos = Math.min(dy * 0.4, 50);
+    // 위로 스와이프면 취소
+    if (dy < 0) {
+      pulling = false;
+      resetIndicator();
+      return;
+    }
+
+    // 아래로 스크롤 중이면 아직 overscroll 아님
+    if (window.scrollY > 0) {
+      overscrolling = false;
+      overscrollStartY = 0;
+      return;
+    }
+
+    // 최상단 도달! 이제부터 overscroll 추적 시작
+    if (!overscrolling) {
+      // 터치 시작 시 이미 최상단이 아니었으면 → 스크롤해서 도달한 것
+      // 이 시점의 Y를 overscroll 기준점으로 설정
+      overscrolling = true;
+      overscrollStartY = cy;
+      return;
+    }
+
+    // overscroll 거리 (최상단 도달 이후 추가로 당긴 거리)
+    const overDy = cy - overscrollStartY;
+    if (overDy <= 0) return;
+
+    const progress = Math.min(overDy / THRESHOLD, 1);
+    const topPos = Math.min(overDy * 0.35, 50);
     indicator.style.top = `${topPos}px`;
     indicator.classList.add('visible');
     spinner.style.transform = `rotate(${progress * 360}deg)`;
     spinner.className = 'ptr-spinner pulling';
-
-    if (dy > THRESHOLD) {
-      spinner.style.opacity = '1';
-    } else {
-      spinner.style.opacity = `${0.3 + progress * 0.7}`;
-    }
+    spinner.style.opacity = `${0.3 + progress * 0.7}`;
   }, { passive: true });
 
   document.addEventListener('touchend', async () => {
-    if (!pulling || refreshing) return;
-    const dy = parseInt(indicator.style.top) || 0;
-    if (dy >= 20) {  // 충분히 당겼으면
+    if (!pulling || refreshing) { pulling = false; return; }
+    if (!overscrolling) { pulling = false; resetIndicator(); return; }
+
+    const topPos = parseInt(indicator.style.top) || 0;
+    if (topPos >= 28) {  // 충분히 당겼으면 새로고침
       refreshing = true;
       spinner.className = 'ptr-spinner refreshing';
       spinner.style.transform = '';
@@ -1434,16 +1461,19 @@ function setupPullToRefresh() {
 
       await refreshCurrentTab();
 
-      // 완료 애니메이션
-      indicator.style.top = '-50px';
-      indicator.classList.remove('visible');
+      resetIndicator();
       refreshing = false;
     } else {
-      indicator.style.top = '-50px';
-      indicator.classList.remove('visible');
+      resetIndicator();
     }
     pulling = false;
+    overscrolling = false;
   }, { passive: true });
+
+  function resetIndicator() {
+    indicator.style.top = '-50px';
+    indicator.classList.remove('visible');
+  }
 }
 setupPullToRefresh();
 
