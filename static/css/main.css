@@ -1790,6 +1790,26 @@ html[lang="en"] .card-tappable::after {
   0% { background-position: 200% 0; }
   100% { background-position: -200% 0; }
 }
+/* 차트 Y축 재계산 로딩 오버레이 */
+.chart-recalc-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.45);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 4;
+  border-radius: 12px;
+}
+.chart-recalc-overlay.active {
+  opacity: 1;
+}
+[data-theme="dark"] .chart-recalc-overlay {
+  background: rgba(30,30,40,0.45);
+}
 .candle-empty {
   text-align: center;
   padding: 60px 0;
