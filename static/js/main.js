@@ -720,14 +720,32 @@ function showBackToast() {
 }
 
 // ── 탭 스와이프 제스처 ──
+// 횡스크롤 영역 판정 함수 (동적 요소 대응)
+function _isHScrollArea(el) {
+  if (!el || !el.closest) return false;
+  // 클래스 기반 체크 (동적 생성 요소 포함)
+  if (el.closest('.candle-scroll') || el.closest('.volume-scroll') ||
+      el.closest('.chart-ticker-chips') || el.closest('.chart-ticker-bar') ||
+      el.closest('.ma-legend')) return true;
+  // overflow-x 스크롤 가능한 요소 체크
+  let node = el;
+  while (node && node !== document.body) {
+    const style = window.getComputedStyle(node);
+    if ((style.overflowX === 'auto' || style.overflowX === 'scroll') &&
+        node.scrollWidth > node.clientWidth + 2) return true;
+    node = node.parentElement;
+  }
+  return false;
+}
+
 function setupTabSwipe() {
   const wrap = document.querySelector('.scroll-wrap');       // 스크롤 영역
   if (!wrap) return;
 
-  const THRESHOLD_X = 50;                                    // 스와이프 최소 거리 (px)
+  const THRESHOLD_X = 70;                                    // 스와이프 최소 거리 (px)
   const MAX_VISUAL  = 80;                                    // 드래그 시 최대 이동량 (px)
-  const MAX_TIME    = 500;                                   // 스와이프 최대 시간 (ms)
-  const DIR_LOCK_PX = 10;                                    // 방향 결정 최소 이동 (px)
+  const MAX_TIME    = 400;                                   // 스와이프 최대 시간 (ms)
+  const DIR_LOCK_PX = 15;                                    // 방향 결정 최소 이동 (px)
   const MAX_VERT    = 30;                                    // 수직 스크롤 판정 임계 (px)
 
   let startX = 0, startY = 0, startTime = 0;                // 터치 시작 좌표/시간
@@ -745,8 +763,7 @@ function setupTabSwipe() {
     isSwipe = null;
     activeEl = null;
     // 횡스크롤 영역 안이면 탭 스와이프 비활성화
-    const t = e.target;
-    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips') || t.closest('.chart-ticker-bar') || t.closest('.ma-legend'))) {
+    if (_isHScrollArea(e.target)) {
       isSwipe = false;
       return;
     }
@@ -756,9 +773,8 @@ function setupTabSwipe() {
 
   wrap.addEventListener('touchmove', (e) => {
     if (isSwipe === false || !activeEl) return;
-    // 횡스크롤 영역 안이면 탭 스와이프 비활성화 (touchstart 이후 포커스 변경 방어)
-    const t = e.target;
-    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips') || t.closest('.chart-ticker-bar') || t.closest('.ma-legend'))) {
+    // 횡스크롤 영역 체크 (touchstart 이후 타겟 변경 방어)
+    if (_isHScrollArea(e.target)) {
       isSwipe = false; activeEl = null; return;
     }
     const cx = e.touches[0].clientX;
@@ -770,8 +786,9 @@ function setupTabSwipe() {
     if (!dirLocked) {
       if (adx < DIR_LOCK_PX && ady < DIR_LOCK_PX) return;
       if (ady > MAX_VERT && adx < ady) { isSwipe = false; return; }
-      if (adx > ady * 2) { isSwipe = true; dirLocked = true; }
-      else if (ady > adx) { isSwipe = false; dirLocked = true; return; }
+      // 수평이 수직보다 2.5배 이상이어야 스와이프 판정
+      if (adx > ady * 2.5) { isSwipe = true; dirLocked = true; }
+      else if (ady >= adx) { isSwipe = false; dirLocked = true; return; }
       else return;
     }
 
@@ -800,13 +817,6 @@ function setupTabSwipe() {
   }, { passive: true });
 }
 setupTabSwipe();
-
-// ── 횡스크롤 영역 터치 이벤트 격리 ──
-// wrap(scroll-wrap)의 탭 스와이프 핸들러에 이벤트가 전파되지 않도록 차단
-document.querySelectorAll('.chart-ticker-chips, .chart-ticker-bar, .candle-scroll, .volume-scroll, .ma-legend').forEach(el => {
-  el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
-  el.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
-});
 
 // ── Crash/Surge 전조 탐지 ──
 async function loadCrashSurge() {
@@ -1411,7 +1421,7 @@ function setupPullToRefresh() {
   document.addEventListener('touchstart', e => {
     if (refreshing) return;
     // 횡스크롤 영역이면 무시
-    if (e.target.closest && (e.target.closest('.candle-scroll') || e.target.closest('.volume-scroll') || e.target.closest('.chart-ticker-chips') || e.target.closest('.chart-ticker-bar') || e.target.closest('.ma-legend'))) return;
+    if (_isHScrollArea(e.target)) return;
     const overlay = document.getElementById('detail-overlay');
     if (overlay && overlay.classList.contains('open')) return;
 
