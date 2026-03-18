@@ -127,7 +127,7 @@ async function loadCandleChart() {
   const sumEl = document.getElementById('chart-summary');
   if (!chartEl) return;
 
-  chartEl.innerHTML = '<div class="candle-loading"><div class="candle-skeleton"></div></div>';
+  chartEl.innerHTML = '<div class="candle-loading"><div class="loading-spinner"></div></div>';
   if (volEl) volEl.innerHTML = '';
   if (sumEl) sumEl.innerHTML = '';
 

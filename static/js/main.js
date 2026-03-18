@@ -330,7 +330,7 @@ async function loadHoldingsSummary() {
     const res = await fetch('/api/index/latest');
     const list = await res.json();
     if (!Array.isArray(list) || list.length === 0) {
-      el.innerHTML = `<div class="holdings-empty">${t('holdings.loading')}</div>`;
+      el.innerHTML = `<div class="loading-placeholder"><div class="loading-spinner sm"></div><span class="loading-text">${t('holdings.loading')}</span></div>`;
       return;
     }
     const priceMap = {};
@@ -802,7 +802,7 @@ async function loadCrashSurge() {
     const d = await res.json();
     if (!d) {
       document.getElementById('cs-card').innerHTML =
-        `<div style="text-align:center;font-size:13px;color:var(--sub);padding:12px 0">${t('holdings.loading')}</div>`;
+        `<div class="loading-placeholder"><div class="loading-spinner sm"></div><span class="loading-text">${t('holdings.loading')}</span></div>`;
       return;
     }
 
@@ -1095,7 +1095,7 @@ async function loadDirection() {
     const res = await fetch('/api/crash-surge/direction');  // 방향성 API 호출
     const d = await res.json();
     if (!d || d.message) {                                  // 데이터 부족 시
-      el.innerHTML = `<div style="text-align:center;font-size:13px;color:var(--sub);padding:12px 0">${d?.message || t('dir.loading')}</div>`;
+      el.innerHTML = `<div class="loading-placeholder"><div class="loading-spinner sm"></div><span class="loading-text">${d?.message || t('dir.loading')}</span></div>`;
       badge.className = 'badge';
       badge.textContent = '';
       return;
@@ -1353,6 +1353,99 @@ function renderNoiseDetail(body) {
     renderDescCards(body, allItems, getNRFeatureDesc());
   }
 }
+
+// ── 현재 탭 데이터 새로고침 ──
+async function refreshCurrentTab() {
+  const idx = _currentTabIdx;
+  if (idx === 0) {
+    // 시장 탭
+    await Promise.allSettled([
+      loadRegime(), loadMacro(), loadFeed(),
+      loadMarketOverview(), loadNoiseChart(),
+      loadHoldingsSummary()
+    ]);
+  } else if (idx === 1) {
+    // 신호 탭
+    await Promise.allSettled([
+      loadCrashSurge(), loadDirection(), loadCrashSurgeChart()
+    ]);
+  } else if (idx === 2) {
+    // 거시경제 탭
+    if (typeof loadSectorCycle === 'function') await loadSectorCycle();
+  } else if (idx === 3) {
+    // 차트 탭
+    if (typeof loadCandleChart === 'function') await loadCandleChart();
+  }
+}
+
+// ── Pull-to-refresh ──
+function setupPullToRefresh() {
+  const indicator = document.getElementById('ptr-indicator');
+  const spinner = document.getElementById('ptr-spinner');
+  if (!indicator || !spinner) return;
+
+  let startY = 0, pulling = false, refreshing = false;
+  const THRESHOLD = 70;
+
+  document.addEventListener('touchstart', e => {
+    if (refreshing) return;
+    // 차트 스크롤 영역이면 무시
+    if (e.target.closest && (e.target.closest('.candle-scroll') || e.target.closest('.volume-scroll'))) return;
+    // 상세 오버레이 열려있으면 무시
+    const overlay = document.getElementById('detail-overlay');
+    if (overlay && overlay.classList.contains('open')) return;
+    // 페이지가 최상단일 때만
+    if (window.scrollY <= 0) {
+      startY = e.touches[0].clientY;
+      pulling = true;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!pulling || refreshing) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy < 0) { pulling = false; return; }
+    // 페이지가 아래로 스크롤되면 취소
+    if (window.scrollY > 0) { pulling = false; indicator.style.top = '-50px'; indicator.classList.remove('visible'); return; }
+
+    const progress = Math.min(dy / THRESHOLD, 1);
+    const topPos = Math.min(dy * 0.4, 50);
+    indicator.style.top = `${topPos}px`;
+    indicator.classList.add('visible');
+    spinner.style.transform = `rotate(${progress * 360}deg)`;
+    spinner.className = 'ptr-spinner pulling';
+
+    if (dy > THRESHOLD) {
+      spinner.style.opacity = '1';
+    } else {
+      spinner.style.opacity = `${0.3 + progress * 0.7}`;
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', async () => {
+    if (!pulling || refreshing) return;
+    const dy = parseInt(indicator.style.top) || 0;
+    if (dy >= 20) {  // 충분히 당겼으면
+      refreshing = true;
+      spinner.className = 'ptr-spinner refreshing';
+      spinner.style.transform = '';
+      spinner.style.opacity = '1';
+      indicator.style.top = '16px';
+
+      await refreshCurrentTab();
+
+      // 완료 애니메이션
+      indicator.style.top = '-50px';
+      indicator.classList.remove('visible');
+      refreshing = false;
+    } else {
+      indicator.style.top = '-50px';
+      indicator.classList.remove('visible');
+    }
+    pulling = false;
+  }, { passive: true });
+}
+setupPullToRefresh();
 
 // ── 초기화 ──
 function dismissSplash() {

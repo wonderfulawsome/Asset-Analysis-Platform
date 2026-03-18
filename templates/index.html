@@ -25,7 +25,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=7">
+  <link rel="stylesheet" href="/static/css/main.css?v=8">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
@@ -110,6 +110,11 @@
     </div>
   </header>
 
+  <!-- Pull-to-refresh indicator -->
+  <div class="ptr-indicator" id="ptr-indicator">
+    <div class="ptr-spinner pulling" id="ptr-spinner"></div>
+  </div>
+
   <!-- Tab Bar -->
   <div class="tab-bar">
     <button class="tab active" data-idx="0" data-i18n="tab.market">시장</button>
@@ -138,13 +143,13 @@
           <span class="card-label">Noise vs Signal</span>
           <span id="nr-badge" class="badge badge-yellow"></span>
         </div>
-        <div id="regime-card"></div>
+        <div id="regime-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
       <!-- Noise Score 30일 추이 그래프 -->
       <div class="fade-target">
         <div class="section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (30일)</div>
-        <div id="nr-chart" class="card" style="padding:14px 16px"></div>
+        <div id="nr-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
       <!-- Indicators -->
@@ -181,7 +186,7 @@
     <main class="content" id="tab-sector" style="display:none;">
 
       <!-- Economic Phase -->
-      <div id="sc-phase-card" class="phase-card fade-target"></div>
+      <div id="sc-phase-card" class="phase-card fade-target"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
 
       <!-- Top Sectors -->
       <div class="fade-target">
@@ -189,13 +194,13 @@
           <span class="section-label">Top Sectors</span>
           <span id="sc-top-sub" class="badge badge-green"></span>
         </div>
-        <div id="sc-top3" class="top-sectors"></div>
+        <div id="sc-top3" class="top-sectors"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
       <!-- Heatmap -->
       <div class="fade-target">
         <div class="section-label" style="margin-top:18px">Sector Heatmap</div>
-        <div id="sc-heatmap" class="heatmap-wrap"></div>
+        <div id="sc-heatmap" class="heatmap-wrap"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
       <!-- Holdings Performance -->
@@ -218,7 +223,7 @@
           <span class="card-label" data-i18n="cs.cardLabel">하락/상승 가능성</span>
           <span id="cs-badge" class="badge"></span>
         </div>
-        <div id="cs-card"></div>
+        <div id="cs-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
       <!-- 방향성 분석 -->
@@ -227,13 +232,13 @@
           <span class="card-label" data-i18n="dir.cardLabel">향후 방향성</span>
           <span id="dir-badge" class="badge"></span>
         </div>
-        <div id="cs-direction"></div>
+        <div id="cs-direction"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
       <!-- Crash/Surge Net Score 30일 추이 그래프 -->
       <div class="fade-target">
         <div class="section-label" data-i18n="section.csChart">방향성 추이 (30일)</div>
-        <div id="cs-chart" class="card" style="padding:14px 16px"></div>
+        <div id="cs-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
       <!-- 면책 문구 -->
@@ -328,8 +333,8 @@
     document.getElementById('btn-lang').addEventListener('click', switchLang);
     document.getElementById('setup-lang').addEventListener('click', switchLang);
   </script>
-  <script src="/static/js/main.js?v=18"></script>
+  <script src="/static/js/main.js?v=19"></script>
   <script src="/static/js/sector.js?v=5"></script>
-  <script src="/static/js/chart.js?v=6"></script>
+  <script src="/static/js/chart.js?v=7"></script>
 </body>
 </html>
