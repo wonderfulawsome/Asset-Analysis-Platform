@@ -117,13 +117,11 @@ async function loadCandleChart() {
       return;
     }
 
-    const maxCandles = _chartInterval === '1mo' ? 60 : (_chartInterval === '1wk' ? 80 : 120);
-    const candles = data.candles.slice(-maxCandles);
     _chartData = data.candles; // 전체 데이터 (MA 계산용)
 
-    renderCandlestickChart(chartEl, candles, data.candles);
-    if (volEl) renderVolumeChart(volEl, candles);
-    if (sumEl) renderChartSummary(sumEl, candles);
+    renderCandlestickChart(chartEl, data.candles);
+    if (volEl) renderVolumeChart(volEl, data.candles);
+    if (sumEl) renderChartSummary(sumEl, data.candles);
     renderMALegend();
   } catch (err) {
     chartEl.innerHTML = `<div class="candle-empty">${t('chart.noData')}</div>`;
@@ -148,9 +146,7 @@ function renderMALegend() {
     // 다시 그리기
     const chartEl = document.getElementById('candle-chart');
     if (chartEl && _chartData) {
-      const maxCandles = _chartInterval === '1mo' ? 60 : (_chartInterval === '1wk' ? 80 : 120);
-      const candles = _chartData.slice(-maxCandles);
-      renderCandlestickChart(chartEl, candles, _chartData);
+      renderCandlestickChart(chartEl, _chartData);
     }
     renderMALegend();
   };
@@ -164,31 +160,39 @@ function fmtYLabel(val) {
   return val.toFixed(2);
 }
 
-// ── 캔들스틱 SVG 렌더링 ──
-function renderCandlestickChart(el, candles, allCandles) {
-  const W = el.clientWidth - 2;
+// ── 캔들스틱 SVG 렌더링 (스크롤 가능) ──
+function renderCandlestickChart(el, allCandles) {
+  const containerW = el.clientWidth - 2;
   const H = 300;
-  const pad = { top: 14, right: 48, bottom: 28, left: 8 };
-  const cW = W - pad.left - pad.right;
+  const yAxisW = 44;
+  const pad = { top: 14, bottom: 24, left: 4 };
   const cH = H - pad.top - pad.bottom;
-  const n = candles.length;
+  const n = allCandles.length;
 
-  // Y축 범위 (캔들 + 이동평균선 고려)
+  // 캔들당 고정 너비 (간격 포함)
+  const candleGap = _chartInterval === '1mo' ? 7 : (_chartInterval === '1wk' ? 5.5 : 4);
+  const scrollW = Math.max(containerW - yAxisW, n * candleGap + pad.left + 4);
+  const chartAreaW = scrollW - pad.left;
+
+  const gap = chartAreaW / n;
+  const candleW = Math.max(1, Math.min(gap * 0.6, 8));
+
+  const x = i => pad.left + gap * i + gap / 2;
+
+  // Y축 범위 (전체 데이터)
   let dataMin = Infinity, dataMax = -Infinity;
-  candles.forEach(c => {
+  allCandles.forEach(c => {
     if (c.l < dataMin) dataMin = c.l;
     if (c.h > dataMax) dataMax = c.h;
   });
 
-  // MA 값 계산 (전체 데이터 기반, 표시 구간만 추출)
+  // MA 값 계산
   const maLines = {};
-  const offset = allCandles.length - n;
   MA_CONFIG.forEach(m => {
     if (!_maVisible[m.period]) return;
-    const fullMA = calcMA(allCandles, m.period);
-    const sliced = fullMA.slice(offset);
-    maLines[m.period] = { values: sliced, color: m.color };
-    sliced.forEach(v => {
+    const vals = calcMA(allCandles, m.period);
+    maLines[m.period] = { values: vals, color: m.color };
+    vals.forEach(v => {
       if (v !== null) {
         if (v < dataMin) dataMin = v;
         if (v > dataMax) dataMax = v;
@@ -202,53 +206,31 @@ function renderCandlestickChart(el, candles, allCandles) {
   const yMax = scale.max;
   const yRange = yMax - yMin || 1;
 
-  const gap = cW / n;
-  const candleW = Math.max(1, Math.min(gap * 0.65, 8));
-
-  const x = i => pad.left + gap * i + gap / 2;
   const y = v => pad.top + (1 - (v - yMin) / yRange) * cH;
 
-  // 현재가 정보 (먼저 계산 → Y축 라벨 충돌 체크용)
-  const lastC = candles[n - 1].c;
-  const lastColor = candles[n - 1].c >= candles[n - 1].o ? '#10B981' : '#EF4444';
+  // 현재가 정보
+  const lastC = allCandles[n - 1].c;
+  const lastColor = allCandles[n - 1].c >= allCandles[n - 1].o ? '#10B981' : '#EF4444';
   const lastY = y(lastC);
 
-  // Y축 격자 + 라벨 (오른쪽 배치, 현재가와 겹치는 tick 숨기기)
-  let yLabels = '', gridLines = '';
+  // 격자선 (스크롤 영역 내)
+  let gridLines = '';
   scale.ticks.forEach(val => {
     const yPos = y(val);
     if (yPos < pad.top - 2 || yPos > pad.top + cH + 2) return;
-    // 현재가 라벨과 너무 가까우면 이 tick 라벨 숨기기 (격자선은 유지)
-    const tooClose = Math.abs(yPos - lastY) < 14;
-    gridLines += `<line class="chart-grid-line" x1="${pad.left}" y1="${yPos.toFixed(1)}" x2="${W - pad.right}" y2="${yPos.toFixed(1)}"/>`;
-    if (!tooClose) {
-      yLabels += `<text class="chart-label chart-y-label" x="${W - pad.right + 6}" y="${yPos.toFixed(1)}" text-anchor="start" dominant-baseline="middle">${fmtYLabel(val)}</text>`;
-    }
+    gridLines += `<line class="chart-grid-line" x1="0" y1="${yPos.toFixed(1)}" x2="${scrollW}" y2="${yPos.toFixed(1)}"/>`;
   });
-
-  // X축 라벨
-  let xLabels = '';
-  const labelCount = Math.min(5, n);
-  const labelStep = Math.max(1, Math.floor((n - 1) / (labelCount - 1)));
-  for (let i = 0; i < n; i += labelStep) {
-    const d = candles[i].d;
-    const lbl = _chartInterval === '1mo' ? d.substring(2, 7) : d.substring(5);
-    xLabels += `<text class="chart-label chart-x-label" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${lbl}</text>`;
-  }
 
   // 캔들 SVG
   let candleSvg = '';
-  candles.forEach((c, i) => {
+  allCandles.forEach((c, i) => {
     const cx = x(i);
     const isUp = c.c >= c.o;
     const color = isUp ? '#10B981' : '#EF4444';
     const bodyTop = y(Math.max(c.o, c.c));
     const bodyBot = y(Math.min(c.o, c.c));
     const bodyH = Math.max(0.8, bodyBot - bodyTop);
-
-    // 심지
     candleSvg += `<line x1="${cx.toFixed(1)}" y1="${y(c.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(c.l).toFixed(1)}" stroke="${color}" stroke-width="0.8"/>`;
-    // 몸통
     candleSvg += `<rect x="${(cx - candleW / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${color}" rx="0.3"/>`;
   });
 
@@ -267,45 +249,80 @@ function renderCandlestickChart(el, candles, allCandles) {
     }
   });
 
+  // X축 라벨
+  let xLabels = '';
+  const labelEvery = Math.max(1, Math.round(20 / candleGap * 5));
+  for (let i = 0; i < n; i += labelEvery) {
+    const d = allCandles[i].d;
+    const lbl = _chartInterval === '1mo' ? d.substring(2, 7) : d.substring(5);
+    xLabels += `<text class="chart-label chart-x-label" x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${lbl}</text>`;
+  }
+
+  // 현재가 점선 (스크롤 영역 내)
+  const priceDash = `<line x1="0" y1="${lastY.toFixed(1)}" x2="${scrollW}" y2="${lastY.toFixed(1)}" stroke="${lastColor}" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.5"/>`;
+
   // 터치 영역
   let touchZones = '';
-  candles.forEach((c, i) => {
+  allCandles.forEach((c, i) => {
     touchZones += `<rect x="${(x(i) - gap / 2).toFixed(1)}" y="${pad.top}" width="${gap.toFixed(1)}" height="${cH}" fill="transparent" data-idx="${i}" class="candle-touch"/>`;
   });
 
-  // 현재가: 점선 + 오른쪽 작은 라벨
+  // Y축 오버레이 (고정, 오른쪽)
+  let yLabelsHtml = '';
+  scale.ticks.forEach(val => {
+    const yPos = y(val);
+    if (yPos < pad.top - 2 || yPos > pad.top + cH + 2) return;
+    const tooClose = Math.abs(yPos - lastY) < 14;
+    if (!tooClose) {
+      yLabelsHtml += `<text class="chart-label chart-y-label" x="6" y="${yPos.toFixed(1)}" text-anchor="start" dominant-baseline="middle">${fmtYLabel(val)}</text>`;
+    }
+  });
+
   const priceLabel = lastC >= 1000 ? lastC.toFixed(0) : lastC.toFixed(2);
-  const priceLabelSvg = `
-    <line x1="${pad.left}" y1="${lastY.toFixed(1)}" x2="${W - pad.right}" y2="${lastY.toFixed(1)}" stroke="${lastColor}" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.6"/>
-    <rect x="${W - pad.right + 2}" y="${lastY - 7}" width="${pad.right - 6}" height="14" rx="3" fill="${lastColor}"/>
-    <text x="${W - pad.right + pad.right / 2 - 1}" y="${lastY + 0.5}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="8" font-weight="700">${priceLabel}</text>`;
+  const priceLabelOverlay = `
+    <rect x="2" y="${lastY - 7}" width="${yAxisW - 4}" height="14" rx="3" fill="${lastColor}"/>
+    <text x="${yAxisW / 2}" y="${lastY + 0.5}" text-anchor="middle" dominant-baseline="middle" fill="#fff" font-size="8" font-weight="700">${priceLabel}</text>`;
 
   el.innerHTML = `<div class="candle-svg-wrap">
-    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-      ${gridLines}
-      ${candleSvg}
-      ${maSvg}
-      ${priceLabelSvg}
-      ${xLabels}
-      ${yLabels}
-      ${touchZones}
-      <line id="candle-crosshair" class="candle-crosshair" x1="${pad.left}" y1="0" x2="${W - pad.right}" y2="0" style="display:none"/>
+    <div class="candle-scroll" id="candle-scroll">
+      <svg width="${scrollW}" height="${H}" viewBox="0 0 ${scrollW} ${H}">
+        ${gridLines}
+        ${priceDash}
+        ${candleSvg}
+        ${maSvg}
+        ${xLabels}
+        ${touchZones}
+        <line id="candle-crosshair" class="candle-crosshair" x1="0" y1="0" x2="${scrollW}" y2="0" style="display:none"/>
+      </svg>
+    </div>
+    <svg class="candle-yaxis" width="${yAxisW}" height="${H}" viewBox="0 0 ${yAxisW} ${H}">
+      ${yLabelsHtml}
+      ${priceLabelOverlay}
     </svg>
     <div class="candle-tooltip" id="candle-tip"></div>
   </div>`;
 
+  // 오른쪽 끝으로 스크롤 (최신 데이터부터 보이기)
+  const scrollEl = document.getElementById('candle-scroll');
+  scrollEl.scrollLeft = scrollEl.scrollWidth;
+
+  // 거래량 차트와 스크롤 동기화
+  scrollEl.addEventListener('scroll', () => {
+    const volScroll = document.getElementById('volume-scroll');
+    if (volScroll) volScroll.scrollLeft = scrollEl.scrollLeft;
+  }, { passive: true });
+
   // 터치/호버 이벤트
-  const svg = el.querySelector('svg');
+  const svg = scrollEl.querySelector('svg');
   const tip = document.getElementById('candle-tip');
   const crosshair = document.getElementById('candle-crosshair');
 
   function showCandleTip(idx) {
-    const c = candles[idx];
+    const c = allCandles[idx];
     const chg = ((c.c - c.o) / c.o * 100).toFixed(2);
     const sign = chg > 0 ? '+' : '';
     const color = c.c >= c.o ? '#10B981' : '#EF4444';
 
-    // MA 값 표시
     let maHtml = '';
     MA_CONFIG.forEach(m => {
       if (!_maVisible[m.period] || !maLines[m.period]) return;
@@ -324,9 +341,11 @@ function renderCandlestickChart(el, candles, allCandles) {
       </div>
       <div class="ct-chg" style="color:${color}">${sign}${chg}%</div>
       ${maHtml}`;
-    const cx = x(idx);
+    // Position tooltip relative to visible area
+    const candleX = x(idx);
+    const visibleX = candleX - scrollEl.scrollLeft;
     const tipW = 150;
-    tip.style.left = cx > W * 0.6 ? `${cx - tipW - 8}px` : `${cx + 12}px`;
+    tip.style.left = visibleX > containerW * 0.5 ? `${visibleX - tipW - 8}px` : `${visibleX + 12}px`;
     tip.style.top = `${pad.top}px`;
     tip.style.opacity = '1';
 
@@ -345,37 +364,58 @@ function renderCandlestickChart(el, candles, allCandles) {
   });
   svg.addEventListener('touchstart', e => {
     const rect = svg.getBoundingClientRect();
-    const tx = (e.touches[0].clientX - rect.left) / rect.width * W;
+    const tx = e.touches[0].clientX - rect.left;
+    const svgX = tx / rect.width * scrollW;
     let closest = 0, minDist = Infinity;
-    candles.forEach((_, i) => { const d = Math.abs(x(i) - tx); if (d < minDist) { minDist = d; closest = i; } });
+    allCandles.forEach((_, i) => { const d = Math.abs(x(i) - svgX); if (d < minDist) { minDist = d; closest = i; } });
     showCandleTip(closest);
   }, { passive: true });
   svg.addEventListener('touchend', () => setTimeout(hideCandleTip, 2000), { passive: true });
 }
 
-// ── 거래량 바 차트 ──
-function renderVolumeChart(el, candles) {
-  const W = el.clientWidth - 2;
+// ── 거래량 바 차트 (스크롤 가능) ──
+function renderVolumeChart(el, allCandles) {
+  const containerW = el.clientWidth - 2;
   const H = 60;
-  const pad = { top: 2, right: 48, bottom: 0, left: 8 };
-  const cW = W - pad.left - pad.right;
+  const yAxisW = 44;
+  const pad = { top: 2, bottom: 0, left: 4 };
   const cH = H - pad.top - pad.bottom;
-  const n = candles.length;
+  const n = allCandles.length;
 
-  const maxVol = Math.max(...candles.map(c => c.v)) || 1;
-  const gap = cW / n;
-  const barW = Math.max(1, Math.min(gap * 0.65, 8));
+  const candleGap = _chartInterval === '1mo' ? 7 : (_chartInterval === '1wk' ? 5.5 : 4);
+  const scrollW = Math.max(containerW - yAxisW, n * candleGap + pad.left + 4);
+  const chartAreaW = scrollW - pad.left;
+
+  const gap = chartAreaW / n;
+  const barW = Math.max(1, Math.min(gap * 0.6, 8));
   const x = i => pad.left + gap * i + gap / 2;
 
+  const maxVol = Math.max(...allCandles.map(c => c.v)) || 1;
+
   let bars = '';
-  candles.forEach((c, i) => {
+  allCandles.forEach((c, i) => {
     const h = (c.v / maxVol) * cH;
     const isUp = c.c >= c.o;
     const color = isUp ? 'rgba(16,185,129,0.45)' : 'rgba(239,68,68,0.45)';
     bars += `<rect x="${(x(i) - barW / 2).toFixed(1)}" y="${(pad.top + cH - h).toFixed(1)}" width="${barW.toFixed(1)}" height="${Math.max(0.5, h).toFixed(1)}" fill="${color}" rx="0.3"/>`;
   });
 
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">${bars}</svg>`;
+  el.innerHTML = `<div class="vol-scroll-wrap">
+    <div class="volume-scroll" id="volume-scroll">
+      <svg width="${scrollW}" height="${H}" viewBox="0 0 ${scrollW} ${H}">${bars}</svg>
+    </div>
+    <div class="vol-yaxis-spacer" style="width:${yAxisW}px;min-width:${yAxisW}px"></div>
+  </div>`;
+
+  // 오른쪽 끝으로 스크롤
+  const volScroll = document.getElementById('volume-scroll');
+  volScroll.scrollLeft = volScroll.scrollWidth;
+
+  // 캔들 차트와 스크롤 동기화
+  volScroll.addEventListener('scroll', () => {
+    const candleScroll = document.getElementById('candle-scroll');
+    if (candleScroll) candleScroll.scrollLeft = volScroll.scrollLeft;
+  }, { passive: true });
 }
 
 // ── 요약 정보 카드 ──
