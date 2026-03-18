@@ -13,12 +13,30 @@ let _chartTicker = 'SPY';
 let _chartInterval = '1d';
 let _chartData = null;
 let _maVisible = { 5: true, 20: true, 60: true, 120: false };
+let _zoomLevel = 1.0;          // 줌 레벨 (0.3 ~ 3.0)
+const ZOOM_MIN = 0.3;
+const ZOOM_MAX = 3.0;
 
 // ── 차트 탭 초기화 ──
 function initChartTab() {
   renderTickerChips();
   setupIntervalButtons();
+  setupZoomButtons();
   loadCandleChart();
+}
+
+// ── 줌 버튼 ──
+function setupZoomButtons() {
+  const inBtn = document.getElementById('zoom-in-btn');
+  const outBtn = document.getElementById('zoom-out-btn');
+  if (inBtn) inBtn.addEventListener('click', () => {
+    _zoomLevel = Math.min(ZOOM_MAX, _zoomLevel * 1.3);
+    _reRenderCharts(true);
+  });
+  if (outBtn) outBtn.addEventListener('click', () => {
+    _zoomLevel = Math.max(ZOOM_MIN, _zoomLevel / 1.3);
+    _reRenderCharts(true);
+  });
 }
 
 // ── 티커 칩 렌더링 ──
@@ -46,6 +64,7 @@ function setupIntervalButtons() {
     btn.addEventListener('click', () => {
       if (btn.dataset.iv === _chartInterval) return;
       _chartInterval = btn.dataset.iv;
+      _zoomLevel = 1.0;
       btns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
       loadCandleChart();
@@ -160,8 +179,32 @@ function fmtYLabel(val) {
   return val.toFixed(2);
 }
 
-// ── 캔들스틱 SVG 렌더링 (스크롤 가능) ──
-function renderCandlestickChart(el, allCandles) {
+// ── 줌 레벨 기반 캔들 간격 계산 ──
+function getBaseGap() {
+  return _chartInterval === '1mo' ? 7 : (_chartInterval === '1wk' ? 5.5 : 4);
+}
+
+// ── 차트 재렌더링 (줌/스크롤 유지) ──
+function _reRenderCharts(keepScrollRatio) {
+  const chartEl = document.getElementById('candle-chart');
+  const volEl = document.getElementById('volume-chart');
+  if (!chartEl || !_chartData) return;
+
+  // 현재 스크롤 비율 저장
+  let scrollRatio = 1;
+  if (keepScrollRatio) {
+    const sc = document.getElementById('candle-scroll');
+    if (sc && sc.scrollWidth > sc.clientWidth) {
+      scrollRatio = (sc.scrollLeft + sc.clientWidth / 2) / sc.scrollWidth;
+    }
+  }
+
+  renderCandlestickChart(chartEl, _chartData, scrollRatio);
+  if (volEl) renderVolumeChart(volEl, _chartData, scrollRatio);
+}
+
+// ── 캔들스틱 SVG 렌더링 (스크롤 + 줌 가능) ──
+function renderCandlestickChart(el, allCandles, scrollRatio) {
   const containerW = el.clientWidth - 2;
   const H = 300;
   const yAxisW = 44;
@@ -169,13 +212,14 @@ function renderCandlestickChart(el, allCandles) {
   const cH = H - pad.top - pad.bottom;
   const n = allCandles.length;
 
-  // 캔들당 고정 너비 (간격 포함)
-  const candleGap = _chartInterval === '1mo' ? 7 : (_chartInterval === '1wk' ? 5.5 : 4);
+  // 줌 레벨 적용된 캔들 간격
+  const baseGap = getBaseGap();
+  const candleGap = baseGap * _zoomLevel;
   const scrollW = Math.max(containerW - yAxisW, n * candleGap + pad.left + 4);
   const chartAreaW = scrollW - pad.left;
 
   const gap = chartAreaW / n;
-  const candleW = Math.max(1, Math.min(gap * 0.6, 8));
+  const candleW = Math.max(1, Math.min(gap * 0.6, 12));
 
   const x = i => pad.left + gap * i + gap / 2;
 
@@ -213,7 +257,7 @@ function renderCandlestickChart(el, allCandles) {
   const lastColor = allCandles[n - 1].c >= allCandles[n - 1].o ? '#10B981' : '#EF4444';
   const lastY = y(lastC);
 
-  // 격자선 (스크롤 영역 내)
+  // 격자선
   let gridLines = '';
   scale.ticks.forEach(val => {
     const yPos = y(val);
@@ -223,6 +267,7 @@ function renderCandlestickChart(el, allCandles) {
 
   // 캔들 SVG
   let candleSvg = '';
+  const wickW = Math.min(1.2, candleW * 0.15 + 0.5);
   allCandles.forEach((c, i) => {
     const cx = x(i);
     const isUp = c.c >= c.o;
@@ -230,11 +275,11 @@ function renderCandlestickChart(el, allCandles) {
     const bodyTop = y(Math.max(c.o, c.c));
     const bodyBot = y(Math.min(c.o, c.c));
     const bodyH = Math.max(0.8, bodyBot - bodyTop);
-    candleSvg += `<line x1="${cx.toFixed(1)}" y1="${y(c.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(c.l).toFixed(1)}" stroke="${color}" stroke-width="0.8"/>`;
+    candleSvg += `<line x1="${cx.toFixed(1)}" y1="${y(c.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${y(c.l).toFixed(1)}" stroke="${color}" stroke-width="${wickW.toFixed(1)}"/>`;
     candleSvg += `<rect x="${(cx - candleW / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${color}" rx="0.3"/>`;
   });
 
-  // 이동평균선 SVG
+  // 이동평균선
   let maSvg = '';
   Object.keys(maLines).forEach(period => {
     const ma = maLines[period];
@@ -249,16 +294,17 @@ function renderCandlestickChart(el, allCandles) {
     }
   });
 
-  // X축 라벨
+  // X축 라벨 (줌 레벨에 따라 밀도 조절)
   let xLabels = '';
-  const labelEvery = Math.max(1, Math.round(20 / candleGap * 5));
+  const targetPxPerLabel = 55;
+  const labelEvery = Math.max(1, Math.round(targetPxPerLabel / candleGap));
   for (let i = 0; i < n; i += labelEvery) {
     const d = allCandles[i].d;
     const lbl = _chartInterval === '1mo' ? d.substring(2, 7) : d.substring(5);
     xLabels += `<text class="chart-label chart-x-label" x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${lbl}</text>`;
   }
 
-  // 현재가 점선 (스크롤 영역 내)
+  // 현재가 점선
   const priceDash = `<line x1="0" y1="${lastY.toFixed(1)}" x2="${scrollW}" y2="${lastY.toFixed(1)}" stroke="${lastColor}" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.5"/>`;
 
   // 터치 영역
@@ -267,7 +313,7 @@ function renderCandlestickChart(el, allCandles) {
     touchZones += `<rect x="${(x(i) - gap / 2).toFixed(1)}" y="${pad.top}" width="${gap.toFixed(1)}" height="${cH}" fill="transparent" data-idx="${i}" class="candle-touch"/>`;
   });
 
-  // Y축 오버레이 (고정, 오른쪽)
+  // Y축 오버레이
   let yLabelsHtml = '';
   scale.ticks.forEach(val => {
     const yPos = y(val);
@@ -302,15 +348,81 @@ function renderCandlestickChart(el, allCandles) {
     <div class="candle-tooltip" id="candle-tip"></div>
   </div>`;
 
-  // 오른쪽 끝으로 스크롤 (최신 데이터부터 보이기)
+  // 스크롤 위치 복원
   const scrollEl = document.getElementById('candle-scroll');
-  scrollEl.scrollLeft = scrollEl.scrollWidth;
+  if (typeof scrollRatio === 'number') {
+    scrollEl.scrollLeft = scrollRatio * scrollEl.scrollWidth - scrollEl.clientWidth / 2;
+  } else {
+    scrollEl.scrollLeft = scrollEl.scrollWidth;
+  }
 
   // 거래량 차트와 스크롤 동기화
   scrollEl.addEventListener('scroll', () => {
     const volScroll = document.getElementById('volume-scroll');
     if (volScroll) volScroll.scrollLeft = scrollEl.scrollLeft;
   }, { passive: true });
+
+  // ── 핀치 줌 제스처 ──
+  let pinchStartDist = 0;
+  let pinchStartZoom = 1;
+  let isPinching = false;
+
+  scrollEl.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      isPinching = true;
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStartDist = Math.hypot(dx, dy);
+      pinchStartZoom = _zoomLevel;
+      e.preventDefault();
+    } else if (e.touches.length === 1 && !isPinching) {
+      // 단일 터치: 캔들 정보 표시
+      const rect = scrollEl.querySelector('svg').getBoundingClientRect();
+      const tx = e.touches[0].clientX - rect.left;
+      const svgX = tx / rect.width * scrollW;
+      let closest = 0, minDist = Infinity;
+      allCandles.forEach((_, i) => { const d = Math.abs(x(i) - svgX); if (d < minDist) { minDist = d; closest = i; } });
+      showCandleTip(closest);
+    }
+  }, { passive: false });
+
+  scrollEl.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && isPinching) {
+      e.preventDefault();
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.hypot(dx, dy);
+      const ratio = dist / pinchStartDist;
+      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, pinchStartZoom * ratio));
+      if (Math.abs(newZoom - _zoomLevel) > 0.02) {
+        _zoomLevel = newZoom;
+        _reRenderCharts(true);
+      }
+    }
+  }, { passive: false });
+
+  scrollEl.addEventListener('touchend', e => {
+    if (e.touches.length < 2) {
+      if (isPinching) {
+        isPinching = false;
+      } else {
+        setTimeout(hideCandleTip, 2000);
+      }
+    }
+  }, { passive: true });
+
+  // 데스크탑 마우스 휠 줌
+  scrollEl.addEventListener('wheel', e => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? 0.9 : 1.1;
+      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, _zoomLevel * delta));
+      if (newZoom !== _zoomLevel) {
+        _zoomLevel = newZoom;
+        _reRenderCharts(true);
+      }
+    }
+  }, { passive: false });
 
   // 터치/호버 이벤트
   const svg = scrollEl.querySelector('svg');
@@ -341,7 +453,6 @@ function renderCandlestickChart(el, allCandles) {
       </div>
       <div class="ct-chg" style="color:${color}">${sign}${chg}%</div>
       ${maHtml}`;
-    // Position tooltip relative to visible area
     const candleX = x(idx);
     const visibleX = candleX - scrollEl.scrollLeft;
     const tipW = 150;
@@ -362,19 +473,10 @@ function renderCandlestickChart(el, allCandles) {
     zone.addEventListener('mouseenter', () => showCandleTip(+zone.dataset.idx));
     zone.addEventListener('mouseleave', hideCandleTip);
   });
-  svg.addEventListener('touchstart', e => {
-    const rect = svg.getBoundingClientRect();
-    const tx = e.touches[0].clientX - rect.left;
-    const svgX = tx / rect.width * scrollW;
-    let closest = 0, minDist = Infinity;
-    allCandles.forEach((_, i) => { const d = Math.abs(x(i) - svgX); if (d < minDist) { minDist = d; closest = i; } });
-    showCandleTip(closest);
-  }, { passive: true });
-  svg.addEventListener('touchend', () => setTimeout(hideCandleTip, 2000), { passive: true });
 }
 
-// ── 거래량 바 차트 (스크롤 가능) ──
-function renderVolumeChart(el, allCandles) {
+// ── 거래량 바 차트 (스크롤 + 줌 가능) ──
+function renderVolumeChart(el, allCandles, scrollRatio) {
   const containerW = el.clientWidth - 2;
   const H = 60;
   const yAxisW = 44;
@@ -382,12 +484,12 @@ function renderVolumeChart(el, allCandles) {
   const cH = H - pad.top - pad.bottom;
   const n = allCandles.length;
 
-  const candleGap = _chartInterval === '1mo' ? 7 : (_chartInterval === '1wk' ? 5.5 : 4);
+  const candleGap = getBaseGap() * _zoomLevel;
   const scrollW = Math.max(containerW - yAxisW, n * candleGap + pad.left + 4);
   const chartAreaW = scrollW - pad.left;
 
   const gap = chartAreaW / n;
-  const barW = Math.max(1, Math.min(gap * 0.6, 8));
+  const barW = Math.max(1, Math.min(gap * 0.6, 12));
   const x = i => pad.left + gap * i + gap / 2;
 
   const maxVol = Math.max(...allCandles.map(c => c.v)) || 1;
@@ -407,9 +509,13 @@ function renderVolumeChart(el, allCandles) {
     <div class="vol-yaxis-spacer" style="width:${yAxisW}px;min-width:${yAxisW}px"></div>
   </div>`;
 
-  // 오른쪽 끝으로 스크롤
+  // 스크롤 위치 복원
   const volScroll = document.getElementById('volume-scroll');
-  volScroll.scrollLeft = volScroll.scrollWidth;
+  if (typeof scrollRatio === 'number') {
+    volScroll.scrollLeft = scrollRatio * volScroll.scrollWidth - volScroll.clientWidth / 2;
+  } else {
+    volScroll.scrollLeft = volScroll.scrollWidth;
+  }
 
   // 캔들 차트와 스크롤 동기화
   volScroll.addEventListener('scroll', () => {

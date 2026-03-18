@@ -16,9 +16,9 @@ CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
 
 # yfinance interval → period 매핑
 INTERVAL_CONFIG = {
-    '1d':  {'period': '6mo'},   # 일봉: 6개월
-    '1wk': {'period': '2y'},    # 주봉: 2년
-    '1mo': {'period': '5y'},    # 월봉: 5년
+    '1d':  {'period': '2y'},    # 일봉: 2년
+    '1wk': {'period': '5y'},    # 주봉: 5년
+    '1mo': {'period': 'max'},   # 월봉: 최대
 }
 
 

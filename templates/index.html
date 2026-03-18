@@ -25,7 +25,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=6">
+  <link rel="stylesheet" href="/static/css/main.css?v=7">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
@@ -260,8 +260,12 @@
       <div id="ma-legend" class="ma-legend fade-target"></div>
 
       <!-- 캔들스틱 차트 -->
-      <div class="card fade-target" style="padding:10px 4px 6px;">
+      <div class="card fade-target" style="padding:10px 4px 6px; position:relative;">
         <div id="candle-chart" class="candle-chart-wrap"></div>
+        <div class="chart-zoom-btns">
+          <button class="chart-zoom-btn" id="zoom-in-btn">+</button>
+          <button class="chart-zoom-btn" id="zoom-out-btn">−</button>
+        </div>
       </div>
 
       <!-- 거래량 차트 -->
@@ -326,6 +330,6 @@
   </script>
   <script src="/static/js/main.js?v=18"></script>
   <script src="/static/js/sector.js?v=5"></script>
-  <script src="/static/js/chart.js?v=4"></script>
+  <script src="/static/js/chart.js?v=5"></script>
 </body>
 </html>
