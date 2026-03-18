@@ -498,14 +498,11 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     }
   }, { passive: true });
 
-  // 데스크탑 Ctrl+휠 줌
   scrollEl.addEventListener('wheel', e => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? 0.9 : 1.1;
-      const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, _zoomLevel * delta));
-      if (newZoom !== _zoomLevel) { _zoomLevel = newZoom; _reRenderCharts(true); }
-    }
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, _zoomLevel * delta));
+    if (newZoom !== _zoomLevel) { _zoomLevel = newZoom; _reRenderCharts(true); }
   }, { passive: false });
 
   // ── 마우스 드래그 스크롤 (데스크탑) ──
