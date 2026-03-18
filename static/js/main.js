@@ -743,6 +743,12 @@ function setupTabSwipe() {
     startTime = Date.now();
     dirLocked = false;
     isSwipe = null;
+    // 차트 스크롤 영역 안이면 탭 스와이프 비활성화
+    const t = e.target;
+    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll'))) {
+      isSwipe = false;
+      return;
+    }
     activeEl = document.getElementById(TAB_IDS[_currentTabIdx]);
     if (activeEl) activeEl.style.transition = 'none';
   }, { passive: true });
