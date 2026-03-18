@@ -1068,6 +1068,41 @@ body {
   max-width: 440px;
   padding: 60px 24px 40px;
 }
+.holdings-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.holdings-top-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.setup-toggle-btn {
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--sep);
+  background: var(--card);
+  color: var(--text);
+  transition: background 0.15s, transform 0.2s ease;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.setup-toggle-btn:active {
+  background: var(--sep);
+  transform: scale(0.92);
+}
+.setup-lang-btn {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 10px;
+  font-family: inherit;
+}
 .holdings-back-btn {
   background: none;
   border: none;
@@ -1076,7 +1111,6 @@ body {
   color: var(--sub);
   cursor: pointer;
   padding: 0;
-  margin-bottom: 18px;
   font-family: inherit;
 }
 .holdings-header {

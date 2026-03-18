@@ -157,6 +157,8 @@ function setHoldings(arr) {
 
 // ── 보유종목 설정 화면 ──
 let _setupSelected = [];
+// setup 화면 칩/선택 재렌더 (언어 변경 시 호출)
+window._rerenderSetupChips = null;
 
 function showHoldingsSetup() {
   const overlay = document.getElementById('holdings-setup');
@@ -188,6 +190,12 @@ function showHoldingsSetup() {
     confirmBtn.disabled = _setupSelected.length === 0;
   }
 
+  // 전역 노출: 언어 전환 시 칩 재렌더
+  window._rerenderSetupChips = function() {
+    renderChips(searchEl.value);
+    renderSelected();
+  };
+
   renderChips('');
   renderSelected();
 
@@ -218,12 +226,14 @@ function showHoldingsSetup() {
   // 뒤로가기 버튼 클릭 시 설정 화면 닫기
   document.getElementById('holdings-back').onclick = () => {
     overlay.style.display = 'none';
+    window._rerenderSetupChips = null;
   };
 
   confirmBtn.onclick = () => {
     if (_setupSelected.length === 0) return;
     setHoldings(_setupSelected);
     overlay.style.display = 'none';
+    window._rerenderSetupChips = null;
     loadHoldingsSummary();
     loadMarketOverview();
     window._sectorLoaded = false;
