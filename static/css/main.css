@@ -22,6 +22,130 @@ html, body {
   --shadow:  0 2px 16px rgba(0,0,0,0.06);
 }
 
+/* ── Bloomberg Terminal Dark Mode ─────────── */
+[data-theme="dark"] {
+  --bg:      #000000;
+  --card:    #131316;
+  --sep:     rgba(255, 255, 255, 0.08);
+  --text:    #E8E8EC;
+  --sub:     #7A7A80;
+  --sub2:    #5A5A60;
+  --green:   #00D26A;
+  --red:     #FF3B30;
+  --accent:  #FF8C00;
+  --bull:    #00D26A;
+  --bear:    #FF3B30;
+  --shadow:  0 2px 16px rgba(0,0,0,0.4);
+}
+[data-theme="dark"] body {
+  background: #000000;
+}
+[data-theme="dark"] .splash {
+  background: #000000;
+}
+[data-theme="dark"] .splash-cover {
+  stroke: #000000;
+}
+/* splash SVG fill handled via currentColor + color property */
+[data-theme="dark"] .holdings-setup {
+  background: #000000;
+}
+[data-theme="dark"] .holdings-search {
+  background: #131316;
+  border-color: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+[data-theme="dark"] .holdings-search:focus {
+  border-color: #FF8C00;
+}
+[data-theme="dark"] .h-chip {
+  background: #131316;
+  border-color: rgba(255,255,255,0.1);
+  color: var(--text);
+}
+[data-theme="dark"] .h-chip.selected {
+  background: #FF8C00;
+  color: #000000;
+  border-color: #FF8C00;
+}
+[data-theme="dark"] .h-sel-chip {
+  background: #1C1C20;
+  color: var(--text);
+}
+[data-theme="dark"] .holdings-confirm-btn {
+  background: #FF8C00;
+  color: #000000;
+}
+[data-theme="dark"] .tab.active {
+  background: #FF8C00;
+  color: #000000;
+}
+[data-theme="dark"] .top-accent {
+  background: radial-gradient(ellipse, rgba(255,140,0,0.08) 0%, transparent 70%);
+}
+[data-theme="dark"] .pf-chip {
+  background: rgba(255,255,255,0.06);
+}
+[data-theme="dark"] .hs-item {
+  background: #1C1C20;
+}
+[data-theme="dark"] .sc-macro-item {
+  background: #1C1C20;
+}
+[data-theme="dark"] .skeleton {
+  background: linear-gradient(90deg, #1C1C20 25%, #252528 50%, #1C1C20 75%);
+  background-size: 200% 100%;
+}
+[data-theme="dark"] .feat-bar-track {
+  background: rgba(255,255,255,0.05);
+}
+[data-theme="dark"] .rank-2, [data-theme="dark"] .rank-3 {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+  color: var(--sub);
+}
+[data-theme="dark"] .back-toast {
+  background: rgba(255, 140, 0, 0.9);
+  color: #000000;
+}
+[data-theme="dark"] .cs-bar-track {
+  background: #1C1C20;
+}
+[data-theme="dark"] .nr-gap-dot {
+  background: #131316;
+}
+[data-theme="dark"] .sc-phase-gap-dot {
+  background: #131316;
+}
+[data-theme="dark"] .sc-hold-phase.current {
+  background: rgba(255,140,0,0.06);
+}
+[data-theme="dark"] .sc-hold-bar-track {
+  background: #1C1C20;
+}
+
+/* ── Theme Toggle Button ──────────────────── */
+.theme-btn {
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  transition: background 0.15s, transform 0.2s ease;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.theme-btn:active {
+  background: var(--sep);
+  transform: scale(0.92);
+}
+.theme-btn:hover {
+  transform: scale(1.05);
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -887,6 +1011,10 @@ body {
 .splash-logo-svg {
   width: 100%;
   height: 100%;
+  color: #1a1a1a;
+}
+[data-theme="dark"] .splash-logo-svg {
+  color: #FF8C00;
 }
 .splash-cover {
   fill: none;
