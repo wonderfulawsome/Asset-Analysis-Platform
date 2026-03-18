@@ -182,12 +182,12 @@ def fetch_index_prices_latest() -> list[dict]:
     실제 거래 데이터가 있는 가장 최근 날짜를 반환합니다.
     """
     client = get_client()
-    # 최근 날짜 5건 조회 (주말/공휴일 폴백 대비)
+    # 최근 날짜 조회 (31개 티커 × 5일 = 155행으로 충분한 날짜 확보)
     dates = (
         client.table("index_price_raw")
         .select("date")
         .order("date", desc=True)
-        .limit(5)
+        .limit(155)
         .execute()
     )
     if not dates.data:
