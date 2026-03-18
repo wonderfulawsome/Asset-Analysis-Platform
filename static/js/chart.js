@@ -464,12 +464,13 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       pinchStartZoom = _zoomLevel;
       e.preventDefault();
     } else if (e.touches.length === 1 && !isPinching) {
-      const rect = scrollEl.querySelector('svg').getBoundingClientRect();
-      const tx = e.touches[0].clientX - rect.left;
-      const svgX = tx / rect.width * scrollW;
-      let closest = 0, minDist = Infinity;
-      for (let i = 0; i < n; i++) { const d = Math.abs(xPos(i) - svgX); if (d < minDist) { minDist = d; closest = i; } }
-      showCandleTip(closest);
+      // 캔들 터치 영역을 직접 터치한 경우에만 툴팁 표시
+      const target = e.target;
+      if (target.classList && target.classList.contains('candle-touch') && target.dataset.idx != null) {
+        showCandleTip(+target.dataset.idx);
+      } else {
+        hideCandleTip();
+      }
     }
   }, { passive: false });
 
