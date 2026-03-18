@@ -815,6 +815,66 @@ function setupTabSwipe() {
       if (newIdx !== _currentTabIdx) switchTab(newIdx, true);
     }
   }, { passive: true });
+
+  let mStartX = 0, mStartY = 0, mStartTime = 0;
+  let mDirLocked = false, mIsSwipe = null;
+  let mActiveEl = null, mLastX = 0;
+
+  wrap.addEventListener('mousedown', (e) => {
+    const overlay = document.getElementById('detail-overlay');
+    if (overlay && overlay.classList.contains('open')) { mActiveEl = null; return; }
+    if (_isHScrollArea(e.target)) { mIsSwipe = false; return; }
+    mStartX = e.clientX;
+    mStartY = e.clientY;
+    mLastX = mStartX;
+    mStartTime = Date.now();
+    mDirLocked = false;
+    mIsSwipe = null;
+    mActiveEl = document.getElementById(TAB_IDS[_currentTabIdx]);
+    if (mActiveEl) mActiveEl.style.transition = 'none';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (mIsSwipe === false || !mActiveEl) return;
+    if (_isHScrollArea(e.target)) { mIsSwipe = false; mActiveEl = null; return; }
+    const cx = e.clientX;
+    const cy = e.clientY;
+    mLastX = cx;
+    const dx = cx - mStartX, dy = cy - mStartY;
+    const adx = Math.abs(dx), ady = Math.abs(dy);
+
+    if (!mDirLocked) {
+      if (adx < DIR_LOCK_PX && ady < DIR_LOCK_PX) return;
+      if (ady > MAX_VERT && adx < ady) { mIsSwipe = false; return; }
+      if (adx > ady * 2.5) { mIsSwipe = true; mDirLocked = true; }
+      else if (ady >= adx) { mIsSwipe = false; mDirLocked = true; return; }
+      else return;
+    }
+
+    e.preventDefault();
+    let clampedDx = Math.max(-MAX_VISUAL, Math.min(MAX_VISUAL, dx));
+    if ((_currentTabIdx === 0 && dx > 0) || (_currentTabIdx === TAB_IDS.length - 1 && dx < 0)) {
+      clampedDx = clampedDx / 3;
+    }
+    mActiveEl.style.transform = `translateX(${clampedDx}px)`;
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!mActiveEl) return;
+    mActiveEl.style.transition = 'transform 0.2s ease-out';
+    mActiveEl.style.transform = '';
+    if (mIsSwipe !== true) { mActiveEl = null; return; }
+
+    const dx = mLastX - mStartX;
+    const elapsed = Date.now() - mStartTime;
+    if (Math.abs(dx) >= THRESHOLD_X && elapsed < MAX_TIME) {
+      const newIdx = dx < 0
+        ? Math.min(_currentTabIdx + 1, TAB_IDS.length - 1)
+        : Math.max(_currentTabIdx - 1, 0);
+      if (newIdx !== _currentTabIdx) switchTab(newIdx, true);
+    }
+    mActiveEl = null;
+  });
 }
 setupTabSwipe();
 

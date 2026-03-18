@@ -508,6 +508,38 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     }
   }, { passive: false });
 
+  // ── 마우스 드래그 스크롤 (데스크탑) ──
+  let isDragging = false, dragStartX = 0, dragStartScroll = 0, hasMoved = false; // 드래그 상태 변수
+
+  scrollEl.style.cursor = 'grab'; // 기본 커서를 grab으로 설정
+
+  scrollEl.addEventListener('mousedown', e => {
+    if (e.button !== 0) return; // 좌클릭만 허용
+    isDragging = true; // 드래그 시작 플래그
+    hasMoved = false; // 이동 여부 초기화
+    dragStartX = e.clientX; // 시작 X 좌표 저장
+    dragStartScroll = scrollEl.scrollLeft; // 시작 스크롤 위치 저장
+    scrollEl.style.cursor = 'grabbing'; // 커서를 grabbing으로 변경
+    e.preventDefault(); // 텍스트 선택 방지
+  });
+
+  const onMouseMove = e => {
+    if (!isDragging) return; // 드래그 중이 아니면 무시
+    const dx = e.clientX - dragStartX; // 이동 거리 계산
+    if (!hasMoved && Math.abs(dx) < 5) return; // 5px 미만이면 클릭으로 간주하여 무시
+    hasMoved = true; // 드래그 모드 진입
+    scrollEl.scrollLeft = dragStartScroll - dx; // 스크롤 위치 업데이트 (반대 방향)
+  };
+
+  const onMouseUp = () => {
+    if (!isDragging) return; // 드래그 중이 아니면 무시
+    isDragging = false; // 드래그 종료
+    scrollEl.style.cursor = 'grab'; // 커서 복원
+  };
+
+  window.addEventListener('mousemove', onMouseMove); // 윈도우 레벨에서 이동 감지 (영역 밖에서도 동작)
+  window.addEventListener('mouseup', onMouseUp); // 윈도우 레벨에서 마우스 업 감지
+
   // ── 터치/호버 이벤트 ──
   const tip = document.getElementById('candle-tip');
   const getCrosshair = () => document.getElementById('candle-crosshair');

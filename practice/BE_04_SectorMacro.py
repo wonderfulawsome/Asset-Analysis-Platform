@@ -206,7 +206,9 @@ macro = (df_pmi
 macro=macro.resample('MS').last().dropna()
 
 # 파생 피처
-macro['pmi_chg3m'] = macro['pmi']
+macro['pmi_chg3m'] = macro['pmi'] = macro['pmi'].pct_change(3)
+macro['capex_yoy_chg3m']=macro['capex_yoy'].gdiff(3)
+macro=macro.dropna()
 
 #######################################
 
