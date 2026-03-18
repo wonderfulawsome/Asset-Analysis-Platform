@@ -801,6 +801,13 @@ function setupTabSwipe() {
 }
 setupTabSwipe();
 
+// ── 횡스크롤 영역 터치 이벤트 격리 ──
+// wrap(scroll-wrap)의 탭 스와이프 핸들러에 이벤트가 전파되지 않도록 차단
+document.querySelectorAll('.chart-ticker-chips, .chart-ticker-bar, .candle-scroll, .volume-scroll, .ma-legend').forEach(el => {
+  el.addEventListener('touchstart', e => e.stopPropagation(), { passive: true });
+  el.addEventListener('touchmove', e => e.stopPropagation(), { passive: true });
+});
+
 // ── Crash/Surge 전조 탐지 ──
 async function loadCrashSurge() {
   try {
@@ -1398,15 +1405,18 @@ function setupPullToRefresh() {
   let overscrolling = false;  // 실제 overscroll 구간 진입
   const THRESHOLD = 80;       // 새로고침 트리거 거리
 
+  const scrollWrap = document.querySelector('.scroll-wrap');
+  const getScrollTop = () => scrollWrap ? scrollWrap.scrollTop : window.scrollY;
+
   document.addEventListener('touchstart', e => {
     if (refreshing) return;
     // 횡스크롤 영역이면 무시
-    if (e.target.closest && (e.target.closest('.candle-scroll') || e.target.closest('.volume-scroll') || e.target.closest('.chart-ticker-chips'))) return;
+    if (e.target.closest && (e.target.closest('.candle-scroll') || e.target.closest('.volume-scroll') || e.target.closest('.chart-ticker-chips') || e.target.closest('.chart-ticker-bar') || e.target.closest('.ma-legend'))) return;
     const overlay = document.getElementById('detail-overlay');
     if (overlay && overlay.classList.contains('open')) return;
 
     startY = e.touches[0].clientY;
-    atTopOnStart = (window.scrollY <= 0);
+    atTopOnStart = (getScrollTop() <= 0);
     overscrolling = false;
     overscrollStartY = 0;
     pulling = true;
@@ -1429,7 +1439,7 @@ function setupPullToRefresh() {
     if (!atTopOnStart) return;
 
     // 최상단이 아니면 무시 (혹시 약간 스크롤된 경우 방어)
-    if (window.scrollY > 0) return;
+    if (getScrollTop() > 0) return;
 
     // 최상단 도달! 이제부터 overscroll 추적 시작
     if (!overscrolling) {
