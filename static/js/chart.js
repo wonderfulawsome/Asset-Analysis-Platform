@@ -347,10 +347,17 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       xLabels += `<text class="chart-label chart-x-label" x="${xPos(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${lbl}</text>`;
     }
 
-    // 터치 영역
+    // 터치 영역 — 캔들 몸통+꼬리 주변으로만 (high~low + 여유)
     let touchZones = '';
+    const touchW = Math.max(gap * 0.8, candleW * 3, 12); // 터치 가로 폭 (최소 12px)
+    const touchPadY = 10; // 위아래 여유 (px)
     allCandles.forEach((c, i) => {
-      touchZones += `<rect x="${(xPos(i) - gap / 2).toFixed(1)}" y="${pad.top}" width="${gap.toFixed(1)}" height="${cH}" fill="transparent" data-idx="${i}" class="candle-touch"/>`;
+      const cx = xPos(i);
+      const yH = yFn(c.h);     // high (위쪽)
+      const yL = yFn(c.l);     // low (아래쪽)
+      const ty = Math.max(pad.top, yH - touchPadY);
+      const th = Math.min(pad.top + cH, yL + touchPadY) - ty;
+      touchZones += `<rect x="${(cx - touchW / 2).toFixed(1)}" y="${ty.toFixed(1)}" width="${touchW.toFixed(1)}" height="${Math.max(20, th).toFixed(1)}" fill="transparent" data-idx="${i}" class="candle-touch" pointer-events="all"/>`;
     });
 
     return `${gridLines}${priceDash}${candleSvg}${maSvg}${xLabels}${touchZones}
