@@ -177,26 +177,48 @@ def upsert_index_prices(records: list[dict]) -> None:
 
 
 def fetch_index_prices_latest() -> list[dict]:
-    """가장 최근 날짜의 ETF 가격/등락률 전체를 조회합니다."""
+    """가장 최근 날짜의 ETF 가격/등락률 전체를 조회합니다.
+    change_pct가 모두 0인 날짜(비거래일/장 시작 전)는 건너뛰고
+    실제 거래 데이터가 있는 가장 최근 날짜를 반환합니다.
+    """
     client = get_client()
-    # 최신 날짜 1건으로 날짜를 확인
-    latest = (
+    # 최근 날짜 5건 조회 (주말/공휴일 폴백 대비)
+    dates = (
         client.table("index_price_raw")
         .select("date")
         .order("date", desc=True)
-        .limit(1)
+        .limit(5)
         .execute()
     )
-    if not latest.data:
+    if not dates.data:
         return []
-    latest_date = latest.data[0]["date"]
-    response = (
+    # 중복 제거 후 최신순 유지
+    seen = []
+    for row in dates.data:
+        if row["date"] not in seen:
+            seen.append(row["date"])
+
+    for candidate_date in seen:
+        response = (
+            client.table("index_price_raw")
+            .select("*")
+            .eq("date", candidate_date)
+            .execute()
+        )
+        rows = response.data
+        if not rows:
+            continue
+        # change_pct가 하나라도 0이 아닌 값이 있으면 유효한 거래일
+        if any(r.get("change_pct", 0) != 0 for r in rows):
+            return rows
+    # 모든 날짜가 0이면 가장 최근 데이터라도 반환
+    fallback = (
         client.table("index_price_raw")
         .select("*")
-        .eq("date", latest_date)
+        .eq("date", seen[0])
         .execute()
     )
-    return response.data
+    return fallback.data
 
 # ── sector_macro_raw ──────────────────────────────────────────
 
