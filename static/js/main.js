@@ -745,7 +745,7 @@ function setupTabSwipe() {
     isSwipe = null;
     // 횡스크롤 영역 안이면 탭 스와이프 비활성화
     const t = e.target;
-    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips'))) {
+    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips') || t.closest('.chart-ticker-bar') || t.closest('.ma-legend'))) {
       isSwipe = false;
       return;
     }
