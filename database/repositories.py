@@ -182,11 +182,11 @@ def fetch_index_prices_latest() -> list[dict]:
     실제 거래 데이터가 있는 가장 최근 날짜를 반환합니다.
     """
     client = get_client()
-    # change_pct != 0 인 행에서 가장 최근 날짜를 직접 찾기
+    # change_pct > 0 또는 < 0 인 행에서 가장 최근 날짜를 직접 찾기
     nz = (
         client.table("index_price_raw")
         .select("date")
-        .neq("change_pct", 0)
+        .or_("change_pct.gt.0,change_pct.lt.0")
         .order("date", desc=True)
         .limit(1)
         .execute()

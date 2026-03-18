@@ -4,6 +4,7 @@
 # -------------------------------------------------------------------
 from fastapi import APIRouter
 from database.repositories import fetch_index_prices_latest
+from database.supabase_client import get_client
 
 router = APIRouter()
 
@@ -13,4 +14,32 @@ def get_index_latest():
     # DB에서 가장 최근 날짜의 ETF 가격/등락률 조회
     return fetch_index_prices_latest()
 
-# http 요청이 오면 DB에서 가장 최근 ETF 가격 데이터를 조회해 반환
+
+@router.get('/debug')
+def get_index_debug():
+    """DB 데이터 상태 확인용 디버그 엔드포인트"""
+    client = get_client()
+    # 최근 5개 날짜의 SPY 데이터 확인
+    recent = (
+        client.table("index_price_raw")
+        .select("date,ticker,close,change_pct")
+        .eq("ticker", "SPY")
+        .order("date", desc=True)
+        .limit(5)
+        .execute()
+    )
+    # change_pct != 0 인 행 확인
+    nz = (
+        client.table("index_price_raw")
+        .select("date,ticker,change_pct")
+        .or_("change_pct.gt.0,change_pct.lt.0")
+        .order("date", desc=True)
+        .limit(5)
+        .execute()
+    )
+    return {
+        "recent_spy": recent.data,
+        "non_zero_rows": nz.data,
+        "total_recent": len(recent.data),
+        "total_non_zero": len(nz.data),
+    }
