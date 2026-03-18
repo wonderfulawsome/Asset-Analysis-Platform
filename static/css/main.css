@@ -1592,6 +1592,7 @@ html[lang="en"] .card-tappable::after {
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
   padding: 2px 0;
+  touch-action: pan-x;
 }
 .chart-ticker-chips::-webkit-scrollbar { display: none; }
 .chart-tk-chip {
