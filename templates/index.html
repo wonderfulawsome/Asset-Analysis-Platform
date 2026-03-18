@@ -26,6 +26,10 @@
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <link rel="stylesheet" href="/static/css/main.css">
+  <script>
+    // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
+    (function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
+  </script>
 </head>
 <body>
 
@@ -42,13 +46,13 @@
             <path id="lp4" d="M0,0 L5,0 L5,2 L7,2 L14,10 L33,29 L32,34 L14,52 L13,54 L11,54 L9,58 L-20,87 L-27,95 L-40,108 L-47,116 L-60,129 L-67,137 L-72,138 L-93,117 L-100,109 L-99,104 L-92,97 L-85,89 L-77,81 L-76,79 L-74,79 L-72,75 L-57,60 L-55,57 L-53,57 L-51,53 L-39,41 L-32,33 L-30,33 L-28,29 L-11,12 L-10,10 L-8,10 L-6,6 L-1,1 Z"/>
             <path id="lp5" d="M0,0 L4,2 L19,17 L19,19 L21,19 L28,27 L38,37 L42,43 L43,47 L43,84 L41,89 L32,99 L25,106 L23,106 L21,110 L-49,180 L-53,185 L-60,189 L-68,190 L-106,190 L-114,187 L-127,175 L-130,172 L-130,170 L-134,168 L-140,161 L-145,157 L-149,152 L-151,151 L-151,149 L-153,149 L-158,144 L-167,134 L-210,91 L-210,89 L-213,88 L-220,80 L-225,75 L-249,51 L-256,43 L-261,37 L-259,32 L-249,21 L-247,21 L-245,17 L-231,3 L-227,5 L-203,29 L-203,31 L-201,31 L-194,39 L-158,75 L-151,83 L-126,108 L-126,110 L-122,112 L-116,118 L-116,120 L-114,120 L-114,122 L-112,122 L-105,130 L-89,146 L-84,147 L-76,140 L-54,118 L-49,113 L-45,108 L-40,103 L-5,68 L-4,63 L-13,53 L-32,34 L-29,29 Z"/>
           </defs>
-          <!-- Filled layer (black, always visible) -->
-          <use href="#lp0" fill="#1a1a1a" transform="translate(124,10)"/>
-          <use href="#lp1" fill="#1a1a1a" transform="translate(347,10)"/>
-          <use href="#lp2" fill="#1a1a1a" transform="translate(141,138)"/>
-          <use href="#lp3" fill="#1a1a1a" transform="translate(368,138)"/>
-          <use href="#lp4" fill="#1a1a1a" transform="translate(214,149)"/>
-          <use href="#lp5" fill="#1a1a1a" transform="translate(454,225)"/>
+          <!-- Filled layer (always visible, color set by class for theming) -->
+          <use href="#lp0" class="splash-fill" fill="currentColor" transform="translate(124,10)"/>
+          <use href="#lp1" class="splash-fill" fill="currentColor" transform="translate(347,10)"/>
+          <use href="#lp2" class="splash-fill" fill="currentColor" transform="translate(141,138)"/>
+          <use href="#lp3" class="splash-fill" fill="currentColor" transform="translate(368,138)"/>
+          <use href="#lp4" class="splash-fill" fill="currentColor" transform="translate(214,149)"/>
+          <use href="#lp5" class="splash-fill" fill="currentColor" transform="translate(454,225)"/>
           <!-- White cover layer (hides fill, then reveals via stroke-dashoffset) -->
           <use href="#lp0" class="splash-cover" transform="translate(124,10)"/>
           <use href="#lp1" class="splash-cover" transform="translate(347,10)"/>
@@ -94,6 +98,7 @@
       </div>
     </div>
     <div class="header-right">
+      <button id="btn-theme" class="theme-btn" aria-label="Toggle dark mode">🌙</button>
       <button id="btn-lang" class="lang-btn">EN</button>
       <div id="btn-edit-holdings" class="settings-btn">⚙️</div>
     </div>
@@ -243,6 +248,29 @@
 
   <script src="/static/js/i18n.js?v=1"></script>
   <script>
+    // ── 다크모드 토글 ──
+    function initThemeToggle() {
+      var btn = document.getElementById('btn-theme');
+      if (!btn) return;
+      function updateIcon() {
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        btn.textContent = isDark ? '☀️' : '🌙';
+      }
+      updateIcon();
+      btn.addEventListener('click', function() {
+        var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+        if (isDark) {
+          document.documentElement.removeAttribute('data-theme');
+          localStorage.setItem('theme', 'light');
+        } else {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          localStorage.setItem('theme', 'dark');
+        }
+        updateIcon();
+      });
+    }
+    initThemeToggle();
+
     // 페이지 로드 시 저장된 언어 설정 적용
     applyI18n();                                   // data-i18n 정적 텍스트 번역
     updateLangButton();                            // 언어 버튼 텍스트 설정
