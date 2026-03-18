@@ -1623,12 +1623,42 @@ html[lang="en"] .card-tappable::after {
   background: var(--ma-color);
 }
 
-.candle-svg-wrap, .volume-chart-wrap {
+.candle-svg-wrap {
   position: relative;
+  display: flex;
 }
-.candle-svg-wrap svg, .volume-chart-wrap svg {
-  width: 100%;
+.candle-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.candle-scroll::-webkit-scrollbar { display: none; }
+.candle-scroll svg {
   display: block;
+}
+.candle-yaxis {
+  flex-shrink: 0;
+  display: block;
+  background: var(--bg);
+}
+.vol-scroll-wrap {
+  display: flex;
+}
+.volume-scroll {
+  flex: 1;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.volume-scroll::-webkit-scrollbar { display: none; }
+.volume-scroll svg {
+  display: block;
+}
+.vol-yaxis-spacer {
+  flex-shrink: 0;
 }
 .candle-vol-label {
   font-size: 10px;
