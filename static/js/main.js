@@ -736,13 +736,14 @@ function setupTabSwipe() {
 
   wrap.addEventListener('touchstart', (e) => {
     const overlay = document.getElementById('detail-overlay');
-    if (overlay && overlay.classList.contains('open')) return;
+    if (overlay && overlay.classList.contains('open')) { activeEl = null; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     lastX = startX;
     startTime = Date.now();
     dirLocked = false;
     isSwipe = null;
+    activeEl = null;
     // 횡스크롤 영역 안이면 탭 스와이프 비활성화
     const t = e.target;
     if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips') || t.closest('.chart-ticker-bar') || t.closest('.ma-legend'))) {
@@ -755,6 +756,11 @@ function setupTabSwipe() {
 
   wrap.addEventListener('touchmove', (e) => {
     if (isSwipe === false || !activeEl) return;
+    // 횡스크롤 영역 안이면 탭 스와이프 비활성화 (touchstart 이후 포커스 변경 방어)
+    const t = e.target;
+    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips') || t.closest('.chart-ticker-bar') || t.closest('.ma-legend'))) {
+      isSwipe = false; activeEl = null; return;
+    }
     const cx = e.touches[0].clientX;
     const cy = e.touches[0].clientY;
     lastX = cx;
