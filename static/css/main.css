@@ -1642,6 +1642,9 @@ html[lang="en"] .card-tappable::after {
 .chart-y-label {
   font-size: 9px;
 }
+.chart-x-label {
+  font-size: 9px;
+}
 .candle-crosshair {
   stroke: var(--sub2);
   stroke-width: 0.5;
