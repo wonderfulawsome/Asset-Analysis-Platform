@@ -115,6 +115,7 @@
     <button class="tab active" data-idx="0" data-i18n="tab.market">시장</button>
     <button class="tab" data-idx="1" data-i18n="tab.signal">신호</button>
     <button class="tab" data-idx="2" data-i18n="tab.macro">거시경제</button>
+    <button class="tab" data-idx="3" data-i18n="tab.chart">차트</button>
   </div>
 
   <!-- Ticker Feed -->
@@ -240,6 +241,40 @@
 
     </main>
 
+    <!-- ═══ 차트 탭 ═══ -->
+    <main class="content" id="tab-chart" style="display:none;">
+
+      <!-- 티커 선택 -->
+      <div class="chart-ticker-bar fade-target">
+        <div id="chart-ticker-chips" class="chart-ticker-chips"></div>
+      </div>
+
+      <!-- 봉 간격 선택 -->
+      <div class="chart-interval-bar fade-target">
+        <button class="chart-iv-btn active" data-iv="1d" data-i18n="chart.daily">일봉</button>
+        <button class="chart-iv-btn" data-iv="1wk" data-i18n="chart.weekly">주봉</button>
+        <button class="chart-iv-btn" data-iv="1mo" data-i18n="chart.monthly">월봉</button>
+      </div>
+
+      <!-- 캔들스틱 차트 -->
+      <div class="card fade-target" style="padding:12px 8px;">
+        <div id="candle-chart" class="candle-chart-wrap"></div>
+      </div>
+
+      <!-- 거래량 차트 -->
+      <div class="card fade-target" style="padding:12px 8px; margin-top:8px;">
+        <div class="candle-vol-label" data-i18n="chart.volume">거래량</div>
+        <div id="volume-chart" class="volume-chart-wrap"></div>
+      </div>
+
+      <!-- 요약 정보 -->
+      <div id="chart-summary" class="chart-summary fade-target"></div>
+
+      <!-- 면책 문구 -->
+      <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
+
+    </main>
+
   </div>
 
   <!-- Detail Page Overlay -->
@@ -286,7 +321,8 @@
     document.getElementById('btn-lang').addEventListener('click', switchLang);
     document.getElementById('setup-lang').addEventListener('click', switchLang);
   </script>
-  <script src="/static/js/main.js?v=17"></script>
+  <script src="/static/js/main.js?v=18"></script>
   <script src="/static/js/sector.js?v=5"></script>
+  <script src="/static/js/chart.js?v=1"></script>
 </body>
 </html>

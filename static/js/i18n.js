@@ -13,6 +13,7 @@ const I18N = {
     'tab.market': '시장',                         // 시장 탭
     'tab.signal': '신호',                         // 신호 탭
     'tab.macro': '거시경제',                      // 거시경제 탭
+    'tab.chart': '차트',                          // 차트 탭
 
     // ── 헤더 / 날짜 ──
     'lang.btn': 'EN',                             // 언어 전환 버튼 텍스트
@@ -140,6 +141,20 @@ const I18N = {
     'chart.noData': '데이터 없음',                // 데이터 없음
     'chart.yTop': '불일치',                       // Y축 상단
     'chart.yBottom': '일치',                      // Y축 하단
+
+    // ── 캔들스틱 차트 탭 ──
+    'chart.daily': '일봉',
+    'chart.weekly': '주봉',
+    'chart.monthly': '월봉',
+    'chart.volume': '거래량',
+    'chart.lastClose': '종가',
+    'chart.prevChg': '전일 대비',
+    'chart.period6m': '6개월 수익률',
+    'chart.period2y': '2년 수익률',
+    'chart.period5y': '5년 수익률',
+    'chart.high': '최고가',
+    'chart.low': '최저가',
+    'chart.range': '변동폭',
 
     // ── 상세 페이지 ──
     'detail.back': '← 뒤로',                     // 뒤로
@@ -378,6 +393,7 @@ const I18N = {
     'tab.market': 'Market',
     'tab.signal': 'Signal',
     'tab.macro': 'Macro',
+    'tab.chart': 'Chart',
 
     // ── Header / Date ──
     'lang.btn': 'KO',
@@ -505,6 +521,20 @@ const I18N = {
     'chart.noData': 'No Data',
     'chart.yTop': 'Diverged',
     'chart.yBottom': 'Aligned',
+
+    // ── Candlestick Chart Tab ──
+    'chart.daily': 'Daily',
+    'chart.weekly': 'Weekly',
+    'chart.monthly': 'Monthly',
+    'chart.volume': 'Volume',
+    'chart.lastClose': 'Close',
+    'chart.prevChg': 'Prev Chg',
+    'chart.period6m': '6M Return',
+    'chart.period2y': '2Y Return',
+    'chart.period5y': '5Y Return',
+    'chart.high': 'High',
+    'chart.low': 'Low',
+    'chart.range': 'Range',
 
     // ── Detail Page ──
     'detail.back': '← Back',
@@ -919,6 +949,11 @@ function reRenderDynamic() {
   // 거시경제 탭 (이미 로드된 경우만)
   if (window._sectorLoaded) {
     if (typeof loadSectorCycle === 'function') loadSectorCycle(); // 섹터 경기국면
+  }
+
+  // 차트 탭 (이미 로드된 경우만) - 요약 텍스트 재렌더
+  if (window._chartLoaded && typeof loadCandleChart === 'function') {
+    loadCandleChart();
   }
 
   // 보유종목 설정 화면 칩 재렌더 (열려있을 때)
