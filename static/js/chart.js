@@ -386,6 +386,7 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       ${buildYAxisSvg(yFn)}
     </svg>
     <div class="candle-tooltip" id="candle-tip"></div>
+    <div class="chart-recalc-overlay" id="chart-recalc"><div class="loading-spinner sm"></div></div>
   </div>`;
 
   // 스크롤 위치 복원
@@ -399,17 +400,25 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
   // ── 스크롤 시 Y축 동적 재계산 (디바운스) ──
   let scrollTimer = null;
   let prevSI = initSI, prevEI = initEI;
+  const recalcOverlay = document.getElementById('chart-recalc');
+
+  function needsYUpdate() {
+    const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
+    if (si === prevSI && ei === prevEI) return false;
+    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
+    const newScale = niceScale(newMin, newMax, 6);
+    return newScale.min !== scale.min || newScale.max !== scale.max;
+  }
 
   function updateYAxisOnScroll() {
     const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
-    if (si === prevSI && ei === prevEI) return;
+    if (si === prevSI && ei === prevEI) { hideRecalc(); return; }
     prevSI = si; prevEI = ei;
 
     const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
     const newScale = niceScale(newMin, newMax, 6);
 
-    // Y축이 실질적으로 변했을 때만 다시 그리기
-    if (newScale.min === scale.min && newScale.max === scale.max) return;
+    if (newScale.min === scale.min && newScale.max === scale.max) { hideRecalc(); return; }
     scale = newScale;
     yMin = scale.min; yMax = scale.max; yRange = yMax - yMin || 1;
 
@@ -423,14 +432,20 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     const yAxisSvg = document.getElementById('candle-yaxis');
     if (yAxisSvg) yAxisSvg.innerHTML = buildYAxisSvg(newYFn);
 
-    // 터치 이벤트 재바인딩
     rebindTouchEvents(newYFn);
+    hideRecalc();
   }
+
+  function showRecalc() { if (recalcOverlay) recalcOverlay.classList.add('active'); }
+  function hideRecalc() { if (recalcOverlay) recalcOverlay.classList.remove('active'); }
 
   scrollEl.addEventListener('scroll', () => {
     // 거래량 동기화
     const volScroll = document.getElementById('volume-scroll');
     if (volScroll) volScroll.scrollLeft = scrollEl.scrollLeft;
+
+    // Y축이 바뀔 예정이면 로딩 표시
+    if (needsYUpdate()) showRecalc();
 
     // Y축 재계산 (디바운스 150ms)
     clearTimeout(scrollTimer);
