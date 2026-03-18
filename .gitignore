@@ -9,9 +9,6 @@ __pycache__/
 # ML 모델 파일 (Railway에서 자동 생성)
 models/*.pkl
 
-# 연습/개발용 노트북
-practice/
-
 # IDE 설정
 .vscode/
 .idea/
