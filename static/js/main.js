@@ -736,13 +736,14 @@ function setupTabSwipe() {
 
   wrap.addEventListener('touchstart', (e) => {
     const overlay = document.getElementById('detail-overlay');
-    if (overlay && overlay.classList.contains('open')) return;
+    if (overlay && overlay.classList.contains('open')) { activeEl = null; return; }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     lastX = startX;
     startTime = Date.now();
     dirLocked = false;
     isSwipe = null;
+    activeEl = null;
     // 횡스크롤 영역 안이면 탭 스와이프 비활성화
     const t = e.target;
     if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips') || t.closest('.chart-ticker-bar') || t.closest('.ma-legend'))) {
@@ -755,6 +756,11 @@ function setupTabSwipe() {
 
   wrap.addEventListener('touchmove', (e) => {
     if (isSwipe === false || !activeEl) return;
+    // 횡스크롤 영역 안이면 탭 스와이프 비활성화 (touchstart 이후 포커스 변경 방어)
+    const t = e.target;
+    if (t.closest && (t.closest('.candle-scroll') || t.closest('.volume-scroll') || t.closest('.chart-ticker-chips') || t.closest('.chart-ticker-bar') || t.closest('.ma-legend'))) {
+      isSwipe = false; activeEl = null; return;
+    }
     const cx = e.touches[0].clientX;
     const cy = e.touches[0].clientY;
     lastX = cx;
@@ -1418,17 +1424,15 @@ function setupPullToRefresh() {
       return;
     }
 
-    // 아래로 스크롤 중이면 아직 overscroll 아님
-    if (window.scrollY > 0) {
-      overscrolling = false;
-      overscrollStartY = 0;
-      return;
-    }
+    // 터치 시작 시 최상단이 아니었으면 → 이 터치에서는 새로고침 불가
+    // (스크롤해서 올라온 뒤 한 번 손 떼고 다시 당겨야 함)
+    if (!atTopOnStart) return;
+
+    // 최상단이 아니면 무시 (혹시 약간 스크롤된 경우 방어)
+    if (window.scrollY > 0) return;
 
     // 최상단 도달! 이제부터 overscroll 추적 시작
     if (!overscrolling) {
-      // 터치 시작 시 이미 최상단이 아니었으면 → 스크롤해서 도달한 것
-      // 이 시점의 Y를 overscroll 기준점으로 설정
       overscrolling = true;
       overscrollStartY = cy;
       return;
