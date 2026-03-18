@@ -393,6 +393,7 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       ${buildYAxisSvg(yFn)}
     </svg>
     <div class="candle-tooltip" id="candle-tip"></div>
+    <div class="chart-recalc-overlay" id="chart-recalc"><div class="loading-spinner sm"></div></div>
   </div>`;
 
   // 스크롤 위치 복원
@@ -403,19 +404,28 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     scrollEl.scrollLeft = scrollW;
   }
 
-  // ── 스크롤 시 Y축 동적 재계산 (로딩 오버레이 없이 즉시 반영) ──
+  // ── 스크롤 시 Y축 동적 재계산 ──
   let scrollTimer = null;
   let prevSI = initSI, prevEI = initEI;
+  const recalcOverlay = document.getElementById('chart-recalc');
+
+  function needsYUpdate() {
+    const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
+    if (si === prevSI && ei === prevEI) return false;
+    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
+    const newScale = niceScale(newMin, newMax, 6);
+    return newScale.min !== scale.min || newScale.max !== scale.max;
+  }
 
   function updateYAxisOnScroll() {
     const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
-    if (si === prevSI && ei === prevEI) return;
+    if (si === prevSI && ei === prevEI) { hideRecalc(); return; }
     prevSI = si; prevEI = ei;
 
     const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
     const newScale = niceScale(newMin, newMax, 6);
 
-    if (newScale.min === scale.min && newScale.max === scale.max) return;
+    if (newScale.min === scale.min && newScale.max === scale.max) { hideRecalc(); return; }
     scale = newScale;
     yMin = scale.min; yMax = scale.max; yRange = yMax - yMin || 1;
 
@@ -428,11 +438,17 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     if (yAxisSvg) yAxisSvg.innerHTML = buildYAxisSvg(newYFn);
 
     rebindTouchEvents(newYFn);
+    hideRecalc();
   }
+
+  function showRecalc() { if (recalcOverlay) recalcOverlay.classList.add('active'); }
+  function hideRecalc() { if (recalcOverlay) recalcOverlay.classList.remove('active'); }
 
   scrollEl.addEventListener('scroll', () => {
     const volScroll = document.getElementById('volume-scroll');
     if (volScroll) volScroll.scrollLeft = scrollEl.scrollLeft;
+
+    if (needsYUpdate()) showRecalc();
 
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(updateYAxisOnScroll, 150);
