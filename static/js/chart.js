@@ -277,8 +277,15 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     return [si, ei];
   }
 
-  // Y축: 전체 데이터 기준으로 고정 (스크롤 시 재계산 없음)
-  const { dataMin, dataMax } = getVisibleYRange(allCandles, maLines, 0, n - 1);
+  // 초기 스크롤 위치 예측 (Y축 계산용)
+  let initScrollLeft;
+  if (typeof scrollRatio === 'number') {
+    initScrollLeft = Math.max(0, scrollRatio * scrollW - visibleW / 2);
+  } else {
+    initScrollLeft = scrollW - visibleW;
+  }
+  const [initSI, initEI] = getVisibleRange(initScrollLeft);
+  const { dataMin, dataMax } = getVisibleYRange(allCandles, maLines, initSI, initEI);
 
   // Y축 스케일
   let scale = niceScale(dataMin, dataMax, 6);
@@ -396,10 +403,39 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     scrollEl.scrollLeft = scrollW;
   }
 
-  // ── 스크롤 시 거래량 동기화만 (Y축 재계산 없음) ──
+  // ── 스크롤 시 Y축 동적 재계산 (로딩 오버레이 없이 즉시 반영) ──
+  let scrollTimer = null;
+  let prevSI = initSI, prevEI = initEI;
+
+  function updateYAxisOnScroll() {
+    const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
+    if (si === prevSI && ei === prevEI) return;
+    prevSI = si; prevEI = ei;
+
+    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
+    const newScale = niceScale(newMin, newMax, 6);
+
+    if (newScale.min === scale.min && newScale.max === scale.max) return;
+    scale = newScale;
+    yMin = scale.min; yMax = scale.max; yRange = yMax - yMin || 1;
+
+    const newYFn = v => pad.top + (1 - (v - yMin) / yRange) * cH;
+
+    const mainSvg = scrollEl.querySelector('svg');
+    mainSvg.innerHTML = buildMainSvg(newYFn);
+
+    const yAxisSvg = document.getElementById('candle-yaxis');
+    if (yAxisSvg) yAxisSvg.innerHTML = buildYAxisSvg(newYFn);
+
+    rebindTouchEvents(newYFn);
+  }
+
   scrollEl.addEventListener('scroll', () => {
     const volScroll = document.getElementById('volume-scroll');
     if (volScroll) volScroll.scrollLeft = scrollEl.scrollLeft;
+
+    clearTimeout(scrollTimer);
+    scrollTimer = setTimeout(updateYAxisOnScroll, 150);
   }, { passive: true });
 
   // ── 핀치 줌 ──
