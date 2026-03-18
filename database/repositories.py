@@ -177,23 +177,39 @@ def upsert_index_prices(records: list[dict]) -> None:
 
 
 def fetch_index_prices_latest() -> list[dict]:
-    """가장 최근 날짜의 ETF 가격/등락률 전체를 조회합니다."""
+    """가장 최근 날짜의 ETF 가격/등락률 전체를 조회합니다.
+    change_pct가 모두 0인 날짜(비거래일/장 시작 전)는 건너뛰고
+    실제 거래 데이터가 있는 가장 최근 날짜를 반환합니다.
+    """
     client = get_client()
-    # 최신 날짜 1건으로 날짜를 확인
-    latest = (
+    # change_pct > 0 또는 < 0 인 행에서 가장 최근 날짜를 직접 찾기
+    nz = (
         client.table("index_price_raw")
         .select("date")
+        .or_("change_pct.gt.0,change_pct.lt.0")
         .order("date", desc=True)
         .limit(1)
         .execute()
     )
-    if not latest.data:
-        return []
-    latest_date = latest.data[0]["date"]
+    if nz.data:
+        target_date = nz.data[0]["date"]
+    else:
+        # 전부 0이면 가장 최근 날짜 사용
+        latest = (
+            client.table("index_price_raw")
+            .select("date")
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+        if not latest.data:
+            return []
+        target_date = latest.data[0]["date"]
+
     response = (
         client.table("index_price_raw")
         .select("*")
-        .eq("date", latest_date)
+        .eq("date", target_date)
         .execute()
     )
     return response.data
