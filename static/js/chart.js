@@ -277,15 +277,8 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     return [si, ei];
   }
 
-  // 초기 스크롤 위치 예측 (Y축 계산용)
-  let initScrollLeft;
-  if (typeof scrollRatio === 'number') {
-    initScrollLeft = Math.max(0, scrollRatio * scrollW - visibleW / 2);
-  } else {
-    initScrollLeft = scrollW - visibleW;
-  }
-  const [initSI, initEI] = getVisibleRange(initScrollLeft);
-  const { dataMin, dataMax } = getVisibleYRange(allCandles, maLines, initSI, initEI);
+  // Y축: 전체 데이터 기준으로 고정 (스크롤 시 재계산 없음)
+  const { dataMin, dataMax } = getVisibleYRange(allCandles, maLines, 0, n - 1);
 
   // Y축 스케일
   let scale = niceScale(dataMin, dataMax, 6);
@@ -393,7 +386,6 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       ${buildYAxisSvg(yFn)}
     </svg>
     <div class="candle-tooltip" id="candle-tip"></div>
-    <div class="chart-recalc-overlay" id="chart-recalc"><div class="loading-spinner sm"></div></div>
   </div>`;
 
   // 스크롤 위치 복원
@@ -404,59 +396,10 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     scrollEl.scrollLeft = scrollW;
   }
 
-  // ── 스크롤 시 Y축 동적 재계산 (디바운스) ──
-  let scrollTimer = null;
-  let prevSI = initSI, prevEI = initEI;
-  const recalcOverlay = document.getElementById('chart-recalc');
-
-  function needsYUpdate() {
-    const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
-    if (si === prevSI && ei === prevEI) return false;
-    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
-    const newScale = niceScale(newMin, newMax, 6);
-    return newScale.min !== scale.min || newScale.max !== scale.max;
-  }
-
-  function updateYAxisOnScroll() {
-    const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
-    if (si === prevSI && ei === prevEI) { hideRecalc(); return; }
-    prevSI = si; prevEI = ei;
-
-    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
-    const newScale = niceScale(newMin, newMax, 6);
-
-    if (newScale.min === scale.min && newScale.max === scale.max) { hideRecalc(); return; }
-    scale = newScale;
-    yMin = scale.min; yMax = scale.max; yRange = yMax - yMin || 1;
-
-    const newYFn = v => pad.top + (1 - (v - yMin) / yRange) * cH;
-
-    // 메인 SVG 교체
-    const mainSvg = scrollEl.querySelector('svg');
-    mainSvg.innerHTML = buildMainSvg(newYFn);
-
-    // Y축 오버레이 교체
-    const yAxisSvg = document.getElementById('candle-yaxis');
-    if (yAxisSvg) yAxisSvg.innerHTML = buildYAxisSvg(newYFn);
-
-    rebindTouchEvents(newYFn);
-    hideRecalc();
-  }
-
-  function showRecalc() { if (recalcOverlay) recalcOverlay.classList.add('active'); }
-  function hideRecalc() { if (recalcOverlay) recalcOverlay.classList.remove('active'); }
-
+  // ── 스크롤 시 거래량 동기화만 (Y축 재계산 없음) ──
   scrollEl.addEventListener('scroll', () => {
-    // 거래량 동기화
     const volScroll = document.getElementById('volume-scroll');
     if (volScroll) volScroll.scrollLeft = scrollEl.scrollLeft;
-
-    // Y축이 바뀔 예정이면 로딩 표시
-    if (needsYUpdate()) showRecalc();
-
-    // Y축 재계산 (디바운스 150ms)
-    clearTimeout(scrollTimer);
-    scrollTimer = setTimeout(updateYAxisOnScroll, 150);
   }, { passive: true });
 
   // ── 핀치 줌 ──
