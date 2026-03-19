@@ -43,10 +43,14 @@ def fetch_index_prices() -> list[dict]:
             # curr: regularMarketPrice가 있으면 사용, 없으면 adjclose 마지막 값 사용
             curr = realtime_price if realtime_price else (closes[-1] if closes else None)
 
-            # prev: previousClose 우선 사용 (chartPreviousClose는 차트 시작 전 종가로 10일 전 값)
-            prev = meta.get('previousClose') or meta.get('chartPreviousClose')  # meta에서 전일 종가 추출
-            if not prev and len(closes) >= 2:            # meta에 없으면 adjclose[-2] fallback
-                prev = closes[-2]
+            # prev(전일 종가): adjclose 배열을 뒤에서부터 순회하여 당일 종가와 다른 첫 번째 값을 찾음
+            # (장 마감 후 adjclose 마지막 2개가 동일해지므로 closes[-2]는 사용 불가)
+            prev = None                                  # 전일 종가 초기화 (아직 못 찾은 상태)
+            if curr and closes:
+                for c in reversed(closes):               # 배열 끝에서부터 역순 탐색
+                    if round(c, 2) != round(curr, 2):    # 당일 종가와 다른 값 발견 시
+                        prev = c                         # 그 값이 전일 종가
+                        break
 
             if not curr or not prev or prev <= 0:        # 유효하지 않으면 건너뜀
                 continue
