@@ -70,6 +70,7 @@ function renderTickerChips() {
 function setupIntervalButtons() {
   const btns = document.querySelectorAll('.chart-iv-btn');
   btns.forEach(btn => {
+    if (!btn.dataset.iv) return;  // 예측 버튼 등 interval 아닌 버튼 제외
     btn.addEventListener('click', () => {
       if (btn.dataset.iv === _chartInterval) return;
       _chartInterval = btn.dataset.iv;
