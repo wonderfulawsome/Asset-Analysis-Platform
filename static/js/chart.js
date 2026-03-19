@@ -22,6 +22,7 @@ let _maCache = {};
 
 // 예측 상태
 let _predictVisible = false;
+let _predictData = null;
 
 // ── 차트 탭 초기화 ──
 function initChartTab() {
@@ -254,7 +255,25 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
   const yAxisW = 44;
   const pad = { top: 14, bottom: 24, left: 4 };
   const cH = H - pad.top - pad.bottom;
-  const n = allCandles.length;
+  const realN = allCandles.length;
+
+  // 예측 데이터 연장 (캔들 오른쪽에 이어서 표시)
+  const predArr = (_predictVisible && _predictData) ? _predictData.predicted : [];
+  const predPoints = [];
+  if (predArr.length > 0 && realN > 0) {
+    const lastDate = allCandles[realN - 1].d;
+    predArr.forEach(p => {
+      if (p.date > lastDate) {
+        predPoints.push({
+          d: p.date,
+          o: p.yhat, h: p.upper, l: p.lower, c: p.yhat, v: 0,
+          _pred: { yhat: p.yhat, lower: p.lower, upper: p.upper }
+        });
+      }
+    });
+  }
+  const allPoints = [...allCandles, ...predPoints];
+  const n = allPoints.length;
 
   // X축 레이아웃 (줌 적용)
   const baseGap = getBaseGap();
@@ -268,7 +287,7 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
 
   const xPos = i => pad.left + gap * i + gap / 2;
 
-  // MA 값 (캐시)
+  // MA 값 (캐시) — 실제 캔들만 사용
   const maLines = getMaLines(allCandles);
 
   // 보이는 캔들 인덱스 계산
@@ -290,16 +309,16 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     initScrollLeft = scrollW - visibleW;
   }
   const [initSI, initEI] = getVisibleRange(initScrollLeft);
-  const { dataMin, dataMax } = getVisibleYRange(allCandles, maLines, initSI, initEI);
+  const { dataMin, dataMax } = getVisibleYRange(allPoints, maLines, initSI, initEI);
 
   // Y축 스케일
   let scale = niceScale(dataMin, dataMax, 6);
   let yMin = scale.min, yMax = scale.max, yRange = yMax - yMin || 1;
   const yFn = v => pad.top + (1 - (v - yMin) / yRange) * cH;
 
-  // 현재가 정보
-  const lastC = allCandles[n - 1].c;
-  const lastColor = allCandles[n - 1].c >= allCandles[n - 1].o ? '#10B981' : '#EF4444';
+  // 현재가 정보 (실제 마지막 캔들 기준)
+  const lastC = allCandles[realN - 1].c;
+  const lastColor = allCandles[realN - 1].c >= allCandles[realN - 1].o ? '#10B981' : '#EF4444';
 
   // ── SVG 빌드 함수 (Y축 바뀔 때 재사용) ──
   function buildMainSvg(yFn) {
@@ -314,9 +333,10 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     const lastY = yFn(lastC);
     const priceDash = `<line x1="0" y1="${lastY.toFixed(1)}" x2="${scrollW}" y2="${lastY.toFixed(1)}" stroke="${lastColor}" stroke-width="0.6" stroke-dasharray="2 2" opacity="0.5"/>`;
 
-    // 캔들
+    // 캔들 (실제 데이터만)
     let candleSvg = '';
-    allCandles.forEach((c, i) => {
+    allPoints.forEach((c, i) => {
+      if (c._pred) return;
       const cx = xPos(i);
       const isUp = c.c >= c.o;
       const color = isUp ? '#10B981' : '#EF4444';
@@ -326,6 +346,30 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       candleSvg += `<line x1="${cx.toFixed(1)}" y1="${yFn(c.h).toFixed(1)}" x2="${cx.toFixed(1)}" y2="${yFn(c.l).toFixed(1)}" stroke="${color}" stroke-width="${wickW.toFixed(1)}"/>`;
       candleSvg += `<rect x="${(cx - candleW / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${color}" rx="0.3"/>`;
     });
+
+    // 예측 오버레이 (신뢰구간 + 예측선 + 구분선)
+    let predSvg = '';
+    if (predPoints.length > 0) {
+      // 구분선 (마지막 캔들과 첫 예측 사이)
+      const divX = (xPos(realN - 1) + xPos(realN)) / 2;
+      predSvg += `<line x1="${divX.toFixed(1)}" y1="${pad.top}" x2="${divX.toFixed(1)}" y2="${pad.top + cH}" stroke="var(--sub)" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>`;
+
+      // 신뢰구간 영역
+      const predIdxs = [];
+      allPoints.forEach((p, i) => { if (p._pred) predIdxs.push(i); });
+      if (predIdxs.length > 1) {
+        let upper = predIdxs.map(i => `${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.upper).toFixed(1)}`).join(' L');
+        let lower = predIdxs.slice().reverse().map(i => `${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.lower).toFixed(1)}`).join(' L');
+        predSvg += `<path d="M${upper} L${lower} Z" fill="rgba(59,130,246,0.12)" stroke="none"/>`;
+      }
+
+      // 예측선 (마지막 종가에서 연결)
+      let predLinePts = [`${xPos(realN - 1).toFixed(1)},${yFn(lastC).toFixed(1)}`];
+      predIdxs.forEach(i => {
+        predLinePts.push(`${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.yhat).toFixed(1)}`);
+      });
+      predSvg += `<path d="M${predLinePts.join(' L')}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 2"/>`;
+    }
 
     // MA선
     let maSvg = '';
@@ -347,25 +391,25 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     const targetPx = 55;
     const labelEvery = Math.max(1, Math.round(targetPx / candleGap));
     for (let i = 0; i < n; i += labelEvery) {
-      const d = allCandles[i].d;
+      const d = allPoints[i].d;
       const lbl = _chartInterval === '1mo' ? d.substring(2, 7) : d.substring(5);
       xLabels += `<text class="chart-label chart-x-label" x="${xPos(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${lbl}</text>`;
     }
 
-    // 터치 영역 — 캔들 몸통+꼬리 주변으로만 (high~low + 여유)
+    // 터치 영역 (캔들 + 예측 포인트 모두)
     let touchZones = '';
-    const touchW = Math.max(gap * 0.8, candleW * 3, 12); // 터치 가로 폭 (최소 12px)
-    const touchPadY = 10; // 위아래 여유 (px)
-    allCandles.forEach((c, i) => {
+    const touchW = Math.max(gap * 0.8, candleW * 3, 12);
+    const touchPadY = 10;
+    allPoints.forEach((c, i) => {
       const cx = xPos(i);
-      const yH = yFn(c.h);     // high (위쪽)
-      const yL = yFn(c.l);     // low (아래쪽)
+      const yH = yFn(c.h);
+      const yL = yFn(c.l);
       const ty = Math.max(pad.top, yH - touchPadY);
       const th = Math.min(pad.top + cH, yL + touchPadY) - ty;
       touchZones += `<rect x="${(cx - touchW / 2).toFixed(1)}" y="${ty.toFixed(1)}" width="${touchW.toFixed(1)}" height="${Math.max(20, th).toFixed(1)}" fill="transparent" data-idx="${i}" class="candle-touch" pointer-events="all"/>`;
     });
 
-    return `${gridLines}${priceDash}${candleSvg}${maSvg}${xLabels}${touchZones}
+    return `${gridLines}${priceDash}${candleSvg}${predSvg}${maSvg}${xLabels}${touchZones}
       <line id="candle-crosshair" class="candle-crosshair" x1="0" y1="0" x2="${scrollW}" y2="0" style="display:none"/>`;
   }
 
@@ -417,7 +461,7 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
   function needsYUpdate() {
     const [si, ei] = getVisibleRange(scrollEl.scrollLeft);
     if (si === prevSI && ei === prevEI) return false;
-    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
+    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allPoints, maLines, si, ei);
     const newScale = niceScale(newMin, newMax, 6);
     return newScale.min !== scale.min || newScale.max !== scale.max;
   }
@@ -427,7 +471,7 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     if (si === prevSI && ei === prevEI) { hideRecalc(); return; }
     prevSI = si; prevEI = ei;
 
-    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allCandles, maLines, si, ei);
+    const { dataMin: newMin, dataMax: newMax } = getVisibleYRange(allPoints, maLines, si, ei);
     const newScale = niceScale(newMin, newMax, 6);
 
     if (newScale.min === scale.min && newScale.max === scale.max) { hideRecalc(); return; }
@@ -548,7 +592,28 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
 
   function showCandleTip(idx) {
     const currentYFn = v => pad.top + (1 - (v - yMin) / yRange) * cH;
-    const c = allCandles[idx];
+    const c = allPoints[idx];
+
+    // 예측 포인트인 경우 별도 툴팁
+    if (c._pred) {
+      tip.innerHTML = `<div class="ct-date">${c.d}</div>
+        <div style="color:#3B82F6;font-weight:700">${t('chart.predictForecast')}: $${c._pred.yhat.toFixed(2)}</div>
+        <div style="color:var(--sub);font-size:10px">$${c._pred.lower.toFixed(2)} ~ $${c._pred.upper.toFixed(2)}</div>`;
+      const candleX = xPos(idx);
+      const visibleX = candleX - scrollEl.scrollLeft;
+      const tipW = 150;
+      tip.style.left = visibleX > containerW * 0.5 ? `${visibleX - tipW - 8}px` : `${visibleX + 12}px`;
+      tip.style.top = `${pad.top}px`;
+      tip.style.opacity = '1';
+      const ch = getCrosshair();
+      if (ch) {
+        ch.setAttribute('y1', currentYFn(c._pred.yhat).toFixed(1));
+        ch.setAttribute('y2', currentYFn(c._pred.yhat).toFixed(1));
+        ch.style.display = '';
+      }
+      return;
+    }
+
     const chg = ((c.c - c.o) / c.o * 100).toFixed(2);
     const sign = chg > 0 ? '+' : '';
     const color = c.c >= c.o ? '#10B981' : '#EF4444';
@@ -557,7 +622,7 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     MA_CONFIG.forEach(m => {
       if (!_maVisible[m.period] || !maLines[m.period]) return;
       const v = maLines[m.period].values[idx];
-      if (v !== null) {
+      if (v !== null && v !== undefined) {
         maHtml += `<div class="ct-row"><span style="color:${m.color}">${m.label}</span> <span>${v.toFixed(2)}</span></div>`;
       }
     });
@@ -703,206 +768,63 @@ function renderChartSummary(el, candles) {
 }
 
 // ═════════════════════════════════
-// ── 30일 예측 (Prophet) ──
+// ── 30일 예측 (캔들차트 연장) ──
 // ═════════════════════════════════
 
 function setupPredictButton() {
   const btn = document.getElementById('predict-toggle-btn');
   if (!btn) return;
-  btn.addEventListener('click', () => {
-    _predictVisible = !_predictVisible;
-    const section = document.getElementById('predict-section');
-    if (!section) return;
+  btn.addEventListener('click', async () => {
     if (_predictVisible) {
-      section.style.display = '';
-      btn.classList.add('active');
-      loadPrediction();
-    } else {
-      section.style.display = 'none';
+      _predictVisible = false;
+      _predictData = null;
       btn.classList.remove('active');
+      _reRenderCharts(false);
+      renderPredictLegend(false);
+      return;
+    }
+    _predictVisible = true;
+    btn.classList.add('active');
+    btn.disabled = true;
+    btn.textContent = t('chart.predictLoading');
+    try {
+      const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`);
+      const data = await res.json();
+      if (data.error) {
+        _predictVisible = false;
+        btn.classList.remove('active');
+        return;
+      }
+      _predictData = data;
+      _reRenderCharts(false);
+      renderPredictLegend(true);
+    } catch {
+      _predictVisible = false;
+      btn.classList.remove('active');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = t('chart.predictBtn');
     }
   });
 }
 
 function hidePredictSection() {
   _predictVisible = false;
-  const section = document.getElementById('predict-section');
+  _predictData = null;
   const btn = document.getElementById('predict-toggle-btn');
-  if (section) section.style.display = 'none';
   if (btn) btn.classList.remove('active');
+  renderPredictLegend(false);
 }
 
-async function loadPrediction() {
-  const chartEl = document.getElementById('predict-chart');
-  const legendEl = document.getElementById('predict-legend');
-  if (!chartEl) return;
-
-  chartEl.innerHTML = '<div class="predict-loading"><div class="loading-spinner"></div></div>';
-  if (legendEl) legendEl.innerHTML = '';
-
-  try {
-    const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`);
-    const data = await res.json();
-    if (data.error) {
-      chartEl.innerHTML = `<div class="candle-empty">${data.error}</div>`;
-      return;
-    }
-    renderPredictionChart(chartEl, data);
-    renderPredictLegend(legendEl);
-  } catch (err) {
-    chartEl.innerHTML = `<div class="candle-empty">${t('chart.noData')}</div>`;
-  }
-}
-
-function renderPredictLegend(el) {
+function renderPredictLegend(show) {
+  const el = document.getElementById('predict-legend');
   if (!el) return;
+  if (!show) { el.innerHTML = ''; return; }
   el.innerHTML = `
-    <div class="predict-legend-item">
-      <span class="predict-legend-dot" style="background:#10B981"></span>${t('chart.predictActual')}
-    </div>
     <div class="predict-legend-item">
       <span class="predict-legend-dot" style="background:#3B82F6"></span>${t('chart.predictForecast')}
     </div>
     <div class="predict-legend-item">
       <span class="predict-legend-bar" style="background:rgba(59,130,246,0.15)"></span>${t('chart.predictConfidence')}
     </div>`;
-}
-
-function renderPredictionChart(el, data) {
-  const actual = data.actual || [];
-  const predicted = data.predicted || [];
-  if (actual.length === 0 && predicted.length === 0) {
-    el.innerHTML = `<div class="candle-empty">${t('chart.noData')}</div>`;
-    return;
-  }
-
-  const W = el.clientWidth - 2;
-  const H = 220;
-  const pad = { top: 16, bottom: 26, left: 8, right: 48 };
-  const cW = W - pad.left - pad.right;
-  const cH = H - pad.top - pad.bottom;
-
-  // 데이터 포인트 합치기 (actual + predicted)
-  const points = [];
-  actual.forEach(a => points.push({ date: a.date, actual: a.close }));
-  predicted.forEach(p => {
-    const existing = points.find(pt => pt.date === p.date);
-    if (existing) {
-      existing.yhat = p.yhat; existing.lower = p.lower; existing.upper = p.upper;
-    } else {
-      points.push({ date: p.date, yhat: p.yhat, lower: p.lower, upper: p.upper });
-    }
-  });
-
-  // Y축 범위
-  let yVals = [];
-  points.forEach(p => {
-    if (p.actual != null) yVals.push(p.actual);
-    if (p.yhat != null) yVals.push(p.yhat);
-    if (p.lower != null) yVals.push(p.lower);
-    if (p.upper != null) yVals.push(p.upper);
-  });
-  const scale = niceScale(Math.min(...yVals), Math.max(...yVals), 5);
-  const yMin = scale.min, yMax = scale.max, yRange = yMax - yMin || 1;
-
-  const n = points.length;
-  const xFn = i => pad.left + (i / (n - 1)) * cW;
-  const yFn = v => pad.top + (1 - (v - yMin) / yRange) * cH;
-
-  // 예측 시작 인덱스 (첫 번째 yhat이 있고 actual이 없는 포인트)
-  let predStartIdx = points.findIndex(p => p.yhat != null && p.actual == null);
-  if (predStartIdx < 0) predStartIdx = actual.length;
-
-  // 신뢰구간 영역
-  let bandPath = '';
-  const predPoints = points.filter(p => p.upper != null && p.lower != null);
-  if (predPoints.length > 0) {
-    const predIndices = [];
-    points.forEach((p, i) => { if (p.upper != null) predIndices.push(i); });
-    let upper = predIndices.map(i => `${xFn(i).toFixed(1)},${yFn(points[i].upper).toFixed(1)}`).join(' L');
-    let lower = predIndices.slice().reverse().map(i => `${xFn(i).toFixed(1)},${yFn(points[i].lower).toFixed(1)}`).join(' L');
-    bandPath = `<path d="M${upper} L${lower} Z" fill="rgba(59,130,246,0.12)" stroke="none"/>`;
-  }
-
-  // 실제가 라인
-  let actualPath = '';
-  const actualPts = [];
-  points.forEach((p, i) => { if (p.actual != null) actualPts.push(i); });
-  if (actualPts.length > 1) {
-    actualPath = '<path d="M' + actualPts.map(i => `${xFn(i).toFixed(1)},${yFn(points[i].actual).toFixed(1)}`).join(' L') +
-      '" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>';
-  }
-
-  // 예측 라인
-  let predPath = '';
-  const predPts = [];
-  points.forEach((p, i) => { if (p.yhat != null) predPts.push(i); });
-  if (predPts.length > 1) {
-    predPath = '<path d="M' + predPts.map(i => `${xFn(i).toFixed(1)},${yFn(points[i].yhat).toFixed(1)}`).join(' L') +
-      '" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 2"/>';
-  }
-
-  // 구분선 (실제 → 예측 경계)
-  let dividerLine = '';
-  if (predStartIdx > 0 && predStartIdx < n) {
-    const dx = xFn(predStartIdx);
-    dividerLine = `<line x1="${dx.toFixed(1)}" y1="${pad.top}" x2="${dx.toFixed(1)}" y2="${pad.top + cH}" stroke="var(--sub)" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>`;
-  }
-
-  // 그리드 + Y축 라벨
-  let grid = '';
-  scale.ticks.forEach(val => {
-    const y = yFn(val);
-    if (y < pad.top - 2 || y > pad.top + cH + 2) return;
-    grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${W - pad.right}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="0.5" opacity="0.4"/>`;
-    grid += `<text x="${W - pad.right + 4}" y="${y.toFixed(1)}" fill="var(--sub)" font-size="9" dominant-baseline="middle">${fmtYLabel(val)}</text>`;
-  });
-
-  // X축 라벨
-  let xLabels = '';
-  const labelCount = Math.min(6, n);
-  const labelEvery = Math.max(1, Math.floor(n / labelCount));
-  for (let i = 0; i < n; i += labelEvery) {
-    const lbl = points[i].date.substring(5);
-    xLabels += `<text x="${xFn(i).toFixed(1)}" y="${H - 5}" fill="var(--sub)" font-size="9" text-anchor="middle">${lbl}</text>`;
-  }
-
-  // 터치/호버 영역
-  let touchZones = '';
-  points.forEach((p, i) => {
-    const x = xFn(i);
-    touchZones += `<rect x="${(x - cW / n / 2).toFixed(1)}" y="${pad.top}" width="${(cW / n).toFixed(1)}" height="${cH}" fill="transparent" data-idx="${i}" class="predict-touch"/>`;
-  });
-
-  el.innerHTML = `<div style="position:relative;">
-    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-      ${grid}${bandPath}${actualPath}${predPath}${dividerLine}${xLabels}${touchZones}
-    </svg>
-    <div class="predict-tooltip" id="predict-tip"></div>
-  </div>`;
-
-  // 툴팁 이벤트
-  const tip = document.getElementById('predict-tip');
-  const svg = el.querySelector('svg');
-
-  function showTip(idx) {
-    const p = points[idx];
-    const x = xFn(idx);
-    let html = `<div style="font-weight:700;margin-bottom:2px">${p.date}</div>`;
-    if (p.actual != null) html += `<div style="color:#10B981">${t('chart.predictActual')}: $${p.actual.toFixed(2)}</div>`;
-    if (p.yhat != null) html += `<div style="color:#3B82F6">${t('chart.predictForecast')}: $${p.yhat.toFixed(2)}</div>`;
-    if (p.lower != null) html += `<div style="color:var(--sub);font-size:10px">$${p.lower.toFixed(2)} ~ $${p.upper.toFixed(2)}</div>`;
-    tip.innerHTML = html;
-    tip.style.left = x > W * 0.6 ? `${x - 130}px` : `${x + 12}px`;
-    tip.style.top = `${pad.top}px`;
-    tip.style.opacity = '1';
-  }
-  function hideTip() { tip.style.opacity = '0'; }
-
-  svg.querySelectorAll('.predict-touch').forEach(zone => {
-    zone.addEventListener('mouseenter', () => showTip(+zone.dataset.idx));
-    zone.addEventListener('mouseleave', hideTip);
-    zone.addEventListener('touchstart', (e) => { showTip(+zone.dataset.idx); }, { passive: true });
-  });
-  svg.addEventListener('touchend', () => setTimeout(hideTip, 2000), { passive: true });
 }
