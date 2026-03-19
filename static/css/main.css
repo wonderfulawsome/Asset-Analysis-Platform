@@ -1583,11 +1583,11 @@ html[lang="en"] .card-tappable::after {
 
 /* ── Candlestick Chart Tab ───────────────── */
 .chart-ticker-bar {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .chart-ticker-chips {
   display: flex;
-  gap: 5px;
+  gap: 6px;
   overflow-x: auto;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
@@ -1597,55 +1597,97 @@ html[lang="en"] .card-tappable::after {
 .chart-ticker-chips::-webkit-scrollbar { display: none; }
 .chart-tk-chip {
   flex-shrink: 0;
-  padding: 5px 12px;
-  border-radius: 16px;
+  padding: 6px 14px;
+  border-radius: 20px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   border: 1.5px solid var(--sep);
   background: var(--card);
   color: var(--sub);
-  transition: all 0.15s;
+  transition: all 0.2s;
   font-family: inherit;
+  letter-spacing: 0.3px;
+}
+.chart-tk-chip:hover {
+  border-color: var(--sub);
 }
 .chart-tk-chip.active {
   background: #1a1a1a;
   color: #fff;
   border-color: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 [data-theme="dark"] .chart-tk-chip.active {
   background: #FF8C00;
   color: #000;
   border-color: #FF8C00;
+  box-shadow: 0 2px 10px rgba(255,140,0,0.3);
 }
 
 .chart-interval-bar {
   display: flex;
-  gap: 5px;
-  margin-bottom: 6px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 .chart-iv-btn {
   flex: 1;
-  padding: 7px 0;
-  border-radius: 10px;
+  padding: 8px 0;
+  border-radius: 12px;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
   border: 1.5px solid var(--sep);
   background: var(--card);
   color: var(--sub);
-  transition: all 0.15s;
+  transition: all 0.2s;
   font-family: inherit;
+}
+.chart-iv-btn:hover {
+  border-color: var(--sub);
 }
 .chart-iv-btn.active {
   background: #1a1a1a;
   color: #fff;
   border-color: #1a1a1a;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 [data-theme="dark"] .chart-iv-btn.active {
   background: #FF8C00;
   color: #000;
   border-color: #FF8C00;
+  box-shadow: 0 2px 10px rgba(255,140,0,0.3);
+}
+
+/* 30일 예측 버튼 */
+.predict-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 28px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 2px solid #3B82F6;
+  background: transparent;
+  color: #3B82F6;
+  transition: all 0.25s;
+  font-family: inherit;
+  letter-spacing: 0.3px;
+}
+.predict-btn:hover {
+  background: rgba(59,130,246,0.08);
+}
+.predict-btn.active {
+  background: #3B82F6;
+  color: #fff;
+  border-color: #3B82F6;
+  box-shadow: 0 3px 12px rgba(59,130,246,0.35);
+}
+.predict-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
 
 /* MA Legend */
@@ -1746,11 +1788,11 @@ html[lang="en"] .card-tappable::after {
   z-index: 5;
 }
 .chart-zoom-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--card);
   color: var(--text);
   font-size: 16px;
   font-weight: 700;
@@ -1758,14 +1800,19 @@ html[lang="en"] .card-tappable::after {
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0.7;
-  transition: opacity 0.15s;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  opacity: 0.8;
+  transition: all 0.2s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
   -webkit-tap-highlight-color: transparent;
+  backdrop-filter: blur(4px);
+}
+.chart-zoom-btn:hover {
+  opacity: 1;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
 }
 .chart-zoom-btn:active {
   opacity: 1;
-  background: var(--card);
+  transform: scale(0.92);
 }
 .candle-crosshair {
   stroke: var(--sub2);
@@ -1870,23 +1917,30 @@ html[lang="en"] .card-tappable::after {
 
 /* Summary Grid */
 .chart-summary {
-  margin-top: 8px;
+  margin-top: 10px;
 }
 .chart-sum-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+  gap: 8px;
 }
 .chart-sum-item {
   background: var(--card);
-  border-radius: 12px;
-  padding: 10px 8px;
+  border-radius: 14px;
+  padding: 12px 8px;
   text-align: center;
+  border: 1px solid var(--sep);
+  transition: border-color 0.2s;
+}
+.chart-sum-item:hover {
+  border-color: var(--sub);
 }
 .chart-sum-label {
   font-size: 10px;
   color: var(--sub);
-  margin-bottom: 3px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 .chart-sum-val {
   font-size: 14px;
@@ -1895,6 +1949,7 @@ html[lang="en"] .card-tappable::after {
 }
 [data-theme="dark"] .chart-sum-item {
   background: #1C1C20;
+  border-color: #2a2a2e;
 }
 
 /* ── 30일 예측 차트 ── */
