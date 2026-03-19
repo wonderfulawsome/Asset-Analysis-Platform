@@ -30,6 +30,7 @@ function initChartTab() {
   setupIntervalButtons();
   setupZoomButtons();
   setupPredictButton();
+  updatePredictBtnVisibility();
   loadCandleChart();
 }
 
@@ -77,6 +78,8 @@ function setupIntervalButtons() {
       _zoomLevel = 1.0;
       btns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
+      hidePredictSection();
+      updatePredictBtnVisibility();
       loadCandleChart();
     });
   });
@@ -820,6 +823,12 @@ function hidePredictSection() {
   const btn = document.getElementById('predict-toggle-btn');
   if (btn) btn.classList.remove('active');
   renderPredictLegend(false);
+}
+
+// 일봉일 때만 예측 버튼 표시
+function updatePredictBtnVisibility() {
+  const wrap = document.getElementById('predict-toggle-btn')?.parentElement;
+  if (wrap) wrap.style.display = _chartInterval === '1d' ? '' : 'none';
 }
 
 function renderPredictLegend(show) {
