@@ -2007,3 +2007,20 @@ html[lang="en"] .card-tappable::after {
 [data-theme="dark"] .predict-tooltip {
   background: #1C1C20;
 }
+
+/* 예측 그리기 애니메이션 */
+.pred-anim-line {
+  stroke-dasharray: 2000;
+  stroke-dashoffset: 2000;
+  animation: predDraw 1.2s ease-out forwards;
+}
+.pred-anim-fade {
+  opacity: 0;
+  animation: predFadeIn 0.8s ease-out 0.4s forwards;
+}
+@keyframes predDraw {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes predFadeIn {
+  to { opacity: 1; }
+}

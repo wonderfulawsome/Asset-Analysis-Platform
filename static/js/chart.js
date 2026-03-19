@@ -348,12 +348,12 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       candleSvg += `<rect x="${(cx - candleW / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${color}" rx="0.3"/>`;
     });
 
-    // 예측 오버레이 (신뢰구간 + 예측선 + 구분선)
+    // 예측 오버레이 (신뢰구간 + 예측선 + 구분선 + 애니메이션)
     let predSvg = '';
     if (predPoints.length > 0) {
       // 구분선 (마지막 캔들과 첫 예측 사이)
       const divX = (xPos(realN - 1) + xPos(realN)) / 2;
-      predSvg += `<line x1="${divX.toFixed(1)}" y1="${pad.top}" x2="${divX.toFixed(1)}" y2="${pad.top + cH}" stroke="var(--sub)" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>`;
+      predSvg += `<line x1="${divX.toFixed(1)}" y1="${pad.top}" x2="${divX.toFixed(1)}" y2="${pad.top + cH}" stroke="var(--sub)" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5" class="pred-anim-fade"/>`;
 
       // 신뢰구간 영역
       const predIdxs = [];
@@ -361,15 +361,15 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       if (predIdxs.length > 1) {
         let upper = predIdxs.map(i => `${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.upper).toFixed(1)}`).join(' L');
         let lower = predIdxs.slice().reverse().map(i => `${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.lower).toFixed(1)}`).join(' L');
-        predSvg += `<path d="M${upper} L${lower} Z" fill="rgba(59,130,246,0.12)" stroke="none"/>`;
+        predSvg += `<path d="M${upper} L${lower} Z" fill="rgba(59,130,246,0.12)" stroke="none" class="pred-anim-fade"/>`;
       }
 
-      // 예측선 (마지막 종가에서 연결)
+      // 예측선 (마지막 종가에서 연결) — stroke-dashoffset 애니메이션
       let predLinePts = [`${xPos(realN - 1).toFixed(1)},${yFn(lastC).toFixed(1)}`];
       predIdxs.forEach(i => {
         predLinePts.push(`${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.yhat).toFixed(1)}`);
       });
-      predSvg += `<path d="M${predLinePts.join(' L')}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 2"/>`;
+      predSvg += `<path d="M${predLinePts.join(' L')}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" class="pred-anim-line"/>`;
     }
 
     // MA선
@@ -799,6 +799,11 @@ function setupPredictButton() {
       _predictData = data;
       _reRenderCharts(false);
       renderPredictLegend(true);
+      // 예측 영역으로 부드럽게 스크롤
+      setTimeout(() => {
+        const sc = document.getElementById('candle-scroll');
+        if (sc) sc.scrollTo({ left: sc.scrollWidth, behavior: 'smooth' });
+      }, 50);
     } catch {
       _predictVisible = false;
       btn.classList.remove('active');
