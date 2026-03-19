@@ -43,8 +43,8 @@ def fetch_index_prices() -> list[dict]:
             # curr: regularMarketPrice가 있으면 사용, 없으면 adjclose 마지막 값 사용
             curr = realtime_price if realtime_price else (closes[-1] if closes else None)
 
-            # prev: chartPreviousClose 우선 사용 (adjclose[-2]는 장 마감 후 인덱스 변동 위험)
-            prev = meta.get('chartPreviousClose') or meta.get('previousClose')  # meta에서 전일 종가 추출
+            # prev: previousClose 우선 사용 (chartPreviousClose는 차트 시작 전 종가로 10일 전 값)
+            prev = meta.get('previousClose') or meta.get('chartPreviousClose')  # meta에서 전일 종가 추출
             if not prev and len(closes) >= 2:            # meta에 없으면 adjclose[-2] fallback
                 prev = closes[-2]
 
