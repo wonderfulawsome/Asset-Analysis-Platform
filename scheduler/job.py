@@ -23,6 +23,8 @@ from processor.feature3_crash_surge import (
     train_crash_surge, load_model as load_crash_surge_model, predict_crash_surge,
     backfill_crash_surge,
 )
+from processor.feature4_chart_predict import run_chart_predict_all
+from database.repositories import upsert_chart_predict
 
 
 def run_pipeline(light: bool = False) -> None:
@@ -231,6 +233,16 @@ def run_pipeline(light: bool = False) -> None:
                 print(f'[Step 7b] 백필 완료: {len(new_records)}건 DB 저장')
         except Exception as e:
             print(f'[Step 7] 폭락/급등 전조 실패, 건너뜀: {e}')  # 실패해도 파이프라인 완료 처리
+
+        # Step 8: Prophet ETF 30일 가격 예측 (16 tickers)
+        print('\n[Step 8] ETF Prophet 예측...')
+        try:
+            predict_results = run_chart_predict_all()
+            for rec in predict_results:
+                upsert_chart_predict(rec)
+            print(f'[Step 8] {len(predict_results)}건 예측 완료')
+        except Exception as e:
+            print(f'[Step 8] Prophet 예측 실패, 건너뜀: {e}')
 
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')

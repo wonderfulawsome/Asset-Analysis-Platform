@@ -439,4 +439,37 @@ def fetch_macro_closes() -> list[dict]:
     )
 
 
+# ── chart_predict_result ──────────────────────────────────
+
+def upsert_chart_predict(record: dict) -> None:
+    """Prophet 예측 결과를 chart_predict_result 테이블에 upsert합니다. (date+ticker 기준)"""
+    record = dict(record)
+    for key in ('actual', 'predicted'):
+        if isinstance(record.get(key), list):
+            record[key] = json.dumps(record[key], ensure_ascii=False)
+    client = get_client()
+    client.table("chart_predict_result").upsert(record, on_conflict="date,ticker").execute()
+    print(f"[DB] chart_predict_result {record['date']} ({record['ticker']}) upsert 완료")
+
+
+def fetch_chart_predict(ticker: str) -> Optional[dict]:
+    """특정 티커의 최신 Prophet 예측 결과를 조회합니다."""
+    client = get_client()
+    response = (
+        client.table("chart_predict_result")
+        .select("*")
+        .eq("ticker", ticker)
+        .order("date", desc=True)
+        .limit(1)
+        .execute()
+    )
+    if not response.data:
+        return None
+    row = response.data[0]
+    for key in ('actual', 'predicted'):
+        if isinstance(row.get(key), str):
+            row[key] = json.loads(row[key])
+    return row
+
+
 ############ Supabase DB의 각 테이블에 데이터를 저장(upsert)하고 조회(fetch)하는 함수들을 모아놓은 파일
