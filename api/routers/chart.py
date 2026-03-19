@@ -106,22 +106,37 @@ def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
         if hasattr(df.columns, 'levels') and len(df.columns.levels) > 1:
             df.columns = df.columns.get_level_values(0)
 
+        import numpy as np
+
         # ds(날짜) y(종가)를 학습데이터로 사용
         prophet_df = df[['Close']].reset_index()
         prophet_df.columns = ['ds', 'y']
 
-        # weekly_seasonality=False: 주간 계절성이 톱니 파동을 만들므로 비활성화
+        # 로그 변환: 주가는 %로 움직이므로 log 스케일이 현실적
+        prophet_df['y'] = np.log(prophet_df['y'])
+
+        # changepoint_prior_scale=0.15: 최근 추세를 민감하게 반영
+        # n_changepoints=50: 추세 변화점을 세밀하게 포착
+        # seasonality_mode='multiplicative': 가격 수준에 비례하는 계절성
         model = Prophet(
             daily_seasonality=False,
             yearly_seasonality=True,
             weekly_seasonality=False,
-            changepoint_prior_scale=0.05,
+            changepoint_prior_scale=0.15,
+            n_changepoints=50,
+            seasonality_mode='multiplicative',
         )
         model.fit(prophet_df)
 
         # freq='B' 영업일만 생성하여 주말 포인트 제거
         future = model.make_future_dataframe(periods=30, freq='B')
         forecast = model.predict(future)
+
+        # 로그 역변환 (exp)
+        forecast['yhat'] = np.exp(forecast['yhat'])
+        forecast['yhat_lower'] = np.exp(forecast['yhat_lower'])
+        forecast['yhat_upper'] = np.exp(forecast['yhat_upper'])
+        prophet_df['y'] = np.exp(prophet_df['y'])
 
         recent = prophet_df.tail(30)
         actual = [{'date': str(r.ds.date()), 'close': round(float(r.y), 2)}
