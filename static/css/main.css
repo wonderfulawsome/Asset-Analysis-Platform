@@ -1896,3 +1896,59 @@ html[lang="en"] .card-tappable::after {
 [data-theme="dark"] .chart-sum-item {
   background: #1C1C20;
 }
+
+/* ── 30일 예측 차트 ── */
+.predict-chart-wrap {
+  min-height: 220px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.predict-legend {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.predict-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--sub);
+}
+.predict-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.predict-legend-bar {
+  width: 20px;
+  height: 8px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.predict-tooltip {
+  position: absolute;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: var(--text);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 10;
+  white-space: nowrap;
+}
+.predict-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+}
+[data-theme="dark"] .predict-tooltip {
+  background: #1C1C20;
+}

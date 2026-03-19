@@ -20,11 +20,15 @@ const ZOOM_MAX = 3.0;
 // 전역 MA 캐시 (데이터/MA설정 바뀔 때만 재계산)
 let _maCache = {};
 
+// 예측 상태
+let _predictVisible = false;
+
 // ── 차트 탭 초기화 ──
 function initChartTab() {
   renderTickerChips();
   setupIntervalButtons();
   setupZoomButtons();
+  setupPredictButton();
   loadCandleChart();
 }
 
@@ -56,6 +60,7 @@ function renderTickerChips() {
     _chartTicker = chip.dataset.tk;
     el.querySelectorAll('.chart-tk-chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
+    hidePredictSection();
     loadCandleChart();
   };
 }
@@ -695,4 +700,209 @@ function renderChartSummary(el, candles) {
         <div class="chart-sum-val">${((high - low) / low * 100).toFixed(1)}%</div>
       </div>
     </div>`;
+}
+
+// ═════════════════════════════════
+// ── 30일 예측 (Prophet) ──
+// ═════════════════════════════════
+
+function setupPredictButton() {
+  const btn = document.getElementById('predict-toggle-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    _predictVisible = !_predictVisible;
+    const section = document.getElementById('predict-section');
+    if (!section) return;
+    if (_predictVisible) {
+      section.style.display = '';
+      btn.classList.add('active');
+      loadPrediction();
+    } else {
+      section.style.display = 'none';
+      btn.classList.remove('active');
+    }
+  });
+}
+
+function hidePredictSection() {
+  _predictVisible = false;
+  const section = document.getElementById('predict-section');
+  const btn = document.getElementById('predict-toggle-btn');
+  if (section) section.style.display = 'none';
+  if (btn) btn.classList.remove('active');
+}
+
+async function loadPrediction() {
+  const chartEl = document.getElementById('predict-chart');
+  const legendEl = document.getElementById('predict-legend');
+  if (!chartEl) return;
+
+  chartEl.innerHTML = '<div class="predict-loading"><div class="loading-spinner"></div></div>';
+  if (legendEl) legendEl.innerHTML = '';
+
+  try {
+    const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`);
+    const data = await res.json();
+    if (data.error) {
+      chartEl.innerHTML = `<div class="candle-empty">${data.error}</div>`;
+      return;
+    }
+    renderPredictionChart(chartEl, data);
+    renderPredictLegend(legendEl);
+  } catch (err) {
+    chartEl.innerHTML = `<div class="candle-empty">${t('chart.noData')}</div>`;
+  }
+}
+
+function renderPredictLegend(el) {
+  if (!el) return;
+  el.innerHTML = `
+    <div class="predict-legend-item">
+      <span class="predict-legend-dot" style="background:#10B981"></span>${t('chart.predictActual')}
+    </div>
+    <div class="predict-legend-item">
+      <span class="predict-legend-dot" style="background:#3B82F6"></span>${t('chart.predictForecast')}
+    </div>
+    <div class="predict-legend-item">
+      <span class="predict-legend-bar" style="background:rgba(59,130,246,0.15)"></span>${t('chart.predictConfidence')}
+    </div>`;
+}
+
+function renderPredictionChart(el, data) {
+  const actual = data.actual || [];
+  const predicted = data.predicted || [];
+  if (actual.length === 0 && predicted.length === 0) {
+    el.innerHTML = `<div class="candle-empty">${t('chart.noData')}</div>`;
+    return;
+  }
+
+  const W = el.clientWidth - 2;
+  const H = 220;
+  const pad = { top: 16, bottom: 26, left: 8, right: 48 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+
+  // 데이터 포인트 합치기 (actual + predicted)
+  const points = [];
+  actual.forEach(a => points.push({ date: a.date, actual: a.close }));
+  predicted.forEach(p => {
+    const existing = points.find(pt => pt.date === p.date);
+    if (existing) {
+      existing.yhat = p.yhat; existing.lower = p.lower; existing.upper = p.upper;
+    } else {
+      points.push({ date: p.date, yhat: p.yhat, lower: p.lower, upper: p.upper });
+    }
+  });
+
+  // Y축 범위
+  let yVals = [];
+  points.forEach(p => {
+    if (p.actual != null) yVals.push(p.actual);
+    if (p.yhat != null) yVals.push(p.yhat);
+    if (p.lower != null) yVals.push(p.lower);
+    if (p.upper != null) yVals.push(p.upper);
+  });
+  const scale = niceScale(Math.min(...yVals), Math.max(...yVals), 5);
+  const yMin = scale.min, yMax = scale.max, yRange = yMax - yMin || 1;
+
+  const n = points.length;
+  const xFn = i => pad.left + (i / (n - 1)) * cW;
+  const yFn = v => pad.top + (1 - (v - yMin) / yRange) * cH;
+
+  // 예측 시작 인덱스 (첫 번째 yhat이 있고 actual이 없는 포인트)
+  let predStartIdx = points.findIndex(p => p.yhat != null && p.actual == null);
+  if (predStartIdx < 0) predStartIdx = actual.length;
+
+  // 신뢰구간 영역
+  let bandPath = '';
+  const predPoints = points.filter(p => p.upper != null && p.lower != null);
+  if (predPoints.length > 0) {
+    const predIndices = [];
+    points.forEach((p, i) => { if (p.upper != null) predIndices.push(i); });
+    let upper = predIndices.map(i => `${xFn(i).toFixed(1)},${yFn(points[i].upper).toFixed(1)}`).join(' L');
+    let lower = predIndices.slice().reverse().map(i => `${xFn(i).toFixed(1)},${yFn(points[i].lower).toFixed(1)}`).join(' L');
+    bandPath = `<path d="M${upper} L${lower} Z" fill="rgba(59,130,246,0.12)" stroke="none"/>`;
+  }
+
+  // 실제가 라인
+  let actualPath = '';
+  const actualPts = [];
+  points.forEach((p, i) => { if (p.actual != null) actualPts.push(i); });
+  if (actualPts.length > 1) {
+    actualPath = '<path d="M' + actualPts.map(i => `${xFn(i).toFixed(1)},${yFn(points[i].actual).toFixed(1)}`).join(' L') +
+      '" fill="none" stroke="#10B981" stroke-width="2" stroke-linecap="round"/>';
+  }
+
+  // 예측 라인
+  let predPath = '';
+  const predPts = [];
+  points.forEach((p, i) => { if (p.yhat != null) predPts.push(i); });
+  if (predPts.length > 1) {
+    predPath = '<path d="M' + predPts.map(i => `${xFn(i).toFixed(1)},${yFn(points[i].yhat).toFixed(1)}`).join(' L') +
+      '" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" stroke-dasharray="4 2"/>';
+  }
+
+  // 구분선 (실제 → 예측 경계)
+  let dividerLine = '';
+  if (predStartIdx > 0 && predStartIdx < n) {
+    const dx = xFn(predStartIdx);
+    dividerLine = `<line x1="${dx.toFixed(1)}" y1="${pad.top}" x2="${dx.toFixed(1)}" y2="${pad.top + cH}" stroke="var(--sub)" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5"/>`;
+  }
+
+  // 그리드 + Y축 라벨
+  let grid = '';
+  scale.ticks.forEach(val => {
+    const y = yFn(val);
+    if (y < pad.top - 2 || y > pad.top + cH + 2) return;
+    grid += `<line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${W - pad.right}" y2="${y.toFixed(1)}" stroke="var(--border)" stroke-width="0.5" opacity="0.4"/>`;
+    grid += `<text x="${W - pad.right + 4}" y="${y.toFixed(1)}" fill="var(--sub)" font-size="9" dominant-baseline="middle">${fmtYLabel(val)}</text>`;
+  });
+
+  // X축 라벨
+  let xLabels = '';
+  const labelCount = Math.min(6, n);
+  const labelEvery = Math.max(1, Math.floor(n / labelCount));
+  for (let i = 0; i < n; i += labelEvery) {
+    const lbl = points[i].date.substring(5);
+    xLabels += `<text x="${xFn(i).toFixed(1)}" y="${H - 5}" fill="var(--sub)" font-size="9" text-anchor="middle">${lbl}</text>`;
+  }
+
+  // 터치/호버 영역
+  let touchZones = '';
+  points.forEach((p, i) => {
+    const x = xFn(i);
+    touchZones += `<rect x="${(x - cW / n / 2).toFixed(1)}" y="${pad.top}" width="${(cW / n).toFixed(1)}" height="${cH}" fill="transparent" data-idx="${i}" class="predict-touch"/>`;
+  });
+
+  el.innerHTML = `<div style="position:relative;">
+    <svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+      ${grid}${bandPath}${actualPath}${predPath}${dividerLine}${xLabels}${touchZones}
+    </svg>
+    <div class="predict-tooltip" id="predict-tip"></div>
+  </div>`;
+
+  // 툴팁 이벤트
+  const tip = document.getElementById('predict-tip');
+  const svg = el.querySelector('svg');
+
+  function showTip(idx) {
+    const p = points[idx];
+    const x = xFn(idx);
+    let html = `<div style="font-weight:700;margin-bottom:2px">${p.date}</div>`;
+    if (p.actual != null) html += `<div style="color:#10B981">${t('chart.predictActual')}: $${p.actual.toFixed(2)}</div>`;
+    if (p.yhat != null) html += `<div style="color:#3B82F6">${t('chart.predictForecast')}: $${p.yhat.toFixed(2)}</div>`;
+    if (p.lower != null) html += `<div style="color:var(--sub);font-size:10px">$${p.lower.toFixed(2)} ~ $${p.upper.toFixed(2)}</div>`;
+    tip.innerHTML = html;
+    tip.style.left = x > W * 0.6 ? `${x - 130}px` : `${x + 12}px`;
+    tip.style.top = `${pad.top}px`;
+    tip.style.opacity = '1';
+  }
+  function hideTip() { tip.style.opacity = '0'; }
+
+  svg.querySelectorAll('.predict-touch').forEach(zone => {
+    zone.addEventListener('mouseenter', () => showTip(+zone.dataset.idx));
+    zone.addEventListener('mouseleave', hideTip);
+    zone.addEventListener('touchstart', (e) => { showTip(+zone.dataset.idx); }, { passive: true });
+  });
+  svg.addEventListener('touchend', () => setTimeout(hideTip, 2000), { passive: true });
 }

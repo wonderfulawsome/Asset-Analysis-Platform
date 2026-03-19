@@ -282,6 +282,18 @@
       <!-- 요약 정보 -->
       <div id="chart-summary" class="chart-summary fade-target"></div>
 
+      <!-- 30일 예측 토글 -->
+      <div class="fade-target" style="margin-top:8px; text-align:center;">
+        <button id="predict-toggle-btn" class="chart-iv-btn" data-i18n="chart.predictBtn">30일 예측</button>
+      </div>
+
+      <!-- 30일 예측 차트 -->
+      <div class="card fade-target" id="predict-section" style="display:none; padding:14px 12px; margin-top:8px;">
+        <div class="section-label" data-i18n="chart.predictTitle">30일 주가 예측 (Prophet)</div>
+        <div id="predict-chart" class="predict-chart-wrap"></div>
+        <div id="predict-legend" class="predict-legend"></div>
+      </div>
+
       <!-- 면책 문구 -->
       <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
 
