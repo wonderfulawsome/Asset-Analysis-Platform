@@ -121,7 +121,13 @@ def run_pipeline(light: bool = False) -> None:
     # Step 5: ETF 가격 수집 및 저장 (항상 실행)
     print('\n[Step 5] ETF 가격 수집...')
     index_prices = fetch_index_prices()  # 31개 ETF 종가/등락률 수집
-    upsert_index_prices(index_prices)
+    # non_zero: 31개 ETF 종가/등락률 데이터를 반복하고 0이 아닌 데이터 정의
+    non_zero = [r for r in index_prices if r['change_pct'] != 0]
+    if not non_zero and index_prices:
+        print('[Step 5] 모든 change_pct가 0 → stale 데이터, upsert 건너뜀')
+    else:
+        # 0이 아닌 index_prices를 DB에 저장
+        upsert_index_prices(index_prices)
 
     # Step 5b: 경량 모드 crash/surge 실시간 예측 (기존 모델 사용, 학습 없음)
     if light:
