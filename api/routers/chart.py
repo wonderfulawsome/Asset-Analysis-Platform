@@ -97,8 +97,8 @@ def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
         from prophet import Prophet
         import pandas as pd
 
-        # 최근 1년의 일봉을 다운로드
-        df = yf.download(ticker, period='1y', interval='1d',
+        # 최근 2년의 일봉을 다운로드 (추세 학습 개선)
+        df = yf.download(ticker, period='2y', interval='1d',
                          auto_adjust=True, progress=False)
         if df.empty:
             return {'error': 'no data'}
@@ -110,16 +110,17 @@ def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
         prophet_df = df[['Close']].reset_index()
         prophet_df.columns = ['ds', 'y']
 
+        # weekly_seasonality=False: 주간 계절성이 톱니 파동을 만들므로 비활성화
         model = Prophet(
             daily_seasonality=False,
             yearly_seasonality=True,
-            weekly_seasonality=True,
+            weekly_seasonality=False,
             changepoint_prior_scale=0.05,
         )
         model.fit(prophet_df)
 
-        # make_future_dataframe를 통해서 미래 데이터프레임을 생성하고 향후 30일을 예측
-        future = model.make_future_dataframe(periods=30)
+        # freq='B' 영업일만 생성하여 주말 포인트 제거
+        future = model.make_future_dataframe(periods=30, freq='B')
         forecast = model.predict(future)
 
         recent = prophet_df.tail(30)
