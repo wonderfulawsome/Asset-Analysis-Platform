@@ -20,8 +20,8 @@ def run_chart_predict_single(ticker: str) -> dict | None:
     from prophet import Prophet
     import pandas as pd
 
-    # 전체 기간 일봉 다운로드
-    df = yf.download(ticker, period='max', interval='1d',
+    # 최근 5년 일봉 다운로드 (상승/하락 사이클 포함 + 최근 추세 반영)
+    df = yf.download(ticker, period='5y', interval='1d',
                      auto_adjust=True, progress=False)
     if df.empty:
         return None
