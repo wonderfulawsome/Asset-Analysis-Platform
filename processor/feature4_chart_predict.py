@@ -18,7 +18,6 @@ CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
 def run_chart_predict_single(ticker: str) -> dict | None:
     """단일 티커에 대해 Prophet 30일 예측을 실행한다."""
     from prophet import Prophet
-    import pandas as pd
 
     # 최근 5년 일봉 다운로드 (상승/하락 사이클 포함 + 최근 추세 반영)
     df = yf.download(ticker, period='5y', interval='1d',
@@ -37,14 +36,19 @@ def run_chart_predict_single(ticker: str) -> dict | None:
     prophet_df['y'] = np.log(prophet_df['y'])
 
     # Prophet 모델 학습
+    # changepoint_prior_scale=0.3: 최근 추세 변화에 민감하게 반응
+    # changepoint_range=0.95: 데이터 끝부분까지 변화점 배치 (기본 0.8은 최근 20%가 직선화됨)
     model = Prophet(
         daily_seasonality=False,
         yearly_seasonality=True,
         weekly_seasonality=False,
-        changepoint_prior_scale=0.15,
+        changepoint_prior_scale=0.3,
         n_changepoints=50,
+        changepoint_range=0.95,
         seasonality_mode='multiplicative',
     )
+    # 월간 계절성 추가: 30일 예측에서 변동 패턴 반영
+    model.add_seasonality(name='monthly', period=30.5, fourier_order=5)
     model.fit(prophet_df)
 
     # 30 영업일 예측
