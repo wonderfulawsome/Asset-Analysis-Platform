@@ -17,4 +17,4 @@ python-dotenv
 optuna
 scipy
 shap
-prophet
+neuralprophet

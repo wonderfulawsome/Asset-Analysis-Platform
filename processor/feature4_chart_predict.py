@@ -1,14 +1,16 @@
-"""Prophet 기반 ETF 30일 주가 예측 (스케줄러 배치 실행용).
+"""NeuralProphet 기반 ETF 30일 주가 예측 (스케줄러 배치 실행용).
 
-전체 파이프라인(3시간 주기)에서 16개 ETF 티커별로 Prophet 모델을 학습하고,
+전체 파이프라인(3시간 주기)에서 16개 ETF 티커별로 NeuralProphet 모델을 학습하고,
 30일 영업일 예측 결과를 DB에 저장한다.
+NeuralProphet은 자동회귀(AR) 기능으로 최근 가격 패턴을 직접 학습하여
+기존 Prophet보다 단기 예측 정확도가 높다.
 """
 
 import datetime
 import json
 import time
-import numpy as np
 import yfinance as yf
+import pandas as pd
 
 # 예측 대상 ETF 티커 (chart.py의 CHART_TICKERS와 동일)
 CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
@@ -16,10 +18,11 @@ CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
 
 
 def run_chart_predict_single(ticker: str) -> dict | None:
-    """단일 티커에 대해 Prophet 30일 예측을 실행한다."""
-    from prophet import Prophet
+    """단일 티커에 대해 NeuralProphet 30일 예측을 실행한다."""
+    from neuralprophet import NeuralProphet, set_log_level
+    set_log_level("ERROR")
 
-    # 최근 5년 일봉 다운로드 (상승/하락 사이클 포함 + 최근 추세 반영)
+    # 최근 5년 일봉 다운로드
     df = yf.download(ticker, period='5y', interval='1d',
                      auto_adjust=True, progress=False)
     if df.empty:
@@ -29,52 +32,67 @@ def run_chart_predict_single(ticker: str) -> dict | None:
         df.columns = df.columns.get_level_values(0)
 
     # ds(날짜) y(종가) 형식으로 변환
-    prophet_df = df[['Close']].reset_index()
-    prophet_df.columns = ['ds', 'y']
+    ndf = df[['Close']].reset_index()
+    ndf.columns = ['ds', 'y']
+    ndf['ds'] = pd.to_datetime(ndf['ds'])
 
-    # 로그 변환: 주가의 곱셈적 특성 반영
-    prophet_df['y'] = np.log(prophet_df['y'])
-
-    # Prophet 모델 학습
-    # changepoint_prior_scale=0.3: 최근 추세 변화에 민감하게 반응
-    # changepoint_range=0.95: 데이터 끝부분까지 변화점 배치 (기본 0.8은 최근 20%가 직선화됨)
-    model = Prophet(
-        daily_seasonality=False,
+    # NeuralProphet 모델
+    # n_lags=30: 최근 30일 가격을 자동회귀 입력으로 사용 (Prophet에 없는 핵심 기능)
+    # n_forecasts=30: 30 영업일 미래를 한번에 예측
+    # quantiles: 80% 신뢰구간 (10%, 90% 분위수)
+    model = NeuralProphet(
+        n_lags=30,
+        n_forecasts=30,
         yearly_seasonality=True,
         weekly_seasonality=False,
-        changepoint_prior_scale=0.3,
-        n_changepoints=50,
-        changepoint_range=0.95,
-        seasonality_mode='multiplicative',
+        daily_seasonality=False,
+        changepoints_range=0.95,
+        trend_reg=0.1,
+        learning_rate=0.01,
+        epochs=100,
+        batch_size=64,
+        quantiles=[0.1, 0.9],
     )
-    # 월간 계절성 추가: 30일 예측에서 변동 패턴 반영
-    model.add_seasonality(name='monthly', period=30.5, fourier_order=5)
-    model.fit(prophet_df)
 
-    # 30 영업일 예측
-    future = model.make_future_dataframe(periods=30, freq='B')
-    forecast = model.predict(future)
-
-    # 로그 역변환
-    forecast['yhat'] = np.exp(forecast['yhat'])
-    forecast['yhat_lower'] = np.exp(forecast['yhat_lower'])
-    forecast['yhat_upper'] = np.exp(forecast['yhat_upper'])
-    prophet_df['y'] = np.exp(prophet_df['y'])
+    model.fit(ndf, freq='B')
+    forecast = model.predict(ndf)
 
     # 최근 30일 실제 종가
-    recent = prophet_df.tail(30)
+    recent = ndf.tail(30)
     actual = [{'date': str(r.ds.date()), 'close': round(float(r.y), 2)}
               for _, r in recent.iterrows()]
 
-    # 예측 30일
-    pred = forecast.tail(30)
-    predicted = [{'date': str(r.ds.date()),
-                  'yhat': round(float(r.yhat), 2),
-                  'lower': round(float(r.yhat_lower), 2),
-                  'upper': round(float(r.yhat_upper), 2)}
-                 for _, r in pred.iterrows()]
+    # 마지막 행에서 30-step 예측 추출
+    last_row = forecast.iloc[-1]
+    last_date = pd.to_datetime(last_row['ds'])
+    predicted = []
 
-    # 메모리 정리
+    for step in range(1, 31):
+        col_yhat = f'yhat{step}'
+        col_lower = f'yhat{step} 10.0%'
+        col_upper = f'yhat{step} 90.0%'
+
+        if col_yhat not in forecast.columns:
+            break
+
+        yhat = float(last_row[col_yhat])
+        future_date = last_date + pd.tseries.offsets.BDay(step)
+
+        # 신뢰구간: quantile 컬럼이 있으면 사용, 없으면 ±5% 추정
+        if col_lower in forecast.columns and col_upper in forecast.columns:
+            lower = float(last_row[col_lower])
+            upper = float(last_row[col_upper])
+        else:
+            lower = yhat * 0.95
+            upper = yhat * 1.05
+
+        predicted.append({
+            'date': str(future_date.date()),
+            'yhat': round(yhat, 2),
+            'lower': round(lower, 2),
+            'upper': round(upper, 2),
+        })
+
     del model
 
     return {
@@ -86,7 +104,7 @@ def run_chart_predict_single(ticker: str) -> dict | None:
 
 
 def run_chart_predict_all() -> list[dict]:
-    """16개 ETF 티커 전체에 대해 Prophet 예측을 실행한다."""
+    """16개 ETF 티커 전체에 대해 NeuralProphet 예측을 실행한다."""
     results = []
     for i, ticker in enumerate(CHART_TICKERS):
         try:
