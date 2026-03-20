@@ -17,5 +17,4 @@ python-dotenv
 optuna
 scipy
 shap
-neuralprophet
-holidays<0.60
+catboost

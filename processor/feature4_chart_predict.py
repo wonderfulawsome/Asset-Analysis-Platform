@@ -1,28 +1,149 @@
-"""NeuralProphet 기반 ETF 30일 주가 예측 (스케줄러 배치 실행용).
+"""5-모델 앙상블 ETF 30일 주가 예측 (스케줄러 배치 실행용).
 
-전체 파이프라인(3시간 주기)에서 16개 ETF 티커별로 NeuralProphet 모델을 학습하고,
-30일 영업일 예측 결과를 DB에 저장한다.
-NeuralProphet은 자동회귀(AR) 기능으로 최근 가격 패턴을 직접 학습하여
-기존 Prophet보다 단기 예측 정확도가 높다.
+XGBoost + CatBoost + RandomForest + Ridge + SVR 앙상블로
+16개 ETF 티커별 30일 영업일 예측을 수행한다.
+OOS sigma로 현실적 신뢰구간을 생성한다.
 """
 
 import datetime
 import json
 import time
-import yfinance as yf
+import numpy as np
 import pandas as pd
+import yfinance as yf
+import xgboost as xgb
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.linear_model import Ridge
+from sklearn.svm import SVR
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from sklearn.impute import SimpleImputer
 
-# 예측 대상 ETF 티커 (chart.py의 CHART_TICKERS와 동일)
+try:
+    from catboost import CatBoostRegressor
+    HAS_CATBOOST = True
+except ImportError:
+    HAS_CATBOOST = False
+
 CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
                  'XLK', 'XLF', 'XLE', 'XLV', 'ARKK', 'GLD', 'TLT', 'SCHD']
 
 
-def run_chart_predict_single(ticker: str) -> dict | None:
-    """단일 티커에 대해 NeuralProphet 30일 예측을 실행한다."""
-    from neuralprophet import NeuralProphet, set_log_level
-    set_log_level("ERROR")
+def _rsi(series, period=14):
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0.0).rolling(period).mean()
+    loss = (-delta.where(delta < 0, 0.0)).rolling(period).mean()
+    rs = gain / loss.replace(0, np.nan)
+    return 100 - (100 / (1 + rs))
 
-    # 최근 5년 일봉 다운로드
+
+def build_features_v2(close):
+    feat = pd.DataFrame(index=close.index)
+
+    for d in [1, 2, 3, 5, 10, 20]:
+        feat[f'ret_{d}d'] = np.log(close / close.shift(d))
+
+    for w in [5, 20, 60, 120, 200]:
+        feat[f'sma{w}_ratio'] = close / close.rolling(w).mean()
+
+    feat['rsi_14'] = _rsi(close, 14)
+
+    log_ret = np.log(close / close.shift(1))
+    feat['vol_5d'] = log_ret.rolling(5).std() * np.sqrt(252)
+    feat['vol_20d'] = log_ret.rolling(20).std() * np.sqrt(252)
+    feat['vol_ratio'] = feat['vol_5d'] / feat['vol_20d']
+
+    feat['drawdown_60d'] = close / close.rolling(60).max() - 1
+
+    sma20 = close.rolling(20).mean()
+    std20 = close.rolling(20).std()
+    bb_upper = sma20 + 2 * std20
+    bb_lower = sma20 - 2 * std20
+    feat['bb_position'] = (close - bb_lower) / (bb_upper - bb_lower)
+
+    feat['mean_revert_200'] = (close / close.rolling(200).mean()) - 1
+
+    feat['roc_10'] = close.pct_change(10)
+    feat['roc_20'] = close.pct_change(20)
+
+    ema12 = close.ewm(span=12).mean()
+    ema26 = close.ewm(span=26).mean()
+    macd = ema12 - ema26
+    macd_signal = macd.ewm(span=9).mean()
+    feat['macd_hist'] = (macd - macd_signal) / close
+
+    feat['sma60_120_ratio'] = close.rolling(60).mean() / close.rolling(120).mean()
+    feat['ret_60d'] = np.log(close / close.shift(60))
+
+    return feat
+
+
+def _train_models(X, y):
+    """5개 모델을 학습하여 리스트로 반환한다."""
+    models = []
+
+    m_xgb = xgb.XGBRegressor(n_estimators=300, max_depth=4, learning_rate=0.05,
+                              subsample=0.8, colsample_bytree=0.8, random_state=42)
+    m_xgb.fit(X, y, verbose=False)
+    models.append(m_xgb)
+
+    if HAS_CATBOOST:
+        m_cb = CatBoostRegressor(iterations=300, depth=4, learning_rate=0.05,
+                                 subsample=0.8, random_seed=42, verbose=0)
+        m_cb.fit(X, y)
+        models.append(m_cb)
+
+    m_rf = RandomForestRegressor(n_estimators=300, max_depth=8, min_samples_leaf=5,
+                                 max_features=0.7, random_state=42, n_jobs=-1)
+    m_rf.fit(X, y)
+    models.append(m_rf)
+
+    m_ridge = make_pipeline(SimpleImputer(strategy='median'), StandardScaler(), Ridge(alpha=1.0))
+    m_ridge.fit(X, y)
+    models.append(m_ridge)
+
+    m_svr = make_pipeline(SimpleImputer(strategy='median'), StandardScaler(),
+                          SVR(kernel='rbf', C=1.0, epsilon=0.001))
+    m_svr.fit(X, y)
+    models.append(m_svr)
+
+    return models
+
+
+def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
+    """5-모델 평균 앙상블 재귀 예측."""
+    hist = close_history.copy()
+    predictions = []
+    last_date = hist.index[-1]
+
+    for k in range(1, n_days + 1):
+        feat = build_features_v2(hist)
+        last_feat = feat.iloc[[-1]][feature_cols].values
+
+        preds = [m.predict(last_feat)[0] for m in models]
+        pred_ret = np.mean(preds)
+
+        current_price = float(hist.iloc[-1])
+        next_price = current_price * np.exp(pred_ret)
+
+        margin = 1.28 * sigma * np.sqrt(k)
+        lower = current_price * np.exp(pred_ret - margin)
+        upper = current_price * np.exp(pred_ret + margin)
+
+        next_date = last_date + pd.tseries.offsets.BDay(k)
+        predictions.append({
+            'date': str(next_date.date()),
+            'yhat': round(next_price, 2),
+            'lower': round(lower, 2),
+            'upper': round(upper, 2),
+        })
+        hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
+
+    return predictions
+
+
+def run_chart_predict_single(ticker):
+    """단일 티커에 대해 5-모델 앙상블 30일 예측을 실행한다."""
     df = yf.download(ticker, period='5y', interval='1d',
                      auto_adjust=True, progress=False)
     if df.empty:
@@ -31,69 +152,41 @@ def run_chart_predict_single(ticker: str) -> dict | None:
     if hasattr(df.columns, 'levels') and len(df.columns.levels) > 1:
         df.columns = df.columns.get_level_values(0)
 
-    # ds(날짜) y(종가) 형식으로 변환
-    ndf = df[['Close']].reset_index()
-    ndf.columns = ['ds', 'y']
-    ndf['ds'] = pd.to_datetime(ndf['ds'])
+    close = df['Close']
+    features = build_features_v2(close)
+    target = np.log(close / close.shift(1)).shift(-1)
+    target.name = 'target'
+    data = features.join(target).dropna()
 
-    # NeuralProphet 모델
-    # n_lags=30: 최근 30일 가격을 자동회귀 입력으로 사용 (Prophet에 없는 핵심 기능)
-    # n_forecasts=30: 30 영업일 미래를 한번에 예측
-    # quantiles: 80% 신뢰구간 (10%, 90% 분위수)
-    model = NeuralProphet(
-        n_lags=30,
-        n_forecasts=30,
-        yearly_seasonality=True,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        changepoints_range=0.95,
-        trend_reg=0.1,
-        learning_rate=0.01,
-        epochs=100,
-        batch_size=64,
-        quantiles=[0.1, 0.9],
-    )
+    if len(data) < 200:
+        return None
 
-    model.fit(ndf, freq='B')
-    forecast = model.predict(ndf)
+    feat_cols = [c for c in data.columns if c != 'target']
+    val_size = 60
+
+    train = data.iloc[:-val_size]
+    val = data.iloc[-val_size:]
+    X_tr, y_tr = train[feat_cols].values, train['target'].values
+    X_val, y_val = val[feat_cols].values, val['target'].values
+
+    # 전체 데이터로 최종 모델 학습
+    models_final = _train_models(data[feat_cols].values, data['target'].values)
+
+    # OOS sigma: train만으로 학습한 모델의 val 잔차
+    models_oos = _train_models(X_tr, y_tr)
+    oos_preds = np.mean([m.predict(X_val) for m in models_oos], axis=0)
+    sigma = np.std(y_val - oos_preds)
+
+    # 재귀 예측
+    predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
 
     # 최근 30일 실제 종가
-    recent = ndf.tail(30)
-    actual = [{'date': str(r.ds.date()), 'close': round(float(r.y), 2)}
-              for _, r in recent.iterrows()]
+    recent = close.tail(30)
+    actual = [{'date': str(idx.date()), 'close': round(float(val), 2)}
+              for idx, val in recent.items()]
 
-    # 마지막 행에서 30-step 예측 추출
-    last_row = forecast.iloc[-1]
-    last_date = pd.to_datetime(last_row['ds'])
-    predicted = []
-
-    for step in range(1, 31):
-        col_yhat = f'yhat{step}'
-        col_lower = f'yhat{step} 10.0%'
-        col_upper = f'yhat{step} 90.0%'
-
-        if col_yhat not in forecast.columns:
-            break
-
-        yhat = float(last_row[col_yhat])
-        future_date = last_date + pd.tseries.offsets.BDay(step)
-
-        # 신뢰구간: quantile 컬럼이 있으면 사용, 없으면 ±5% 추정
-        if col_lower in forecast.columns and col_upper in forecast.columns:
-            lower = float(last_row[col_lower])
-            upper = float(last_row[col_upper])
-        else:
-            lower = yhat * 0.95
-            upper = yhat * 1.05
-
-        predicted.append({
-            'date': str(future_date.date()),
-            'yhat': round(yhat, 2),
-            'lower': round(lower, 2),
-            'upper': round(upper, 2),
-        })
-
-    del model
+    # 메모리 정리
+    del models_final, models_oos
 
     return {
         'date': str(datetime.date.today()),
@@ -103,8 +196,10 @@ def run_chart_predict_single(ticker: str) -> dict | None:
     }
 
 
-def run_chart_predict_all() -> list[dict]:
-    """16개 ETF 티커 전체에 대해 NeuralProphet 예측을 실행한다."""
+def run_chart_predict_all():
+    """16개 ETF 티커 전체에 대해 앙상블 예측을 실행한다."""
+    n = 5 if HAS_CATBOOST else 4
+    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"})')
     results = []
     for i, ticker in enumerate(CHART_TICKERS):
         try:
@@ -117,7 +212,6 @@ def run_chart_predict_all() -> list[dict]:
                 print(f'  [{i+1}/{len(CHART_TICKERS)}] {ticker} 데이터 없음, 건너뜀')
         except Exception as e:
             print(f'  [{i+1}/{len(CHART_TICKERS)}] {ticker} 실패: {e}')
-        # yfinance 속도 제한 방지
         if i < len(CHART_TICKERS) - 1:
             time.sleep(1)
     return results
