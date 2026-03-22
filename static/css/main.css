@@ -1978,11 +1978,12 @@ html[lang="en"] .card-tappable::after {
   transform: translateX(-50%) translateY(20px);
   background: rgba(0,0,0,0.85);
   color: #fff;
-  padding: 12px 20px;
+  padding: 10px 16px;
   border-radius: 10px;
-  font-size: 12px;
-  line-height: 1.5;
-  max-width: 420px;
+  font-size: 11px;
+  line-height: 1.4;
+  width: calc(100% - 32px);
+  max-width: 600px;
   text-align: center;
   z-index: 9999;
   opacity: 0;
