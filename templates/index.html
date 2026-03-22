@@ -28,7 +28,7 @@
   <link rel="stylesheet" href="/static/css/main.css?v=11">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
-    (function(){var t=localStorage.getItem('theme');if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
+    (function(){var t=localStorage.getItem('theme');if(!t){t='dark';localStorage.setItem('theme','dark');}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
   </script>
 </head>
 <body>
