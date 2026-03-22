@@ -75,21 +75,33 @@ SURGE_THRESHOLD = 0.10
 
 # ── 헬퍼 ──
 
-def _fetch_fred(series_id: str, col_name: str, retries: int = 4, timeout: int = 60) -> pd.DataFrame:
-    """FRED CSV 다운로드 (지수 백오프 재시도, 60초 타임아웃)."""
+_fred_session = requests.Session()                           # FRED 전용 세션 (TCP 연결 재사용)
+_fred_session.headers.update(HEADERS)
+
+
+def _fetch_fred(series_id: str, col_name: str, retries: int = 3,
+                timeout: tuple = (10, 30)) -> pd.DataFrame:
+    """FRED CSV 다운로드 (지수 백오프 재시도, connect=10s/read=30s 타임아웃).
+
+    Args:
+        series_id: FRED 시리즈 ID (예: BAMLC0A4CBBB)
+        col_name: 결과 DataFrame 컬럼명
+        retries: 최대 재시도 횟수 (기본 3)
+        timeout: (connect, read) 타임아웃 튜플 (기본 10초/30초)
+    """
     url = FRED_BASE + series_id                              # FRED CSV 다운로드 URL
     for attempt in range(retries):                           # 최대 retries번 시도
         try:
-            resp = requests.get(url, headers=HEADERS, timeout=timeout)  # 60초 타임아웃
+            resp = _fred_session.get(url, timeout=timeout)   # 세션 기반 요청 (연결 재사용)
             resp.raise_for_status()                          # 4xx/5xx 에러 시 예외
             df = pd.read_csv(StringIO(resp.text), index_col=0, parse_dates=True)  # CSV 파싱
             df.columns = [col_name]                          # 컬럼명 설정
             df[col_name] = pd.to_numeric(df[col_name], errors='coerce')  # 숫자 변환
             return df                                        # 성공 시 반환
-        except Exception:
+        except Exception as e:
             if attempt < retries - 1:                        # 마지막 시도 전이면
-                wait = 5 * (3 ** attempt)                    # 5초, 15초, 45초 대기
-                print(f'  [{series_id}] 재시도 {attempt+1}/{retries} ({wait}초 대기)...')
+                wait = 3 * (3 ** attempt)                    # 3초, 9초, 27초 대기
+                print(f'  [{series_id}] 재시도 {attempt+1}/{retries} ({wait}초 대기) — {type(e).__name__}')
                 time.sleep(wait)                             # 대기 후 재시도
             else:
                 raise                                        # 최종 실패 시 예외
