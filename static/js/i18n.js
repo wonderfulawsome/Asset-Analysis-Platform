@@ -161,6 +161,7 @@ const I18N = {
     'chart.predictForecast': '예측',
     'chart.predictConfidence': '80% 신뢰구간',
     'chart.predictLoading': '예측 모델 실행 중...',
+    'chart.predictDisclaimer': '본 예측은 통계 모델 기반이며 투자 조언이 아닙니다. 투자 판단의 책임은 본인에게 있습니다.',
 
     // ── 상세 페이지 ──
     'detail.back': '← 뒤로',                     // 뒤로
@@ -547,6 +548,7 @@ const I18N = {
     'chart.predictForecast': 'Forecast',
     'chart.predictConfidence': '80% Confidence',
     'chart.predictLoading': 'Running forecast model...',
+    'chart.predictDisclaimer': 'This forecast is based on statistical models and is not investment advice. You are solely responsible for your investment decisions.',
 
     // ── Detail Page ──
     'detail.back': '← Back',

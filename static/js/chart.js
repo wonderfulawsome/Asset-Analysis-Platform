@@ -791,6 +791,7 @@ function setupPredictButton() {
     btn.classList.add('active');
     btn.disabled = true;
     btn.textContent = t('chart.predictLoading');
+    showPredictDisclaimer();
     try {
       const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`);
       const data = await res.json();
@@ -829,6 +830,23 @@ function hidePredictSection() {
 function updatePredictBtnVisibility() {
   const wrap = document.getElementById('predict-toggle-btn')?.parentElement;
   if (wrap) wrap.style.display = _chartInterval === '1d' ? '' : 'none';
+}
+
+function showPredictDisclaimer() {
+  let toast = document.getElementById('predict-disclaimer-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'predict-disclaimer-toast';
+    toast.className = 'predict-disclaimer-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = t('chart.predictDisclaimer');
+  toast.classList.remove('hide');
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+    toast.classList.add('hide');
+  }, 3000);
 }
 
 function renderPredictLegend(show) {
