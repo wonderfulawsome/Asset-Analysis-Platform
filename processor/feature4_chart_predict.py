@@ -121,7 +121,7 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
         last_feat = feat.iloc[[-1]][feature_cols].values
 
         preds = [m.predict(last_feat)[0] for m in models]
-        pred_ret = np.mean(preds)
+        pred_ret = np.mean(preds) * 3.0  # 변동성 3배 증폭
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
@@ -144,7 +144,7 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
 
 def run_chart_predict_single(ticker):
     """단일 티커에 대해 5-모델 앙상블 30일 예측을 실행한다."""
-    df = yf.download(ticker, period='5y', interval='1d',
+    df = yf.download(ticker, period='max', interval='1d',
                      auto_adjust=True, progress=False)
     if df.empty:
         return None
