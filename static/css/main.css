@@ -126,24 +126,24 @@ html, body {
 
 /* ── Theme Toggle Button ──────────────────── */
 .theme-btn {
-  font-size: 18px;
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 6px;
   border-radius: 10px;
   border: none;
   background: transparent;
-  transition: background 0.15s, transform 0.2s ease;
+  color: var(--sub);
+  transition: background 0.15s, transform 0.2s ease, color 0.2s;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
 }
+.theme-btn:hover {
+  color: var(--text);
+}
 .theme-btn:active {
   background: var(--sep);
   transform: scale(0.92);
-}
-.theme-btn:hover {
-  transform: scale(1.05);
 }
 
 body {
@@ -195,6 +195,15 @@ body {
   width: 30px;
   height: 30px;
   object-fit: contain;
+}
+.header-logo-svg {
+  width: 28px;
+  height: 24px;
+  color: #1a1a1a;
+  flex-shrink: 0;
+}
+[data-theme="dark"] .header-logo-svg {
+  color: #FF8C00;
 }
 .app-title {
   font-size: 28px;

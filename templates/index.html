@@ -33,20 +33,25 @@
 </head>
 <body>
 
+  <!-- 공유 SVG 로고 path 정의 (스플래시 + 헤더 공용) -->
+  <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <path id="lp0" d="M0,0 L41,0 L49,3 L61,15 L68,23 L99,54 L106,62 L129,85 L136,93 L154,111 L154,113 L157,114 L164,122 L181,139 L181,141 L184,142 L191,150 L195,156 L189,164 L170,183 L169,185 L167,185 L167,187 L163,188 L155,181 L148,174 L141,166 L121,146 L114,138 L98,122 L98,120 L94,118 L94,116 L92,116 L85,108 L74,97 L74,95 L72,95 L65,87 L46,68 L46,66 L44,66 L37,58 L22,43 L19,42 L14,47 L-7,68 L-8,70 L-10,70 L-12,74 L-26,88 L-27,90 L-29,90 L-29,92 L-31,92 L-33,96 L-37,98 L-39,102 L-61,124 L-62,127 L-61,130 L-57,132 L-49,140 L-49,142 L-47,142 L-43,146 L-43,148 L-39,150 L-34,156 L-35,161 L-59,185 L-64,190 L-68,189 L-102,155 L-107,148 L-108,141 L-108,113 L-107,104 L-105,100 L-97,93 L-68,64 L-61,56 L-22,17 L-15,9 L-8,3 Z"/>
+      <path id="lp1" d="M0,0 L43,0 L50,3 L58,10 L65,18 L93,46 L97,51 L103,56 L103,58 L105,58 L112,66 L142,96 L148,101 L150,107 L150,144 L147,151 L142,156 L140,159 L138,159 L138,161 L136,161 L134,165 L116,183 L115,185 L113,185 L113,187 L111,187 L111,189 L109,189 L107,193 L87,213 L82,218 L70,231 L60,241 L59,243 L57,243 L55,247 L39,263 L38,265 L36,265 L36,267 L34,267 L32,271 L30,271 L30,273 L28,273 L28,275 L25,277 L20,276 L-2,254 L-7,248 L-6,244 L1,236 L5,231 L10,226 L22,214 L29,206 L41,194 L42,192 L44,192 L46,188 L63,171 L64,169 L66,169 L66,167 L71,162 L87,146 L94,138 L103,129 L104,126 L90,111 L53,74 L46,66 L23,43 L18,44 L2,60 L-5,68 L-23,86 L-30,94 L-38,102 L-43,108 L-49,109 L-57,102 L-65,94 L-73,87 L-80,80 L-79,76 L-74,70 L-70,66 L-68,66 L-66,62 L-59,56 L-55,51 L-53,51 L-51,47 L-8,4 Z"/>
+      <path id="lp2" d="M0,0 L4,1 L25,22 L31,29 L31,34 L24,41 L23,43 L21,43 L19,47 L5,61 L-2,69 L-11,78 L-18,86 L-29,97 L-36,105 L-47,116 L-54,124 L-66,136 L-69,140 L-71,140 L-73,144 L-78,149 L-77,153 L-75,157 L-73,157 L-66,165 L-32,199 L-32,201 L-28,203 L-21,211 L2,234 L7,233 L25,215 L32,207 L71,168 L76,171 L86,181 L93,189 L103,199 L102,204 L53,253 L50,257 L48,257 L48,259 L46,259 L44,263 L39,268 L31,275 L23,277 L-17,277 L-26,274 L-50,250 L-57,242 L-122,177 L-124,173 L-124,130 L-117,121 L-115,121 L-113,117 L-96,100 L-89,92 L-65,68 L-58,60 L-46,48 L-39,40 L-30,31 L-28,28 L-26,28 L-26,26 L-24,26 L-22,22 L-12,12 L-11,10 L-9,10 L-7,6 Z"/>
+      <path id="lp3" d="M0,0 L4,1 L15,12 L22,20 L30,28 L31,32 L23,42 L21,42 L19,46 L2,63 L-5,71 L-17,83 L-24,91 L-29,97 L-34,102 L-49,117 L-56,125 L-60,130 L-62,130 L-62,132 L-64,132 L-66,136 L-70,140 L-75,139 L-104,110 L-103,106 L-88,91 L-86,88 L-84,88 L-82,84 L-65,67 L-64,65 L-62,65 L-60,61 L-37,38 L-30,30 L-12,12 L-7,6 L-5,6 L-3,2 Z"/>
+      <path id="lp4" d="M0,0 L5,0 L5,2 L7,2 L14,10 L33,29 L32,34 L14,52 L13,54 L11,54 L9,58 L-20,87 L-27,95 L-40,108 L-47,116 L-60,129 L-67,137 L-72,138 L-93,117 L-100,109 L-99,104 L-92,97 L-85,89 L-77,81 L-76,79 L-74,79 L-72,75 L-57,60 L-55,57 L-53,57 L-51,53 L-39,41 L-32,33 L-30,33 L-28,29 L-11,12 L-10,10 L-8,10 L-6,6 L-1,1 Z"/>
+      <path id="lp5" d="M0,0 L4,2 L19,17 L19,19 L21,19 L28,27 L38,37 L42,43 L43,47 L43,84 L41,89 L32,99 L25,106 L23,106 L21,110 L-49,180 L-53,185 L-60,189 L-68,190 L-106,190 L-114,187 L-127,175 L-130,172 L-130,170 L-134,168 L-140,161 L-145,157 L-149,152 L-151,151 L-151,149 L-153,149 L-158,144 L-167,134 L-210,91 L-210,89 L-213,88 L-220,80 L-225,75 L-249,51 L-256,43 L-261,37 L-259,32 L-249,21 L-247,21 L-245,17 L-231,3 L-227,5 L-203,29 L-203,31 L-201,31 L-194,39 L-158,75 L-151,83 L-126,108 L-126,110 L-122,112 L-116,118 L-116,120 L-114,120 L-114,122 L-112,122 L-105,130 L-89,146 L-84,147 L-76,140 L-54,118 L-49,113 L-45,108 L-40,103 L-5,68 L-4,63 L-13,53 L-32,34 L-29,29 Z"/>
+    </defs>
+  </svg>
+
   <!-- Splash -->
   <div id="splash" class="splash">
     <div class="splash-content">
       <div class="splash-logo-wrap">
         <svg class="splash-logo-svg" viewBox="0 0 513 427" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <path id="lp0" d="M0,0 L41,0 L49,3 L61,15 L68,23 L99,54 L106,62 L129,85 L136,93 L154,111 L154,113 L157,114 L164,122 L181,139 L181,141 L184,142 L191,150 L195,156 L189,164 L170,183 L169,185 L167,185 L167,187 L163,188 L155,181 L148,174 L141,166 L121,146 L114,138 L98,122 L98,120 L94,118 L94,116 L92,116 L85,108 L74,97 L74,95 L72,95 L65,87 L46,68 L46,66 L44,66 L37,58 L22,43 L19,42 L14,47 L-7,68 L-8,70 L-10,70 L-12,74 L-26,88 L-27,90 L-29,90 L-29,92 L-31,92 L-33,96 L-37,98 L-39,102 L-61,124 L-62,127 L-61,130 L-57,132 L-49,140 L-49,142 L-47,142 L-43,146 L-43,148 L-39,150 L-34,156 L-35,161 L-59,185 L-64,190 L-68,189 L-102,155 L-107,148 L-108,141 L-108,113 L-107,104 L-105,100 L-97,93 L-68,64 L-61,56 L-22,17 L-15,9 L-8,3 Z"/>
-            <path id="lp1" d="M0,0 L43,0 L50,3 L58,10 L65,18 L93,46 L97,51 L103,56 L103,58 L105,58 L112,66 L142,96 L148,101 L150,107 L150,144 L147,151 L142,156 L140,159 L138,159 L138,161 L136,161 L134,165 L116,183 L115,185 L113,185 L113,187 L111,187 L111,189 L109,189 L107,193 L87,213 L82,218 L70,231 L60,241 L59,243 L57,243 L55,247 L39,263 L38,265 L36,265 L36,267 L34,267 L32,271 L30,271 L30,273 L28,273 L28,275 L25,277 L20,276 L-2,254 L-7,248 L-6,244 L1,236 L5,231 L10,226 L22,214 L29,206 L41,194 L42,192 L44,192 L46,188 L63,171 L64,169 L66,169 L66,167 L71,162 L87,146 L94,138 L103,129 L104,126 L90,111 L53,74 L46,66 L23,43 L18,44 L2,60 L-5,68 L-23,86 L-30,94 L-38,102 L-43,108 L-49,109 L-57,102 L-65,94 L-73,87 L-80,80 L-79,76 L-74,70 L-70,66 L-68,66 L-66,62 L-59,56 L-55,51 L-53,51 L-51,47 L-8,4 Z"/>
-            <path id="lp2" d="M0,0 L4,1 L25,22 L31,29 L31,34 L24,41 L23,43 L21,43 L19,47 L5,61 L-2,69 L-11,78 L-18,86 L-29,97 L-36,105 L-47,116 L-54,124 L-66,136 L-69,140 L-71,140 L-73,144 L-78,149 L-77,153 L-75,157 L-73,157 L-66,165 L-32,199 L-32,201 L-28,203 L-21,211 L2,234 L7,233 L25,215 L32,207 L71,168 L76,171 L86,181 L93,189 L103,199 L102,204 L53,253 L50,257 L48,257 L48,259 L46,259 L44,263 L39,268 L31,275 L23,277 L-17,277 L-26,274 L-50,250 L-57,242 L-122,177 L-124,173 L-124,130 L-117,121 L-115,121 L-113,117 L-96,100 L-89,92 L-65,68 L-58,60 L-46,48 L-39,40 L-30,31 L-28,28 L-26,28 L-26,26 L-24,26 L-22,22 L-12,12 L-11,10 L-9,10 L-7,6 Z"/>
-            <path id="lp3" d="M0,0 L4,1 L15,12 L22,20 L30,28 L31,32 L23,42 L21,42 L19,46 L2,63 L-5,71 L-17,83 L-24,91 L-29,97 L-34,102 L-49,117 L-56,125 L-60,130 L-62,130 L-62,132 L-64,132 L-66,136 L-70,140 L-75,139 L-104,110 L-103,106 L-88,91 L-86,88 L-84,88 L-82,84 L-65,67 L-64,65 L-62,65 L-60,61 L-37,38 L-30,30 L-12,12 L-7,6 L-5,6 L-3,2 Z"/>
-            <path id="lp4" d="M0,0 L5,0 L5,2 L7,2 L14,10 L33,29 L32,34 L14,52 L13,54 L11,54 L9,58 L-20,87 L-27,95 L-40,108 L-47,116 L-60,129 L-67,137 L-72,138 L-93,117 L-100,109 L-99,104 L-92,97 L-85,89 L-77,81 L-76,79 L-74,79 L-72,75 L-57,60 L-55,57 L-53,57 L-51,53 L-39,41 L-32,33 L-30,33 L-28,29 L-11,12 L-10,10 L-8,10 L-6,6 L-1,1 Z"/>
-            <path id="lp5" d="M0,0 L4,2 L19,17 L19,19 L21,19 L28,27 L38,37 L42,43 L43,47 L43,84 L41,89 L32,99 L25,106 L23,106 L21,110 L-49,180 L-53,185 L-60,189 L-68,190 L-106,190 L-114,187 L-127,175 L-130,172 L-130,170 L-134,168 L-140,161 L-145,157 L-149,152 L-151,151 L-151,149 L-153,149 L-158,144 L-167,134 L-210,91 L-210,89 L-213,88 L-220,80 L-225,75 L-249,51 L-256,43 L-261,37 L-259,32 L-249,21 L-247,21 L-245,17 L-231,3 L-227,5 L-203,29 L-203,31 L-201,31 L-194,39 L-158,75 L-151,83 L-126,108 L-126,110 L-122,112 L-116,118 L-116,120 L-114,120 L-114,122 L-112,122 L-105,130 L-89,146 L-84,147 L-76,140 L-54,118 L-49,113 L-45,108 L-40,103 L-5,68 L-4,63 L-13,53 L-32,34 L-29,29 Z"/>
-          </defs>
-          <!-- Filled layer (always visible, color set by class for theming) -->
+          <!-- path 정의는 body 상단 공유 defs 참조 -->
+          <!-- Filled layer -->
           <use href="#lp0" class="splash-fill" fill="currentColor" transform="translate(124,10)"/>
           <use href="#lp1" class="splash-fill" fill="currentColor" transform="translate(347,10)"/>
           <use href="#lp2" class="splash-fill" fill="currentColor" transform="translate(141,138)"/>
@@ -73,7 +78,7 @@
       <div class="holdings-top-bar">
         <button id="holdings-back" class="holdings-back-btn" data-i18n="holdings.back">← 뒤로</button>
         <div class="holdings-top-actions">
-          <button id="setup-theme" class="setup-toggle-btn" aria-label="Toggle dark mode">🌙</button>
+          <button id="setup-theme" class="setup-toggle-btn" aria-label="Toggle dark mode"></button>
           <button id="setup-lang" class="setup-toggle-btn setup-lang-btn">EN</button>
         </div>
       </div>
@@ -99,12 +104,19 @@
     <div>
       <div id="app-date" class="app-date-top"></div>
       <div class="app-title-row">
-        <img src="/static/img/logo.png" alt="logo" class="app-logo">
+        <svg class="header-logo-svg" viewBox="0 0 513 427" xmlns="http://www.w3.org/2000/svg">
+          <use href="#lp0" fill="currentColor" transform="translate(124,10)"/>
+          <use href="#lp1" fill="currentColor" transform="translate(347,10)"/>
+          <use href="#lp2" fill="currentColor" transform="translate(141,138)"/>
+          <use href="#lp3" fill="currentColor" transform="translate(368,138)"/>
+          <use href="#lp4" fill="currentColor" transform="translate(214,149)"/>
+          <use href="#lp5" fill="currentColor" transform="translate(454,225)"/>
+        </svg>
         <h1 class="app-title">Passive</h1>
       </div>
     </div>
     <div class="header-right">
-      <button id="btn-theme" class="theme-btn" aria-label="Toggle dark mode">🌙</button>
+      <button id="btn-theme" class="theme-btn" aria-label="Toggle dark mode"></button>
       <button id="btn-lang" class="lang-btn">EN</button>
       <div id="btn-edit-holdings" class="settings-btn">⚙️</div>
     </div>
@@ -308,11 +320,13 @@
   <script src="/static/js/i18n.js?v=2"></script>
   <script>
     // ── 다크모드 토글 (헤더 + setup 화면 동기화) ──
+    var _sunSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
+    var _moonSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
     function updateAllThemeIcons() {
       var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-      var icon = isDark ? '☀️' : '🌙';
+      var icon = isDark ? _sunSvg : _moonSvg;
       var btns = [document.getElementById('btn-theme'), document.getElementById('setup-theme')];
-      btns.forEach(function(b) { if (b) b.textContent = icon; });
+      btns.forEach(function(b) { if (b) b.innerHTML = icon; });
     }
     function toggleTheme() {
       var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
