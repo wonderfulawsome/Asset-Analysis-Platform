@@ -13,7 +13,7 @@ const I18N = {
     'tab.market': '시장',                         // 시장 탭
     'tab.signal': '신호',                         // 신호 탭
     'tab.macro': '거시경제',                      // 거시경제 탭
-    'tab.chart': '차트',                          // 차트 탭
+    'tab.chart': 'AI차트',                        // 차트 탭
 
     // ── 헤더 / 날짜 ──
     'lang.btn': 'EN',                             // 언어 전환 버튼 텍스트
@@ -399,7 +399,7 @@ const I18N = {
     'tab.market': 'Market',
     'tab.signal': 'Signal',
     'tab.macro': 'Macro',
-    'tab.chart': 'Chart',
+    'tab.chart': 'AI Chart',
 
     // ── Header / Date ──
     'lang.btn': 'KO',
