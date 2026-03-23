@@ -1595,29 +1595,34 @@ function dismissSplash() {
 
 // ── 사용자 추적 (익명 해시) ──
 function getOrCreateUserHash() {
-  let hash = localStorage.getItem('user_hash');
-  if (!hash) {
-    // crypto.randomUUID 지원 시 사용, 아니면 fallback
-    if (crypto.randomUUID) {
-      hash = crypto.randomUUID();
-    } else {
-      hash = 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () =>
-        Math.floor(Math.random() * 16).toString(16));
-    }
-    localStorage.setItem('user_hash', hash);
+  // WebView에서 localStorage/crypto 접근이 제한될 수 있으므로 단계별 fallback
+  try {
+    const stored = localStorage.getItem('user_hash');
+    if (stored) return stored;
+  } catch (e) { /* localStorage 접근 불가 */ }
+
+  let hash;
+  try {
+    hash = crypto.randomUUID();
+  } catch (e) {
+    hash = 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () =>
+      Math.floor(Math.random() * 16).toString(16));
   }
+
+  try { localStorage.setItem('user_hash', hash); } catch (e) { /* 저장 실패 무시 */ }
   return hash;
 }
 
 function trackVisit() {
-  const userHash = getOrCreateUserHash();
-  // 앱(WebView) 환경에서도 동작하도록 절대 URL 사용
-  const baseUrl = window.location.origin || 'https://passive-financial-data-analysis-production.up.railway.app';
-  fetch(baseUrl + '/api/tracking/visit', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ user_hash: userHash }),
-  }).catch(() => {});  // 추적 실패해도 무시
+  try {
+    const userHash = getOrCreateUserHash();
+    const baseUrl = window.location.origin || 'https://passive-financial-data-analysis-production.up.railway.app';
+    fetch(baseUrl + '/api/tracking/visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_hash: userHash }),
+    }).catch(() => {});
+  } catch (e) { /* 추적 실패해도 앱 동작에 영향 없음 */ }
 }
 
 (async () => {
