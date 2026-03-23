@@ -2,6 +2,7 @@ from datetime import date
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from database.repositories import track_user_visit, fetch_user_stats
+from database.supabase_client import get_client
 
 router = APIRouter()
 
@@ -36,3 +37,31 @@ def get_stats(
     except Exception as e:
         print(f"[Tracking] stats 조회 실패: {e}")
         return {"error": "tracking unavailable", "dau": 0, "mau": 0, "new_users": 0, "returning_users": 0}
+
+
+@router.delete("/purge-dummy")
+def purge_dummy_users(
+    count: int = Query(default=21, description="삭제할 더미 유저 수"),
+):
+    """is_new=True인 더미 유저를 최대 count명까지 삭제합니다."""
+    try:
+        client = get_client()
+        # is_new=True인 레코드를 조회
+        rows = (
+            client.table("user_visit")
+            .select("id")
+            .eq("is_new", True)
+            .limit(count)
+            .execute()
+        )
+        if not rows.data:
+            return {"deleted": 0, "message": "삭제할 더미 유저가 없습니다"}
+
+        ids = [r["id"] for r in rows.data]
+        for row_id in ids:
+            client.table("user_visit").delete().eq("id", row_id).execute()
+
+        return {"deleted": len(ids), "message": f"{len(ids)}명 삭제 완료"}
+    except Exception as e:
+        print(f"[Tracking] purge 실패: {e}")
+        return {"error": str(e), "deleted": 0}

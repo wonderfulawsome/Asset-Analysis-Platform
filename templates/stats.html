@@ -336,6 +336,36 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
+    /* ── Purge button ── */
+    .purge-section {
+      text-align: center;
+      margin-top: 8px;
+    }
+    .purge-btn {
+      background: rgba(255,59,48,0.1);
+      border: 1px solid rgba(255,59,48,0.3);
+      border-radius: 12px;
+      color: var(--red);
+      font-size: 14px;
+      font-weight: 600;
+      padding: 12px 24px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+    .purge-btn:hover {
+      background: rgba(255,59,48,0.2);
+    }
+    .purge-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .purge-result {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--sub);
+    }
+
     /* ── Back link ── */
     .back-link {
       display: inline-flex;
@@ -455,6 +485,12 @@
           <div class="chart-title">최근 7일 DAU 추이</div>
           <div class="chart-bars" id="chart-bars"></div>
         </div>
+      </div>
+
+      <!-- Admin: purge dummy -->
+      <div class="purge-section">
+        <button class="purge-btn" id="purge-btn">더미 유저 21명 삭제</button>
+        <div class="purge-result" id="purge-result"></div>
       </div>
 
     </div>
@@ -618,6 +654,26 @@
       fetchStats().finally(() => {
         setTimeout(() => this.classList.remove('spinning'), 500);
       });
+    });
+
+    // Purge dummy users
+    document.getElementById('purge-btn').addEventListener('click', async function() {
+      if (!confirm('더미 유저 21명을 삭제하시겠습니까?')) return;
+      this.disabled = true;
+      this.textContent = '삭제 중...';
+      const result = document.getElementById('purge-result');
+      try {
+        const resp = await fetch(`${API_BASE}/purge-dummy?count=21`, { method: 'DELETE' });
+        const data = await resp.json();
+        result.textContent = data.message || JSON.stringify(data);
+        result.style.color = data.error ? 'var(--red)' : 'var(--green)';
+        fetchStats(); // 새로고침
+      } catch (err) {
+        result.textContent = '삭제 실패: ' + err.message;
+        result.style.color = 'var(--red)';
+      }
+      this.textContent = '더미 유저 21명 삭제';
+      this.disabled = false;
     });
 
     // Init
