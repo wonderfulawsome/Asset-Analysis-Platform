@@ -793,9 +793,18 @@ function setupPredictButton() {
     btn.textContent = t('chart.predictLoading');
     showPredictDisclaimer();
     try {
-      const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`);
-      const data = await res.json();
-      if (data.error) {
+      let data = null;
+      // 최대 3회 재시도 (백그라운드 재생성 대기)
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`);
+        data = await res.json();
+        if (!data.error) break;
+        if (attempt < 2) {
+          btn.textContent = t('chart.predictLoading') + '..';
+          await new Promise(r => setTimeout(r, 3000));
+        }
+      }
+      if (!data || data.error) {
         _predictVisible = false;
         btn.classList.remove('active');
         return;
