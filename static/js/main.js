@@ -382,7 +382,7 @@ async function loadRegime() {
   const name  = data.regime_name ?? '';              // API 한글 국면명
   // noise_score 기반 동적 위치 계산 (범위: 5%~95%)
   const ns = data.noise_score ?? null;
-  const pos = ns != null ? Math.max(5, Math.min(95, ((ns + 2) / 12) * 100)) : (NR_GAP_POS[name] ?? 50);
+  const pos = ns != null ? Math.max(5, Math.min(95, ((ns + 1) / 5) * 100)) : (NR_GAP_POS[name] ?? 50);
   const color = NR_GAP_COLOR[name] ?? '#999';        // 갭바 색상
   const sub   = tNrSub(name);                        // 국면 설명 (i18n)
 
