@@ -94,12 +94,16 @@ def run_pipeline(light: bool = False) -> None:
             # 3e: DB 저장
             upsert_noise_regime(result)
 
-            # 3f: 신규 날짜만 백필 (기존 히스토리 보존)
+            # 3f: 백필 (기존 히스토리 보존)
             if should_retrain:
                 print('[Step 3f] Noise Regime 백필...')
-                backfill_records = backfill_noise_regime(bundle, model_bundle, days=60)  # 최근 60 영업일 계산
                 existing = fetch_noise_regime_all()                                      # 기존 DB 날짜 조회
                 existing_dates = {r['date'] for r in existing}                           # 기존 날짜 set 변환
+
+                # 히스토리 < 500건이면 대량 백필 (최초 1회), 이후 60일
+                backfill_days = 4000 if len(existing_dates) < 500 else 60
+                print(f'[Step 3f] 백필 범위: {backfill_days}일 (기존 {len(existing_dates)}건)')
+                backfill_records = backfill_noise_regime(bundle, model_bundle, days=backfill_days)
                 new_records = [r for r in backfill_records if r['date'] not in existing_dates]  # 신규 날짜만 필터
                 print(f'[Step 3f] 전체 {len(backfill_records)}건 중 신규 {len(new_records)}건 백필')
                 for rec in new_records:                                                  # 신규 레코드만 저장
