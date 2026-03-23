@@ -46,7 +46,7 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 16px;
+      padding: 0 20px;
       height: 42px;
       position: sticky;
       top: 0;
@@ -98,12 +98,16 @@
     }
 
     /* ═══════════════════════════════════════════
-       LAYOUT
+       LAYOUT — 화면 꽉 차게
        ═══════════════════════════════════════════ */
     .layout {
-      max-width: 1100px;
-      margin: 0 auto;
-      padding: 12px;
+      padding: 12px 20px;
+    }
+    @media (min-width: 1400px) {
+      .layout { padding: 16px 40px; }
+    }
+    @media (max-width: 640px) {
+      .layout { padding: 10px 10px; }
     }
 
     /* ═══════════════════════════════════════════
@@ -180,7 +184,10 @@
       color: var(--dim);
     }
     .panel-body {
-      padding: 14px;
+      padding: 18px;
+    }
+    @media (min-width: 1200px) {
+      .panel-body { padding: 24px; }
     }
 
     /* ═══════════════════════════════════════════
@@ -198,7 +205,7 @@
     }
     .kpi-cell {
       background: var(--surface);
-      padding: 18px 14px;
+      padding: 24px 20px;
       position: relative;
     }
     .kpi-cell::before {
@@ -212,18 +219,25 @@
     .kpi-cell:nth-child(3)::before { background: var(--green); }
     .kpi-cell:nth-child(4)::before { background: var(--yellow); }
     .kpi-label {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       color: var(--dim);
       letter-spacing: 0.5px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
+    }
+    @media (min-width: 1200px) {
+      .kpi-label { font-size: 12px; margin-bottom: 12px; }
+      .kpi-cell { padding: 28px 24px; }
     }
     .kpi-val {
       font-family: var(--mono);
-      font-size: 34px;
+      font-size: 38px;
       font-weight: 700;
       line-height: 1;
       font-variant-numeric: tabular-nums;
+    }
+    @media (min-width: 1200px) {
+      .kpi-val { font-size: 48px; }
     }
     .kpi-val.c-orange { color: var(--orange); }
     .kpi-val.c-blue { color: var(--blue); }
@@ -254,11 +268,14 @@
        RATIO
        ═══════════════════════════════════════════ */
     .ratio-track {
-      height: 6px;
+      height: 8px;
       display: flex;
       overflow: hidden;
       background: rgba(255,255,255,0.03);
-      margin-bottom: 14px;
+      margin-bottom: 16px;
+    }
+    @media (min-width: 1200px) {
+      .ratio-track { height: 12px; margin-bottom: 20px; }
     }
     .ratio-new {
       background: var(--green);
@@ -298,8 +315,11 @@
     .chart-bars {
       display: flex;
       align-items: flex-end;
-      gap: 6px;
-      height: 140px;
+      gap: 8px;
+      height: 180px;
+    }
+    @media (min-width: 1200px) {
+      .chart-bars { height: 240px; }
     }
     .bar-col {
       flex: 1;
@@ -312,10 +332,14 @@
     }
     .bar-val {
       font-family: var(--mono);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--text);
       font-variant-numeric: tabular-nums;
+    }
+    @media (min-width: 1200px) {
+      .bar-val { font-size: 14px; }
+      .bar-day { font-size: 12px; }
     }
     .bar-fill {
       width: 100%;
