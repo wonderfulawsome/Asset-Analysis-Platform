@@ -1,3 +1,4 @@
+import math
 import threading
 from datetime import datetime
 from fastapi import APIRouter, Query
@@ -75,6 +76,19 @@ def get_ohlc(
         return {'error': str(e)}
 
 
+def _sanitize_floats(obj):
+    """NaN/Infinity를 None으로 변환하여 JSON 직렬화 오류 방지."""
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_floats(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitize_floats(v) for v in obj]
+    return obj
+
+
 @router.get('/predict')
 def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
     """Prophet 30일 예측 결과를 DB에서 조회 (스케줄러가 3시간마다 갱신)"""
@@ -90,8 +104,8 @@ def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
 
     return {
         'ticker': result['ticker'],
-        'actual': result['actual'],
-        'predicted': result['predicted'],
+        'actual': _sanitize_floats(result['actual']),
+        'predicted': _sanitize_floats(result['predicted']),
     }
 
 
