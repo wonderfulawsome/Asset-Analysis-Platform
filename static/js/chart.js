@@ -267,7 +267,7 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
   if (predArr.length > 0 && realN > 0) {
     const lastDate = allCandles[realN - 1].d;
     predArr.forEach(p => {
-      if (p.date > lastDate) {
+      if (p.date > lastDate && p.yhat != null && p.lower != null && p.upper != null) {
         predPoints.push({
           d: p.date,
           o: p.yhat, h: p.upper, l: p.lower, c: p.yhat, v: 0,

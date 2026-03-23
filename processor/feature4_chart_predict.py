@@ -125,6 +125,7 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
     hist = close_history.copy()
     predictions = []
     last_date = hist.index[-1]
+    start_price = float(close_history.iloc[-1])
 
     for k in range(1, n_days + 1):
         feat = build_features_v2(hist)
@@ -136,15 +137,21 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
         preds = [m.predict(last_feat)[0] for m in models]
         pred_ret = np.mean(preds) * 3.0  # 변동성 3배 증폭
 
-        # 비정상 수익률 클램핑 (일일 ±50% 제한)
-        pred_ret = np.clip(pred_ret, -0.5, 0.5)
+        # 일일 수익률 클램핑 (±3%)
+        pred_ret = np.clip(pred_ret, -0.03, 0.03)
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
 
+        # 누적 가격 범위 제한: 시작가 대비 ±30%
+        next_price = np.clip(next_price, start_price * 0.7, start_price * 1.3)
+
         margin = 1.28 * sigma * np.sqrt(k)
         lower = current_price * np.exp(pred_ret - margin)
         upper = current_price * np.exp(pred_ret + margin)
+        # 신뢰구간도 범위 제한
+        lower = max(lower, start_price * 0.5)
+        upper = min(upper, start_price * 1.5)
 
         next_date = last_date + pd.tseries.offsets.BDay(k)
         predictions.append({
