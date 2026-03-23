@@ -1593,7 +1593,35 @@ function dismissSplash() {
   setTimeout(onEnd, 600);
 }
 
+// ── 사용자 추적 (익명 해시) ──
+function getOrCreateUserHash() {
+  let hash = localStorage.getItem('user_hash');
+  if (!hash) {
+    // crypto.randomUUID 지원 시 사용, 아니면 fallback
+    if (crypto.randomUUID) {
+      hash = crypto.randomUUID();
+    } else {
+      hash = 'xxxx-xxxx-xxxx-xxxx'.replace(/x/g, () =>
+        Math.floor(Math.random() * 16).toString(16));
+    }
+    localStorage.setItem('user_hash', hash);
+  }
+  return hash;
+}
+
+function trackVisit() {
+  const userHash = getOrCreateUserHash();
+  fetch('/api/tracking/visit', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ user_hash: userHash }),
+  }).catch(() => {});  // 추적 실패해도 무시
+}
+
 (async () => {
+  // 페이지 로드 시 방문 기록 전송
+  trackVisit();
+
   const splashStart = Date.now();
   let splashDismissed = false;
   function safeDismiss() {
