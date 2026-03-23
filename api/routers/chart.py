@@ -111,14 +111,18 @@ def get_ohlc(
 
         candles = []
         for idx, row in df.iterrows():
-            dt_str = idx.strftime('%Y-%m-%d')
+            o, h, l, c = float(row['Open']), float(row['High']), float(row['Low']), float(row['Close'])
+            # NaN/Infinity 행 건너뛰기 — JSON 직렬화 오류 방지
+            if any(math.isnan(v) or math.isinf(v) for v in (o, h, l, c)):
+                continue
+            vol = row.get('Volume', 0) if 'Volume' in row else 0
             candles.append({
-                'd': dt_str,
-                'o': round(float(row['Open']), 2),
-                'h': round(float(row['High']), 2),
-                'l': round(float(row['Low']), 2),
-                'c': round(float(row['Close']), 2),
-                'v': int(row['Volume']) if 'Volume' in row and row['Volume'] == row['Volume'] else 0,
+                'd': idx.strftime('%Y-%m-%d'),
+                'o': round(o, 2),
+                'h': round(h, 2),
+                'l': round(l, 2),
+                'c': round(c, 2),
+                'v': int(vol) if vol == vol and not math.isinf(float(vol)) else 0,
             })
 
         result = {'ticker': ticker, 'interval': interval, 'candles': candles}
