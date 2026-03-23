@@ -1,12 +1,10 @@
-name: Seed 24 dummy users
+name: Delete 21 dummy users
 
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
-  seed:
+  delete:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,8 +16,8 @@ jobs:
       - name: Install dependencies
         run: pip install supabase python-dotenv
 
-      - name: Run seed script
+      - name: Run delete script
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
-        run: python scripts/seed_users.py
+        run: python scripts/delete_seed_users.py
