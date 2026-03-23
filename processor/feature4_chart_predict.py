@@ -171,8 +171,12 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
     return predictions
 
 
-def _garch_forecast(models, close_history, n_days, feature_cols):
-    """GARCH(1,1) 기반 재귀 예측 — SPY 전용.
+# 변동성이 큰 ETF는 범위 제한을 넉넉하게
+_HIGH_VOL_TICKERS = {'ARKK', 'SOXX', 'SMH', 'XLE', 'IWM'}
+
+
+def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
+    """GARCH(1,1) 기반 재귀 예측 — 전체 ETF 공용.
 
     앙상블 모델의 평균 수익률 예측을 방향(direction)으로 사용하고,
     GARCH(1,1)로 추정한 조건부 변동성으로 스케일링한다.
@@ -182,6 +186,20 @@ def _garch_forecast(models, close_history, n_days, feature_cols):
     predictions = []
     last_date = hist.index[-1]
     start_price = float(close_history.iloc[-1])
+
+    # 티커별 범위 제한 설정
+    if ticker.upper() in _HIGH_VOL_TICKERS:
+        price_band = 0.25   # ±25%
+        ci_band = 0.40       # 신뢰구간 ±40%
+        daily_clip = 0.05    # 일일 ±5%
+    elif ticker.upper() in {'SPY', 'VOO', 'VTI', 'DIA', 'SCHD'}:
+        price_band = 0.15   # ±15% (대형 안정)
+        ci_band = 0.30
+        daily_clip = 0.03
+    else:
+        price_band = 0.20   # ±20% (기본)
+        ci_band = 0.35
+        daily_clip = 0.04
 
     # --- GARCH(1,1) 적합 ---
     log_ret = (np.log(close_history / close_history.shift(1)).dropna()) * 100  # % 스케일
@@ -216,21 +234,23 @@ def _garch_forecast(models, close_history, n_days, feature_cols):
         # 앙상블 방향 × GARCH σ × 스케일 팩터
         pred_ret = direction * g_sigma * 1.5
 
-        # 일일 수익률 클램핑 (±3%)
-        pred_ret = np.clip(pred_ret, -0.03, 0.03)
+        # 일일 수익률 클램핑
+        pred_ret = np.clip(pred_ret, -daily_clip, daily_clip)
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
 
-        # 누적 가격 범위 제한: 시작가 대비 ±15% (SPY는 보수적)
-        next_price = np.clip(next_price, start_price * 0.85, start_price * 1.15)
+        # 누적 가격 범위 제한
+        next_price = np.clip(next_price,
+                             start_price * (1 - price_band),
+                             start_price * (1 + price_band))
 
         # 신뢰구간: GARCH σ 기반 80% CI
         margin = 1.28 * g_sigma * np.sqrt(k)
         lower = current_price * np.exp(pred_ret - margin)
         upper = current_price * np.exp(pred_ret + margin)
-        lower = max(lower, start_price * 0.7)
-        upper = min(upper, start_price * 1.3)
+        lower = max(lower, start_price * (1 - ci_band))
+        upper = min(upper, start_price * (1 + ci_band))
 
         next_date = last_date + pd.tseries.offsets.BDay(k)
         predictions.append({
@@ -279,9 +299,9 @@ def run_chart_predict_single(ticker):
     oos_preds = np.mean([m.predict(X_val) for m in models_oos], axis=0)
     sigma = np.std(y_val - oos_preds)
 
-    # 재귀 예측: SPY는 GARCH 기반, 나머지는 기존 3배 증폭
-    if ticker.upper() == 'SPY' and HAS_ARCH:
-        predicted = _garch_forecast(models_final, close, 30, feat_cols)
+    # 재귀 예측: GARCH 기반 (전체 ETF), fallback → 기존 3배 증폭
+    if HAS_ARCH:
+        predicted = _garch_forecast(models_final, close, 30, feat_cols, ticker)
     else:
         predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
 
@@ -304,7 +324,7 @@ def run_chart_predict_single(ticker):
 def run_chart_predict_all():
     """16개 ETF 티커 전체에 대해 앙상블 예측을 실행한다."""
     n = 5 if HAS_CATBOOST else 4
-    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"}, GARCH-SPY: {"O" if HAS_ARCH else "X"})')
+    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"}, GARCH: {"O" if HAS_ARCH else "X"})')
     results = []
     for i, ticker in enumerate(CHART_TICKERS):
         try:

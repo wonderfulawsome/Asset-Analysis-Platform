@@ -1,6 +1,8 @@
 import math
+import time
 import threading
 from datetime import datetime
+import pandas as pd
 from fastapi import APIRouter, Query
 import yfinance as yf
 
@@ -21,6 +23,65 @@ INTERVAL_CONFIG = {
     '1wk': {'period': '5y'},    # 주봉: 5년
     '1mo': {'period': 'max'},   # 월봉: 최대
 }
+
+
+def _flatten_columns(df):
+    """yfinance MultiIndex 컬럼을 단일 레벨로 변환."""
+    if hasattr(df.columns, 'levels') and len(df.columns.levels) > 1:
+        df.columns = df.columns.get_level_values(0)
+    return df
+
+
+def _resample_daily_to(df, interval):
+    """일봉 DataFrame을 주봉/월봉으로 리샘플링."""
+    rule = 'W' if interval == '1wk' else 'ME'
+    resampled = df.resample(rule).agg({
+        'Open': 'first',
+        'High': 'max',
+        'Low': 'min',
+        'Close': 'last',
+        'Volume': 'sum',
+    }).dropna(subset=['Open', 'Close'])
+    return resampled
+
+
+def _download_with_fallback(ticker, interval, max_retries=2):
+    """yfinance 다운로드 + 재시도 + 일봉 리샘플링 fallback.
+
+    1차: 요청 interval로 직접 다운로드 (재시도 포함)
+    2차: 일봉 다운로드 → 주봉/월봉 리샘플링 (1wk, 1mo인 경우)
+    """
+    cfg = INTERVAL_CONFIG[interval]
+
+    # 1차: 직접 다운로드 (재시도)
+    for attempt in range(max_retries):
+        try:
+            df = yf.download(ticker, period=cfg['period'], interval=interval,
+                             auto_adjust=True, progress=False)
+            df = _flatten_columns(df)
+            if not df.empty and len(df) >= 2:
+                return df
+        except Exception:
+            pass
+        if attempt < max_retries - 1:
+            time.sleep(1)
+
+    # 2차: 일봉으로 다운로드 → 리샘플링 (주봉/월봉만)
+    if interval in ('1wk', '1mo'):
+        try:
+            period = '5y' if interval == '1wk' else '10y'
+            df_daily = yf.download(ticker, period=period, interval='1d',
+                                   auto_adjust=True, progress=False)
+            df_daily = _flatten_columns(df_daily)
+            if not df_daily.empty:
+                resampled = _resample_daily_to(df_daily, interval)
+                if not resampled.empty and len(resampled) >= 2:
+                    print(f'[Chart] {ticker} {interval}: 일봉→리샘플링 fallback 사용')
+                    return resampled
+        except Exception as e:
+            print(f'[Chart] {ticker} {interval}: 리샘플링 fallback 실패: {e}')
+
+    return None
 
 
 @router.get('/ohlc')
@@ -44,15 +105,9 @@ def get_ohlc(
             return cached['data']
 
     try:
-        cfg = INTERVAL_CONFIG[interval]
-        df = yf.download(ticker, period=cfg['period'], interval=interval,
-                         auto_adjust=True, progress=False)
-        if df.empty:
+        df = _download_with_fallback(ticker, interval)
+        if df is None or df.empty:
             return {'error': 'no data'}
-
-        # MultiIndex 처리 (yfinance 0.2.x)
-        if hasattr(df.columns, 'levels') and len(df.columns.levels) > 1:
-            df.columns = df.columns.get_level_values(0)
 
         candles = []
         for idx, row in df.iterrows():
