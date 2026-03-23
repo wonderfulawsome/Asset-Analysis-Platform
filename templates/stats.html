@@ -4,225 +4,250 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Passive — User Stats</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #000000;
-      --card: #111114;
-      --card-hover: #19191d;
-      --border: rgba(255,255,255,0.06);
-      --text: #E8E8EC;
-      --sub: #7A7A80;
-      --accent: #FF8C00;
-      --accent-glow: rgba(255,140,0,0.15);
+      --bg: #0A0E17;
+      --panel: #0F1923;
+      --panel-alt: #121D2B;
+      --border: #1C2B3A;
+      --border-light: #253546;
+      --text: #D1D5DB;
+      --text-bright: #F1F5F9;
+      --sub: #6B7B8D;
+      --orange: #FF8C00;
       --green: #00D26A;
-      --red: #FF3B30;
       --blue: #3B82F6;
-      --purple: #8B5CF6;
-      --radius: 16px;
+      --red: #FF3B30;
+      --cyan: #22D3EE;
+      --amber: #FBBF24;
     }
 
     body {
-      font-family: 'Pretendard Variable', -apple-system, sans-serif;
+      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
       padding: 0;
+      -webkit-font-smoothing: antialiased;
     }
 
-    /* ── Top gradient ── */
-    .top-glow {
-      position: fixed;
-      top: -120px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 600px;
-      height: 300px;
-      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
-      pointer-events: none;
-      z-index: 0;
+    /* ── Top bar ── */
+    .top-bar {
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
     }
+    .top-bar-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .top-bar-logo {
+      color: var(--orange);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: 1px;
+    }
+    .top-bar-sep {
+      color: var(--border-light);
+      font-size: 14px;
+    }
+    .top-bar-title {
+      color: var(--sub);
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .top-bar-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .top-bar-time {
+      color: var(--sub);
+      font-size: 11px;
+    }
+    .back-link {
+      color: var(--sub);
+      text-decoration: none;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      transition: color 0.2s;
+    }
+    .back-link:hover { color: var(--orange); }
 
     /* ── Container ── */
     .container {
-      max-width: 520px;
+      max-width: 600px;
       margin: 0 auto;
-      padding: 48px 20px 60px;
-      position: relative;
-      z-index: 1;
+      padding: 12px 12px 40px;
     }
 
-    /* ── Header ── */
-    .header {
-      margin-bottom: 32px;
+    /* ── Section header ── */
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0 8px;
     }
-    .header-label {
-      font-size: 11px;
+    .section-indicator {
+      width: 3px;
+      height: 14px;
+      border-radius: 1px;
+    }
+    .section-indicator.orange { background: var(--orange); }
+    .section-indicator.green { background: var(--green); }
+    .section-indicator.blue { background: var(--blue); }
+    .section-indicator.cyan { background: var(--cyan); }
+    .section-label {
+      font-size: 10px;
       font-weight: 700;
-      color: var(--accent);
+      color: var(--sub);
       letter-spacing: 1.5px;
       text-transform: uppercase;
-      margin-bottom: 8px;
-    }
-    .header-title {
-      font-size: 28px;
-      font-weight: 800;
-      letter-spacing: -0.5px;
-      margin-bottom: 6px;
-    }
-    .header-date {
-      font-size: 14px;
-      color: var(--sub);
     }
 
     /* ── Date nav ── */
     .date-nav {
       display: flex;
       align-items: center;
-      gap: 12px;
-      margin-bottom: 28px;
-      background: var(--card);
+      background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 10px 16px;
+      border-radius: 4px;
+      margin-bottom: 12px;
+      overflow: hidden;
     }
     .date-nav button {
       background: none;
       border: none;
+      border-right: 1px solid var(--border);
       color: var(--sub);
-      font-size: 18px;
+      font-size: 14px;
+      font-family: inherit;
       cursor: pointer;
-      padding: 4px 8px;
-      border-radius: 8px;
-      transition: all 0.2s;
+      padding: 10px 14px;
+      transition: all 0.15s;
       line-height: 1;
     }
+    .date-nav button:last-child {
+      border-right: none;
+      border-left: 1px solid var(--border);
+    }
     .date-nav button:hover {
-      background: rgba(255,255,255,0.06);
-      color: var(--text);
+      background: var(--panel-alt);
+      color: var(--orange);
     }
     .date-nav-label {
       flex: 1;
       text-align: center;
-      font-size: 15px;
-      font-weight: 600;
-    }
-
-    /* ── Stats grid ── */
-    .stats-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 24px;
-    }
-    .stat-card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-      position: relative;
-      overflow: hidden;
-    }
-    .stat-card::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 3px;
-      border-radius: var(--radius) var(--radius) 0 0;
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    .stat-card:hover {
-      transform: translateY(-2px);
-      border-color: rgba(255,255,255,0.1);
-      background: var(--card-hover);
-    }
-    .stat-card:hover::before {
-      opacity: 1;
-    }
-    .stat-card.accent-orange::before { background: var(--accent); }
-    .stat-card.accent-blue::before { background: var(--blue); }
-    .stat-card.accent-green::before { background: var(--green); }
-    .stat-card.accent-purple::before { background: var(--purple); }
-
-    .stat-icon {
-      width: 36px;
-      height: 36px;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 18px;
-      margin-bottom: 14px;
-    }
-    .stat-icon.orange { background: rgba(255,140,0,0.12); }
-    .stat-icon.blue { background: rgba(59,130,246,0.12); }
-    .stat-icon.green { background: rgba(0,210,106,0.12); }
-    .stat-icon.purple { background: rgba(139,92,246,0.12); }
-
-    .stat-label {
       font-size: 12px;
       font-weight: 600;
-      color: var(--sub);
-      margin-bottom: 6px;
-      letter-spacing: 0.3px;
+      color: var(--text-bright);
+      letter-spacing: 0.5px;
     }
-    .stat-value {
-      font-size: 32px;
-      font-weight: 800;
-      letter-spacing: -1px;
+    .refresh-btn {
+      background: none;
+      border: none;
+      border-left: 1px solid var(--border);
+      color: var(--sub);
+      font-size: 14px;
+      cursor: pointer;
+      padding: 10px 14px;
+      transition: all 0.15s;
       line-height: 1;
+      display: flex;
+      align-items: center;
     }
-    .stat-value.orange { color: var(--accent); }
-    .stat-value.blue { color: var(--blue); }
-    .stat-value.green { color: var(--green); }
-    .stat-value.purple { color: var(--purple); }
+    .refresh-btn:hover { background: var(--panel-alt); color: var(--orange); }
+    .refresh-btn.spinning svg { animation: spin 0.6s linear infinite; }
 
-    /* ── Full-width card ── */
-    .wide-card {
-      grid-column: 1 / -1;
-    }
-
-    /* ── Ratio bar ── */
-    .ratio-section {
-      margin-bottom: 24px;
-    }
-    .ratio-card {
-      background: var(--card);
+    /* ── KPI Grid ── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 12px;
     }
-    .ratio-title {
-      font-size: 13px;
-      font-weight: 700;
+    .kpi-cell {
+      background: var(--panel);
+      padding: 14px 16px;
+      position: relative;
+    }
+    .kpi-cell::after {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+    }
+    .kpi-cell.c-orange::after { background: var(--orange); }
+    .kpi-cell.c-blue::after { background: var(--blue); }
+    .kpi-cell.c-green::after { background: var(--green); }
+    .kpi-cell.c-cyan::after { background: var(--cyan); }
+
+    .kpi-label {
+      font-size: 10px;
+      font-weight: 600;
       color: var(--sub);
-      margin-bottom: 16px;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .kpi-row {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .kpi-value {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .kpi-value.orange { color: var(--orange); }
+    .kpi-value.blue { color: var(--blue); }
+    .kpi-value.green { color: var(--green); }
+    .kpi-value.cyan { color: var(--cyan); }
+    .kpi-unit {
+      font-size: 11px;
+      color: var(--sub);
+    }
+
+    /* ── Ratio panel ── */
+    .ratio-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
     }
     .ratio-bar-wrap {
-      height: 12px;
-      border-radius: 6px;
-      background: rgba(255,255,255,0.04);
+      height: 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.03);
       overflow: hidden;
       display: flex;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
     }
     .ratio-bar-new {
-      background: linear-gradient(90deg, var(--green), #34D399);
+      background: var(--green);
       height: 100%;
-      border-radius: 6px 0 0 6px;
       transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .ratio-bar-return {
-      background: linear-gradient(90deg, var(--blue), #60A5FA);
+      background: var(--blue);
       height: 100%;
-      border-radius: 0 6px 6px 0;
       transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
     }
     .ratio-legend {
@@ -233,228 +258,245 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 13px;
+      font-size: 11px;
       color: var(--sub);
     }
     .ratio-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
+      width: 6px;
+      height: 6px;
+      border-radius: 1px;
     }
     .ratio-dot.new { background: var(--green); }
     .ratio-dot.ret { background: var(--blue); }
     .ratio-count {
       font-weight: 700;
-      color: var(--text);
+      color: var(--text-bright);
     }
 
-    /* ── Weekly chart ── */
-    .chart-section {
-      margin-bottom: 24px;
-    }
-    .chart-card {
-      background: var(--card);
+    /* ── Bar chart ── */
+    .chart-panel {
+      background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-    }
-    .chart-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--sub);
-      margin-bottom: 16px;
-      letter-spacing: 0.3px;
+      border-radius: 4px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
     }
     .chart-bars {
       display: flex;
       align-items: flex-end;
-      gap: 6px;
-      height: 120px;
+      gap: 4px;
+      height: 100px;
+      padding-top: 4px;
     }
     .chart-bar-col {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 6px;
+      gap: 4px;
       height: 100%;
       justify-content: flex-end;
     }
     .chart-bar {
       width: 100%;
-      border-radius: 6px 6px 4px 4px;
-      background: linear-gradient(180deg, var(--accent), rgba(255,140,0,0.4));
-      min-height: 4px;
+      border-radius: 2px 2px 0 0;
+      background: var(--orange);
+      min-height: 2px;
       transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      opacity: 0.6;
     }
     .chart-bar.today {
-      background: linear-gradient(180deg, #FF8C00, #FF6B00);
-      box-shadow: 0 0 12px rgba(255,140,0,0.3);
+      opacity: 1;
+      box-shadow: 0 0 8px rgba(255,140,0,0.3);
     }
     .chart-bar-label {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--sub);
       font-weight: 600;
     }
     .chart-bar-value {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--text);
       font-weight: 700;
+      font-variant-numeric: tabular-nums;
     }
 
-    /* ── Loading / Error ── */
+    /* ── Status row ── */
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: var(--sub);
+    }
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--green);
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* ── Loading ── */
     .loading {
       text-align: center;
       padding: 60px 0;
       color: var(--sub);
-      font-size: 14px;
+      font-size: 12px;
     }
     .loading-spinner {
-      width: 32px;
-      height: 32px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
+      width: 24px;
+      height: 24px;
+      border: 2px solid var(--border);
+      border-top-color: var(--orange);
       border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 12px;
+      animation: spin 0.6s linear infinite;
+      margin: 0 auto 10px;
     }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Fade in animation ── */
+    /* ── Fade in ── */
     .fade-in {
       opacity: 0;
-      transform: translateY(12px);
-      animation: fadeUp 0.5s ease forwards;
+      transform: translateY(8px);
+      animation: fadeUp 0.4s ease forwards;
     }
     .fade-in:nth-child(1) { animation-delay: 0.05s; }
     .fade-in:nth-child(2) { animation-delay: 0.1s; }
     .fade-in:nth-child(3) { animation-delay: 0.15s; }
     .fade-in:nth-child(4) { animation-delay: 0.2s; }
-    @keyframes fadeUp {
-      to { opacity: 1; transform: translateY(0); }
-    }
+    @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
 
-    /* ── Back link ── */
-    .back-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      color: var(--sub);
-      text-decoration: none;
-      font-size: 14px;
-      font-weight: 600;
-      margin-bottom: 20px;
-      transition: color 0.2s;
-    }
-    .back-link:hover {
-      color: var(--text);
-    }
-
-    /* ── Refresh button ── */
-    .refresh-btn {
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      color: var(--sub);
-      font-size: 16px;
-      cursor: pointer;
-      padding: 6px 10px;
-      transition: all 0.2s;
-      line-height: 1;
-    }
-    .refresh-btn:hover {
-      background: rgba(255,255,255,0.06);
-      color: var(--text);
-    }
-    .refresh-btn.spinning svg {
-      animation: spin 0.8s linear infinite;
-    }
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
   </style>
 </head>
 <body>
-  <div class="top-glow"></div>
+
+  <!-- Top bar -->
+  <div class="top-bar">
+    <div class="top-bar-left">
+      <span class="top-bar-logo">PASSIVE</span>
+      <span class="top-bar-sep">|</span>
+      <span class="top-bar-title">User Analytics</span>
+    </div>
+    <div class="top-bar-right">
+      <span class="top-bar-time" id="live-time"></span>
+      <a href="/" class="back-link">← MAIN</a>
+    </div>
+  </div>
 
   <div class="container">
-    <a href="/" class="back-link">← Passive</a>
 
-    <div class="header">
-      <div class="header-label">Analytics Dashboard</div>
-      <h1 class="header-title">사용자 통계</h1>
-      <div class="header-date" id="header-date"></div>
-    </div>
-
-    <!-- Date navigation -->
-    <div class="date-nav">
-      <button id="prev-day" title="이전 날짜">‹</button>
+    <!-- Date nav -->
+    <div class="date-nav" style="margin-top:12px;">
+      <button id="prev-day" title="이전 날짜">◀</button>
       <span class="date-nav-label" id="date-label"></span>
-      <button id="next-day" title="다음 날짜">›</button>
+      <button id="next-day" title="다음 날짜">▶</button>
       <button class="refresh-btn" id="refresh-btn" title="새로고침">
-        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1v5h5"/><path d="M1 6C2.1 3.2 4.8 1.3 8 1.3c3.7 0 6.7 3 6.7 6.7s-3 6.7-6.7 6.7c-2.7 0-5-1.6-6.1-3.9"/></svg>
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1v5h5"/><path d="M1 6C2.1 3.2 4.8 1.3 8 1.3c3.7 0 6.7 3 6.7 6.7s-3 6.7-6.7 6.7c-2.7 0-5-1.6-6.1-3.9"/></svg>
       </button>
     </div>
 
     <!-- Loading -->
     <div id="loading" class="loading">
       <div class="loading-spinner"></div>
-      데이터를 불러오는 중...
+      LOADING DATA...
     </div>
 
-    <!-- Stats content (hidden initially) -->
+    <!-- Stats content -->
     <div id="stats-content" style="display:none;">
 
-      <!-- KPI cards -->
-      <div class="stats-grid">
-        <div class="stat-card accent-orange fade-in">
-          <div class="stat-icon orange">👤</div>
-          <div class="stat-label">오늘 방문자 (DAU)</div>
-          <div class="stat-value orange" id="dau">0</div>
-        </div>
-        <div class="stat-card accent-blue fade-in">
-          <div class="stat-icon blue">📊</div>
-          <div class="stat-label">월간 방문자 (MAU)</div>
-          <div class="stat-value blue" id="mau">0</div>
-        </div>
-        <div class="stat-card accent-green fade-in">
-          <div class="stat-icon green">🆕</div>
-          <div class="stat-label">신규 사용자</div>
-          <div class="stat-value green" id="new-users">0</div>
-        </div>
-        <div class="stat-card accent-purple fade-in">
-          <div class="stat-icon purple">🔄</div>
-          <div class="stat-label">재방문 사용자</div>
-          <div class="stat-value purple" id="returning-users">0</div>
-        </div>
+      <!-- KPI -->
+      <div class="section-header">
+        <div class="section-indicator orange"></div>
+        <span class="section-label">Key Metrics</span>
       </div>
-
-      <!-- Ratio bar -->
-      <div class="ratio-section">
-        <div class="ratio-card fade-in">
-          <div class="ratio-title">신규 vs 재방문 비율</div>
-          <div class="ratio-bar-wrap">
-            <div class="ratio-bar-new" id="ratio-new" style="width:0%"></div>
-            <div class="ratio-bar-return" id="ratio-return" style="width:0%"></div>
+      <div class="kpi-grid fade-in">
+        <div class="kpi-cell c-orange">
+          <div class="kpi-label">DAU (Today)</div>
+          <div class="kpi-row">
+            <div class="kpi-value orange" id="dau">0</div>
+            <span class="kpi-unit">users</span>
           </div>
-          <div class="ratio-legend">
-            <div class="ratio-legend-item">
-              <span class="ratio-dot new"></span>
-              신규 <span class="ratio-count" id="ratio-new-pct">0%</span>
-            </div>
-            <div class="ratio-legend-item">
-              <span class="ratio-dot ret"></span>
-              재방문 <span class="ratio-count" id="ratio-ret-pct">0%</span>
-            </div>
+        </div>
+        <div class="kpi-cell c-blue">
+          <div class="kpi-label">MAU (Month)</div>
+          <div class="kpi-row">
+            <div class="kpi-value blue" id="mau">0</div>
+            <span class="kpi-unit">users</span>
+          </div>
+        </div>
+        <div class="kpi-cell c-green">
+          <div class="kpi-label">New Users</div>
+          <div class="kpi-row">
+            <div class="kpi-value green" id="new-users">0</div>
+            <span class="kpi-unit">new</span>
+          </div>
+        </div>
+        <div class="kpi-cell c-cyan">
+          <div class="kpi-label">Returning</div>
+          <div class="kpi-row">
+            <div class="kpi-value cyan" id="returning-users">0</div>
+            <span class="kpi-unit">ret</span>
           </div>
         </div>
       </div>
 
-      <!-- 7-day bar chart -->
-      <div class="chart-section">
-        <div class="chart-card fade-in">
-          <div class="chart-title">최근 7일 DAU 추이</div>
-          <div class="chart-bars" id="chart-bars"></div>
+      <!-- Ratio -->
+      <div class="section-header">
+        <div class="section-indicator green"></div>
+        <span class="section-label">New vs Returning</span>
+      </div>
+      <div class="ratio-panel fade-in">
+        <div class="ratio-bar-wrap">
+          <div class="ratio-bar-new" id="ratio-new" style="width:0%"></div>
+          <div class="ratio-bar-return" id="ratio-return" style="width:0%"></div>
         </div>
+        <div class="ratio-legend">
+          <div class="ratio-legend-item">
+            <span class="ratio-dot new"></span>
+            NEW <span class="ratio-count" id="ratio-new-pct">0%</span>
+          </div>
+          <div class="ratio-legend-item">
+            <span class="ratio-dot ret"></span>
+            RETURN <span class="ratio-count" id="ratio-ret-pct">0%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-day chart -->
+      <div class="section-header">
+        <div class="section-indicator blue"></div>
+        <span class="section-label">7-Day DAU Trend</span>
+      </div>
+      <div class="chart-panel fade-in">
+        <div class="chart-bars" id="chart-bars"></div>
+      </div>
+
+      <!-- Status -->
+      <div class="status-row fade-in">
+        <div class="status-item">
+          <span class="status-dot"></span>
+          LIVE
+        </div>
+        <div class="status-item" id="last-update"></div>
       </div>
 
     </div>
@@ -463,10 +505,22 @@
   <script>
     const API_BASE = '/api/tracking';
 
-    // KST(한국 시간) 기준 오늘 날짜
+    // Live clock
+    function updateClock() {
+      const now = new Date();
+      const kst = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+      const h = String(kst.getUTCHours()).padStart(2,'0');
+      const m = String(kst.getUTCMinutes()).padStart(2,'0');
+      const s = String(kst.getUTCSeconds()).padStart(2,'0');
+      document.getElementById('live-time').textContent = `KST ${h}:${m}:${s}`;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    // KST today
     function getKSTToday() {
       const now = new Date();
-      const kst = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+      const kst = new Date(now.getTime() + (9 * 60 * 60 * 1000));
       return new Date(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate());
     }
     let currentDate = getKSTToday();
@@ -483,13 +537,14 @@
       return `${y}-${m}`;
     }
     function formatDisplay(d) {
-      const days = ['일', '월', '화', '수', '목', '금', '토'];
-      return `${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}. (${days[d.getDay()]})`;
+      const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+      const m = String(d.getMonth()+1).padStart(2,'0');
+      const day = String(d.getDate()).padStart(2,'0');
+      return `${d.getFullYear()}.${m}.${day} ${days[d.getDay()]}`;
     }
 
     function updateDateUI() {
       document.getElementById('date-label').textContent = formatDisplay(currentDate);
-      document.getElementById('header-date').textContent = formatMonth(currentDate) + ' 기준';
     }
 
     async function fetchStats() {
@@ -509,7 +564,6 @@
         document.getElementById('new-users').textContent = data.new_users ?? 0;
         document.getElementById('returning-users').textContent = data.returning_users ?? 0;
 
-        // Ratio bar
         const total = (data.new_users || 0) + (data.returning_users || 0);
         const newPct = total > 0 ? Math.round((data.new_users / total) * 100) : 0;
         const retPct = total > 0 ? 100 - newPct : 0;
@@ -518,16 +572,23 @@
         document.getElementById('ratio-new-pct').textContent = newPct + '%';
         document.getElementById('ratio-ret-pct').textContent = retPct + '%';
 
-        // Animate numbers
         animateNumbers(data);
+
+        const lastUp = document.getElementById('last-update');
+        if (lastUp) {
+          const now = new Date();
+          const kst = new Date(now.getTime() + (9*60*60*1000));
+          const h = String(kst.getUTCHours()).padStart(2,'0');
+          const mi = String(kst.getUTCMinutes()).padStart(2,'0');
+          lastUp.textContent = `UPDATED ${h}:${mi} KST`;
+        }
 
         loading.style.display = 'none';
         content.style.display = '';
 
-        // Load 7-day chart
         load7DayChart();
       } catch (err) {
-        loading.innerHTML = '<div style="color:var(--red)">데이터 로드 실패</div><div style="margin-top:8px;font-size:12px;color:var(--sub)">' + err.message + '</div>';
+        loading.innerHTML = '<div style="color:var(--red);font-size:12px">ERR: FETCH FAILED</div><div style="margin-top:6px;font-size:10px;color:var(--sub)">' + err.message + '</div>';
       }
     }
 
@@ -540,10 +601,9 @@
       ];
       targets.forEach(t => {
         const el = document.getElementById(t.id);
-        let start = 0;
         const end = t.val;
         if (end === 0) { el.textContent = '0'; return; }
-        const duration = 600;
+        const duration = 500;
         const startTime = performance.now();
         function tick(now) {
           const elapsed = now - startTime;
@@ -578,7 +638,7 @@
       }));
 
       const maxDau = Math.max(...results.map(r => r.dau), 1);
-      const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+      const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
 
       results.forEach((r, idx) => {
         const col = document.createElement('div');
@@ -601,11 +661,10 @@
         col.appendChild(label);
         container.appendChild(col);
 
-        // Animate bar height
         requestAnimationFrame(() => {
           setTimeout(() => {
-            bar.style.height = Math.max((r.dau / maxDau) * 100, 4) + '%';
-          }, idx * 80);
+            bar.style.height = Math.max((r.dau / maxDau) * 100, 3) + '%';
+          }, idx * 60);
         });
       });
     }
