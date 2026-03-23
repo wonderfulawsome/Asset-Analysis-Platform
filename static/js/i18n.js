@@ -40,7 +40,7 @@ const I18N = {
     // ── NR 국면명 (API 응답 한글 → 표시용) ──
     'nr.phase.fundamental': '펀더멘털 반영',      // 국면 1
     'nr.phase.weakFundamental': '펀더멘털 약반영', // 국면 2
-    'nr.phase.weakSentiment': '센티멘트 약반영',  // 국면 3
+    'nr.phase.weakSentiment': '펀더멘털-주가 불일치',  // 국면 3
     'nr.phase.sentiment': '센티멘트 지배',        // 국면 4
 
     // ── NR 국면 설명 ──
@@ -58,7 +58,7 @@ const I18N = {
     // ── 섹션 라벨 ──
     'section.nrChart': '펀더멘털·주가 추이 (30일)', // NR 차트 라벨
     'section.myHoldings': 'My Holdings',           // 보유종목 섹션
-    'section.csChart': '방향성 추이 (30일)',       // CS 차트 라벨
+    'section.csChart': '방향성 예측 추이 (30일)',    // CS 차트 라벨
 
     // ── VIX 등급 ──
     'vix.low': '낮음',                            // VIX 낮음
@@ -427,7 +427,7 @@ const I18N = {
     // ── NR Phase Names ──
     'nr.phase.fundamental': 'Fundamental',
     'nr.phase.weakFundamental': 'Weak Fundamental',
-    'nr.phase.weakSentiment': 'Weak Sentiment',
+    'nr.phase.weakSentiment': 'Fundamental-Price Mismatch',
     'nr.phase.sentiment': 'Sentiment',
 
     // ── NR Phase Descriptions ──
@@ -445,7 +445,7 @@ const I18N = {
     // ── Section Labels ──
     'section.nrChart': 'Fundamental·Price Trend (30d)',
     'section.myHoldings': 'My Holdings',
-    'section.csChart': 'Direction Trend (30d)',
+    'section.csChart': 'Directional Forecast Trend (30d)',
 
     // ── VIX Levels ──
     'vix.low': 'Low',
@@ -789,7 +789,7 @@ const I18N = {
 const NR_NAME_TO_KEY = {                          // API 한글 국면명 → i18n 키 접미사
   '펀더멘털 반영': 'fundamental',
   '펀더멘털 약반영': 'weakFundamental',
-  '센티멘트 약반영': 'weakSentiment',
+  '펀더멘털-주가 불일치': 'weakSentiment',
   '센티멘트 지배': 'sentiment',
 };
 
@@ -856,7 +856,7 @@ function tNrBadge(koreanName) {
   const badgeMap = {                              // 한글 국면 → 뱃지 키 매핑
     '펀더멘털 반영': 'stable',
     '펀더멘털 약반영': 'caution',
-    '센티멘트 약반영': 'alert',
+    '펀더멘털-주가 불일치': 'alert',
     '센티멘트 지배': 'danger',
   };
   const k = badgeMap[koreanName];                 // 한글 → 키 변환
