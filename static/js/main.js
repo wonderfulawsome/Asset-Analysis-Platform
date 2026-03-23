@@ -381,9 +381,16 @@ async function loadRegime() {
 
   const name  = data.regime_name ?? '';              // API 한글 국면명
   // noise_score 기반 동적 위치 계산 (범위: 5%~95%)
-  // 실제 noise_score 범위: ~-2(강한 일치) ~ ~7(강한 괴리) → 90% 구간에 선형 매핑
+  // 중심점(mid=2.5)을 50%로, 양쪽 대칭 스케일링
+  // 일치 쪽(-2~2.5): 좁은 범위 → 5%~50%, 괴리 쪽(2.5~7): 넓은 범위 → 50%~95%
   const ns = data.noise_score ?? null;
-  const pos = ns != null ? Math.max(5, Math.min(95, ((ns + 2) / 9) * 90 + 5)) : (NR_GAP_POS[name] ?? 50);
+  let pos;
+  if (ns != null) {
+    const mid = 2.5;
+    if (ns <= mid) { pos = 5 + ((ns - (-2)) / (mid - (-2))) * 45; }   // -2→5%, 2.5→50%
+    else           { pos = 50 + ((ns - mid) / (7 - mid)) * 45; }      // 2.5→50%, 7→95%
+    pos = Math.max(5, Math.min(95, pos));
+  } else { pos = NR_GAP_POS[name] ?? 50; }
   const color = NR_GAP_COLOR[name] ?? '#999';        // 갭바 색상
   const sub   = tNrSub(name);                        // 국면 설명 (i18n)
 
