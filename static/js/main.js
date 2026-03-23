@@ -1611,7 +1611,9 @@ function getOrCreateUserHash() {
 
 function trackVisit() {
   const userHash = getOrCreateUserHash();
-  fetch('/api/tracking/visit', {
+  // 앱(WebView) 환경에서도 동작하도록 절대 URL 사용
+  const baseUrl = window.location.origin || 'https://passive-financial-data-analysis-production.up.railway.app';
+  fetch(baseUrl + '/api/tracking/visit', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ user_hash: userHash }),
