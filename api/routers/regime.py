@@ -71,7 +71,7 @@ def get_score_distribution():
         'percentiles': percentiles,
         'by_regime': regime_stats,
         'histogram': histogram,
-        'current_config': {'gauge_min': -2, 'gauge_mid': 2.5, 'gauge_max': 7},
+        'current_config': {'gauge_min': -5, 'gauge_mid': 0, 'gauge_max': 10},
         'all_scores': [{'date': r['date'], 'score': r['noise_score'], 'regime': r.get('regime_name')}
                        for r in records if r.get('noise_score') is not None],
     }
