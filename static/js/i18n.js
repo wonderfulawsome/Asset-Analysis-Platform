@@ -32,10 +32,10 @@ const I18N = {
     'holdings.loadError': '데이터를 불러올 수 없습니다', // 로드 에러
 
     // ── Noise vs Signal ──
-    'nr.fundamental': '펀더멘털',                 // 갭바 좌측
-    'nr.price': '주가',                           // 갭바 우측
-    'nr.match': '일치',                           // 갭바 하단 좌측
-    'nr.gap': '괴리',                             // 갭바 하단 우측
+    'nr.fundamental': '이성적',                    // 갭바 좌측
+    'nr.price': '감정적',                          // 갭바 우측
+    'nr.match': '이성적',                          // 갭바 하단 좌측
+    'nr.gap': '감정적',                            // 갭바 하단 우측
 
     // ── NR 국면명 (API 응답 한글 → 표시용) ──
     'nr.phase.fundamental': '펀더멘털 반영',      // 국면 1
@@ -44,10 +44,10 @@ const I18N = {
     'nr.phase.sentiment': '센티멘트 지배',        // 국면 4
 
     // ── NR 국면 설명 ──
-    'nr.sub.fundamental': '주가가 펀더멘털에 부합',         // 국면 1 설명
-    'nr.sub.weakFundamental': '주가가 펀더멘털에 부합',     // 국면 2 설명
-    'nr.sub.weakSentiment': '주가가 펀더멘털에 부합하지 않음', // 국면 3 설명
-    'nr.sub.sentiment': '주가가 펀더멘털에 부합하지 않음',    // 국면 4 설명
+    'nr.sub.fundamental': '시장이 이성적으로 움직이는 중',         // 국면 1 설명
+    'nr.sub.weakFundamental': '시장이 이성적으로 움직이는 중',     // 국면 2 설명
+    'nr.sub.weakSentiment': '시장이 감정적으로 움직이는 중', // 국면 3 설명
+    'nr.sub.sentiment': '시장이 감정적으로 움직이는 중',    // 국면 4 설명
 
     // ── NR 뱃지 ──
     'nr.badge.stable': '안정',                    // 안정 뱃지
@@ -56,7 +56,7 @@ const I18N = {
     'nr.badge.danger': '위험',                    // 위험 뱃지
 
     // ── 섹션 라벨 ──
-    'section.nrChart': '펀더멘털·주가 추이 (30일)', // NR 차트 라벨
+    'section.nrChart': '이성적·감정적 추이 (30일)', // NR 차트 라벨
     'section.myHoldings': 'My Holdings',           // 보유종목 섹션
     'section.csChart': '방향성 예측 추이 (30일)',    // CS 차트 라벨
 
@@ -139,8 +139,8 @@ const I18N = {
 
     // ── 차트 / 공통 ──
     'chart.noData': '데이터 없음',                // 데이터 없음
-    'chart.yTop': '불일치',                       // Y축 상단
-    'chart.yBottom': '일치',                      // Y축 하단
+    'chart.yTop': '감정적',                        // Y축 상단
+    'chart.yBottom': '이성적',                     // Y축 하단
 
     // ── 캔들스틱 차트 탭 ──
     'chart.daily': '일봉',
@@ -419,10 +419,10 @@ const I18N = {
     'holdings.loadError': 'Failed to load data',
 
     // ── Noise vs Signal ──
-    'nr.fundamental': 'Fundamental',
-    'nr.price': 'Price',
-    'nr.match': 'Aligned',
-    'nr.gap': 'Diverged',
+    'nr.fundamental': 'Rational',
+    'nr.price': 'Emotional',
+    'nr.match': 'Rational',
+    'nr.gap': 'Emotional',
 
     // ── NR Phase Names ──
     'nr.phase.fundamental': 'Fundamental',
@@ -431,10 +431,10 @@ const I18N = {
     'nr.phase.sentiment': 'Sentiment',
 
     // ── NR Phase Descriptions ──
-    'nr.sub.fundamental': 'Price reflects fundamentals',
-    'nr.sub.weakFundamental': 'Price reflects fundamentals',
-    'nr.sub.weakSentiment': 'Price diverges from fundamentals',
-    'nr.sub.sentiment': 'Price diverges from fundamentals',
+    'nr.sub.fundamental': 'Market is moving rationally',
+    'nr.sub.weakFundamental': 'Market is moving rationally',
+    'nr.sub.weakSentiment': 'Market is moving emotionally',
+    'nr.sub.sentiment': 'Market is moving emotionally',
 
     // ── NR Badges ──
     'nr.badge.stable': 'Stable',
@@ -443,7 +443,7 @@ const I18N = {
     'nr.badge.danger': 'Danger',
 
     // ── Section Labels ──
-    'section.nrChart': 'Fundamental·Price Trend (30d)',
+    'section.nrChart': 'Rational·Emotional Trend (30d)',
     'section.myHoldings': 'My Holdings',
     'section.csChart': 'Directional Forecast Trend (30d)',
 
@@ -526,8 +526,8 @@ const I18N = {
 
     // ── Chart / Common ──
     'chart.noData': 'No Data',
-    'chart.yTop': 'Diverged',
-    'chart.yBottom': 'Aligned',
+    'chart.yTop': 'Emotional',
+    'chart.yBottom': 'Rational',
 
     // ── Candlestick Chart Tab ──
     'chart.daily': 'Daily',
