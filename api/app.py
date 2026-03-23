@@ -62,7 +62,7 @@ if tracking:
 # GET / 요청이 오면 index.html을 렌더링해서 반환
 @app.get('/')
 def root(request: Request):
-    return templates.TemplateResponse('index.html', {'request': request})
+    return templates.TemplateResponse(request=request, name='index.html')
 
 # 사이트 도메인 (sitemap, robots.txt에서 사용)
 SITE_URL = 'https://passive-financial-data-analysis-production.up.railway.app'
