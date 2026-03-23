@@ -20,27 +20,22 @@ warnings.filterwarnings('ignore')
 
 N_STATES = 4
 PHASE_NAMES = {
-    0: '펀더멘털 반영',
-    1: '펀더멘털 약반영',
+    0: '펀더멘털-주가 일치',
+    1: '펀더멘털-주가 일치',
     2: '펀더멘털-주가 불일치',
-    3: '센티멘트 지배',
+    3: '펀더멘털-주가 불일치',
 }
 PHASE_EMOJIS = {0: '🧠', 1: '⚖️', 2: '🌊', 3: '🔥'}
 
-# noise_score 기반 레짐 분류 임계값 (상한, regime_id)
-# score < -1.5  → 펀더멘털 반영 (시그널 강함)
-# -1.5 ≤ score < 1.5 → 펀더멘털 약반영 (중립)
-# 1.5 ≤ score < 5.0  → 펀더멘털-주가 불일치 (노이즈 증가)
-# score ≥ 5.0        → 센티멘트 지배 (노이즈 지배)
-SCORE_THRESHOLDS = [(-1.5, 0), (1.5, 1), (5.0, 2)]
-
 
 def score_to_regime(noise_score: float) -> tuple:
-    """noise_score → (regime_id, regime_name, regime_emoji)"""
-    for threshold, rid in SCORE_THRESHOLDS:
-        if noise_score < threshold:
-            return rid, PHASE_NAMES[rid], PHASE_EMOJIS[rid]
-    return 3, PHASE_NAMES[3], PHASE_EMOJIS[3]
+    """noise_score → (regime_id, regime_name, regime_emoji)
+    score < 0  → 일치 (주가가 펀더멘털 반영)
+    score >= 0 → 불일치 (주가가 펀더멘털과 괴리)
+    """
+    if noise_score < 0:
+        return 0, '펀더멘털-주가 일치', '🧠'
+    return 2, '펀더멘털-주가 불일치', '🌊'
 
 
 FEATURE_NAMES = [
@@ -186,7 +181,13 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
     pred_phase, pred_name, pred_emoji = score_to_regime(ns)
 
     today_str = str(datetime.date.today())
-    proba_dict = {PHASE_NAMES[ph]: round(proba_by_phase.get(ph, 0.0), 4) for ph in range(N_STATES)}
+    # HMM 4-state 확률을 2-레짐(일치/불일치)으로 합산
+    p_match = sum(proba_by_phase.get(ph, 0.0) for ph in (0, 1))
+    p_mismatch = sum(proba_by_phase.get(ph, 0.0) for ph in (2, 3))
+    proba_dict = {
+        '펀더멘털-주가 일치': round(p_match, 4),
+        '펀더멘털-주가 불일치': round(p_mismatch, 4),
+    }
 
     # 피처별 noise_score 기여도 계산
     noise_weights = [0.5, 0.3, 1.0, 0.0, 0.5, 2.0, 1.5, 2.0]
@@ -339,7 +340,13 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
             ns = float(compute_noise_score(feat_scaled)[0])  # noise_score 계산
             pred_phase, pred_name, pred_emoji = score_to_regime(ns)  # score 기반 레짐 결정
 
-            proba_dict = {PHASE_NAMES[ph]: round(proba_by_phase.get(ph, 0.0), 4) for ph in range(N_STATES)}  # 국면별 확률
+            # HMM 4-state 확률을 2-레짐(일치/불일치)으로 합산
+            p_match = sum(proba_by_phase.get(ph, 0.0) for ph in (0, 1))
+            p_mismatch = sum(proba_by_phase.get(ph, 0.0) for ph in (2, 3))
+            proba_dict = {
+                '펀더멘털-주가 일치': round(p_match, 4),
+                '펀더멘털-주가 불일치': round(p_mismatch, 4),
+            }
 
             # 피처 기여도 계산
             contributions = []                         # 기여도 리스트
