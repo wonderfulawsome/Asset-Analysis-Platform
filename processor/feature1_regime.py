@@ -20,12 +20,23 @@ warnings.filterwarnings('ignore')
 
 N_STATES = 4
 PHASE_NAMES = {
-    0: '펀더멘털 반영',
-    1: '펀더멘털 약반영',
+    0: '펀더멘털-주가 일치',
+    1: '펀더멘털-주가 일치',
     2: '펀더멘털-주가 불일치',
-    3: '센티멘트 지배',
+    3: '펀더멘털-주가 불일치',
 }
 PHASE_EMOJIS = {0: '🧠', 1: '⚖️', 2: '🌊', 3: '🔥'}
+
+
+def score_to_regime_name(noise_score: float) -> tuple:
+    """noise_score → (regime_id, regime_name)
+    score < 0  → 일치 (주가가 펀더멘털 반영)
+    score >= 0 → 불일치 (주가가 펀더멘털과 괴리)
+    """
+    if noise_score < 0:
+        return 0, '펀더멘털-주가 일치'
+    return 2, '펀더멘털-주가 불일치'
+
 
 FEATURE_NAMES = [
     'fundamental_gap', 'erp_zscore', 'residual_corr',
@@ -165,13 +176,21 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
         phase_id = state_to_phase[state_id]
         proba_by_phase[phase_id] = proba_by_phase.get(phase_id, 0.0) + float(prob)
 
-    pred_phase = max(proba_by_phase, key=proba_by_phase.get)
+    # HMM이 예측한 국면 (이모지용)
+    hmm_phase = max(proba_by_phase, key=proba_by_phase.get)
 
-    # noise_score 계산 (오늘 피처 기준)
+    # noise_score 계산 → score 기반 레짐 이름 결정
     ns = float(compute_noise_score(daily_scaled)[0])
+    pred_phase, pred_name = score_to_regime_name(ns)
 
     today_str = str(datetime.date.today())
-    proba_dict = {PHASE_NAMES[ph]: round(proba_by_phase.get(ph, 0.0), 4) for ph in range(N_STATES)}
+    # HMM 4-state 확률을 2-레짐(일치/불일치)으로 합산
+    p_match = sum(proba_by_phase.get(ph, 0.0) for ph in (0, 1))
+    p_mismatch = sum(proba_by_phase.get(ph, 0.0) for ph in (2, 3))
+    proba_dict = {
+        '펀더멘털-주가 일치': round(p_match, 4),
+        '펀더멘털-주가 불일치': round(p_mismatch, 4),
+    }
 
     # 피처별 noise_score 기여도 계산
     noise_weights = [0.5, 0.3, 1.0, 0.0, 0.5, 2.0, 1.5, 2.0]
@@ -193,16 +212,15 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
     result = {
         'date': today_str,
         'regime_id': pred_phase,
-        'regime_name': PHASE_NAMES[pred_phase],
-        'regime_emoji': PHASE_EMOJIS[pred_phase],
+        'regime_name': pred_name,
+        'regime_emoji': PHASE_EMOJIS[hmm_phase],
         'noise_score': round(ns, 4),
         'probabilities': proba_dict,
         'feature_contributions': contributions,
         'feature_values': feature_values,
     }
 
-    print(f'[NoiseHMM] {today_str} → {PHASE_EMOJIS[pred_phase]} {PHASE_NAMES[pred_phase]} '
-          f'({proba_by_phase[pred_phase]*100:.0f}%)')
+    print(f'[NoiseHMM] {today_str} → {PHASE_EMOJIS[hmm_phase]} {pred_name} (score: {ns:.2f})')
 
     return result
 
@@ -322,10 +340,17 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
                 phase_id = state_to_phase[state_id]    # 국면 ID 변환
                 proba_by_phase[phase_id] = proba_by_phase.get(phase_id, 0.0) + float(prob)  # 누적
 
-            pred_phase = max(proba_by_phase, key=proba_by_phase.get)  # 최고 확률 국면
+            hmm_phase = max(proba_by_phase, key=proba_by_phase.get)  # HMM 예측 국면 (이모지용)
             ns = float(compute_noise_score(feat_scaled)[0])  # noise_score 계산
+            pred_phase, pred_name = score_to_regime_name(ns)  # score 기반 레짐 이름 결정
 
-            proba_dict = {PHASE_NAMES[ph]: round(proba_by_phase.get(ph, 0.0), 4) for ph in range(N_STATES)}  # 국면별 확률
+            # HMM 4-state 확률을 2-레짐(일치/불일치)으로 합산
+            p_match = sum(proba_by_phase.get(ph, 0.0) for ph in (0, 1))
+            p_mismatch = sum(proba_by_phase.get(ph, 0.0) for ph in (2, 3))
+            proba_dict = {
+                '펀더멘털-주가 일치': round(p_match, 4),
+                '펀더멘털-주가 불일치': round(p_mismatch, 4),
+            }
 
             # 피처 기여도 계산
             contributions = []                         # 기여도 리스트
@@ -346,8 +371,8 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
             records.append({                           # 결과 레코드 추가
                 'date': date_str,
                 'regime_id': pred_phase,
-                'regime_name': PHASE_NAMES[pred_phase],
-                'regime_emoji': PHASE_EMOJIS[pred_phase],
+                'regime_name': pred_name,
+                'regime_emoji': PHASE_EMOJIS[hmm_phase],
                 'noise_score': round(ns, 4),
                 'probabilities': proba_dict,
                 'feature_contributions': contributions,
