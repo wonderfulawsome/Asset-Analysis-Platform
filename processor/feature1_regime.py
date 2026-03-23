@@ -27,6 +27,22 @@ PHASE_NAMES = {
 }
 PHASE_EMOJIS = {0: '🧠', 1: '⚖️', 2: '🌊', 3: '🔥'}
 
+# noise_score 기반 레짐 분류 임계값 (상한, regime_id)
+# score < -1.5  → 펀더멘털 반영 (시그널 강함)
+# -1.5 ≤ score < 1.5 → 펀더멘털 약반영 (중립)
+# 1.5 ≤ score < 5.0  → 펀더멘털-주가 불일치 (노이즈 증가)
+# score ≥ 5.0        → 센티멘트 지배 (노이즈 지배)
+SCORE_THRESHOLDS = [(-1.5, 0), (1.5, 1), (5.0, 2)]
+
+
+def score_to_regime(noise_score: float) -> tuple:
+    """noise_score → (regime_id, regime_name, regime_emoji)"""
+    for threshold, rid in SCORE_THRESHOLDS:
+        if noise_score < threshold:
+            return rid, PHASE_NAMES[rid], PHASE_EMOJIS[rid]
+    return 3, PHASE_NAMES[3], PHASE_EMOJIS[3]
+
+
 FEATURE_NAMES = [
     'fundamental_gap', 'erp_zscore', 'residual_corr',
     'dispersion', 'amihud', 'vix_term', 'hy_spread',
@@ -165,10 +181,9 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
         phase_id = state_to_phase[state_id]
         proba_by_phase[phase_id] = proba_by_phase.get(phase_id, 0.0) + float(prob)
 
-    pred_phase = max(proba_by_phase, key=proba_by_phase.get)
-
-    # noise_score 계산 (오늘 피처 기준)
+    # noise_score 계산 (오늘 피처 기준) → score 기반 레짐 결정
     ns = float(compute_noise_score(daily_scaled)[0])
+    pred_phase, pred_name, pred_emoji = score_to_regime(ns)
 
     today_str = str(datetime.date.today())
     proba_dict = {PHASE_NAMES[ph]: round(proba_by_phase.get(ph, 0.0), 4) for ph in range(N_STATES)}
@@ -193,16 +208,15 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
     result = {
         'date': today_str,
         'regime_id': pred_phase,
-        'regime_name': PHASE_NAMES[pred_phase],
-        'regime_emoji': PHASE_EMOJIS[pred_phase],
+        'regime_name': pred_name,
+        'regime_emoji': pred_emoji,
         'noise_score': round(ns, 4),
         'probabilities': proba_dict,
         'feature_contributions': contributions,
         'feature_values': feature_values,
     }
 
-    print(f'[NoiseHMM] {today_str} → {PHASE_EMOJIS[pred_phase]} {PHASE_NAMES[pred_phase]} '
-          f'({proba_by_phase[pred_phase]*100:.0f}%)')
+    print(f'[NoiseHMM] {today_str} → {pred_emoji} {pred_name} (score: {ns:.2f})')
 
     return result
 
@@ -322,8 +336,8 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
                 phase_id = state_to_phase[state_id]    # 국면 ID 변환
                 proba_by_phase[phase_id] = proba_by_phase.get(phase_id, 0.0) + float(prob)  # 누적
 
-            pred_phase = max(proba_by_phase, key=proba_by_phase.get)  # 최고 확률 국면
             ns = float(compute_noise_score(feat_scaled)[0])  # noise_score 계산
+            pred_phase, pred_name, pred_emoji = score_to_regime(ns)  # score 기반 레짐 결정
 
             proba_dict = {PHASE_NAMES[ph]: round(proba_by_phase.get(ph, 0.0), 4) for ph in range(N_STATES)}  # 국면별 확률
 
@@ -346,8 +360,8 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
             records.append({                           # 결과 레코드 추가
                 'date': date_str,
                 'regime_id': pred_phase,
-                'regime_name': PHASE_NAMES[pred_phase],
-                'regime_emoji': PHASE_EMOJIS[pred_phase],
+                'regime_name': pred_name,
+                'regime_emoji': pred_emoji,
                 'noise_score': round(ns, 4),
                 'probabilities': proba_dict,
                 'feature_contributions': contributions,
