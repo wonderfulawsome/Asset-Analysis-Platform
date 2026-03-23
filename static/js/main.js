@@ -14,19 +14,19 @@ function lucideIcon(name, size, sw) {
 }
 
 // NR 국면 데이터 (API 한글 키 기반, 표시 텍스트는 i18n에서 처리)
-const NR_PHASES = ['펀더멘털 반영', '펀더멘털 약반영', '센티멘트 약반영', '센티멘트 지배']; // 국면 목록
-const NR_GAP_POS   = { '펀더멘털 반영': 12, '펀더멘털 약반영': 37, '센티멘트 약반영': 63, '센티멘트 지배': 88 }; // 갭바 위치
-const NR_GAP_COLOR = { '펀더멘털 반영': '#4CAF50', '펀더멘털 약반영': '#8BC34A', '센티멘트 약반영': '#FF9800', '센티멘트 지배': '#F44336' }; // 갭바 색상
+const NR_PHASES = ['펀더멘털 반영', '펀더멘털 약반영', '펀더멘털-주가 불일치', '센티멘트 지배']; // 국면 목록
+const NR_GAP_POS   = { '펀더멘털 반영': 12, '펀더멘털 약반영': 37, '펀더멘털-주가 불일치': 63, '센티멘트 지배': 88 }; // 갭바 위치
+const NR_GAP_COLOR = { '펀더멘털 반영': '#4CAF50', '펀더멘털 약반영': '#8BC34A', '펀더멘털-주가 불일치': '#FF9800', '센티멘트 지배': '#F44336' }; // 갭바 색상
 const NR_BADGE = {                                // 뱃지 스타일 (텍스트는 i18n)
   '펀더멘털 반영':   { cls: 'badge-green', icon: 'sun' },
   '펀더멘털 약반영': { cls: 'badge-yellow', icon: 'cloud' },
-  '센티멘트 약반영': { cls: 'badge-yellow', icon: 'cloudDrizzle' },
+  '펀더멘털-주가 불일치': { cls: 'badge-yellow', icon: 'cloudDrizzle' },
   '센티멘트 지배':   { cls: 'badge-red', icon: 'cloudLightning' },
 };
 const NR_ICON = {                                 // 아이콘 스타일
   '펀더멘털 반영':   { icon: 'sun',            color: '#10B981', softBg: 'rgba(16,185,129,0.1)' },
   '펀더멘털 약반영': { icon: 'cloud',          color: '#F59E0B', softBg: 'rgba(245,158,11,0.1)' },
-  '센티멘트 약반영': { icon: 'cloudDrizzle',   color: '#F97316', softBg: 'rgba(249,115,22,0.1)' },
+  '펀더멘털-주가 불일치': { icon: 'cloudDrizzle',   color: '#F97316', softBg: 'rgba(249,115,22,0.1)' },
   '센티멘트 지배':   { icon: 'cloudLightning', color: '#EF4444', softBg: 'rgba(239,68,68,0.1)' },
 };
 
