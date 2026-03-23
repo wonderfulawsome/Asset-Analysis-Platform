@@ -380,7 +380,9 @@ async function loadRegime() {
   if (!data) return;
 
   const name  = data.regime_name ?? '';              // API 한글 국면명
-  const pos   = NR_GAP_POS[name] ?? 50;             // 갭바 위치
+  // noise_score 기반 동적 위치 계산 (범위: 5%~95%)
+  const ns = data.noise_score ?? null;
+  const pos = ns != null ? Math.max(5, Math.min(95, ((ns + 2) / 12) * 100)) : (NR_GAP_POS[name] ?? 50);
   const color = NR_GAP_COLOR[name] ?? '#999';        // 갭바 색상
   const sub   = tNrSub(name);                        // 국면 설명 (i18n)
 
@@ -410,7 +412,7 @@ async function loadRegime() {
         <span>${t('nr.price')}</span>
       </div>
       <div class="nr-gap-track">
-        <div class="nr-gap-fill" style="width:${pos}%;background:${color}"></div>
+        <div class="nr-gap-fill" style="width:${pos}%;background:linear-gradient(to right,#4CAF50,#8BC34A,#FF9800,#F44336)"></div>
         <div class="nr-gap-dot" style="left:${pos}%;border-color:${color}"></div>
       </div>
       <div class="nr-gap-ticks">
