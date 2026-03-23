@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PASSIVE // ANALYTICS</title>
+  <title>PASSIVE // 분석 대시보드</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -508,11 +508,11 @@
     <div class="top-bar-left">
       <span class="top-bar-logo">PASSIVE</span>
       <span class="top-bar-sep">///</span>
-      <span class="top-bar-title">Analytics HUD</span>
+      <span class="top-bar-title">사용자 분석</span>
     </div>
     <div class="top-bar-right">
       <span class="top-bar-time" id="live-time"></span>
-      <a href="/" class="back-link">[ MAIN ]</a>
+      <a href="/" class="back-link">[ 메인 ]</a>
     </div>
   </div>
 
@@ -531,7 +531,7 @@
     <!-- Loading -->
     <div id="loading" class="loading">
       <div class="loading-spinner"></div>
-      INITIALIZING...
+      데이터 로딩중...
     </div>
 
     <!-- Stats content -->
@@ -539,43 +539,43 @@
 
       <!-- KPI -->
       <div class="section-header">
-        <span class="section-tag cyan">SYS::METRICS</span>
+        <span class="section-tag cyan">핵심::지표</span>
         <div class="section-line"></div>
       </div>
       <div class="kpi-grid">
         <div class="kpi-cell c-cyan fade-in">
-          <div class="kpi-label">DAU // Today</div>
+          <div class="kpi-label">오늘 // 방문자</div>
           <div class="kpi-row">
             <div class="kpi-value cyan" id="dau">0</div>
-            <span class="kpi-unit">usr</span>
+            <span class="kpi-unit">명</span>
           </div>
         </div>
         <div class="kpi-cell c-blue fade-in">
-          <div class="kpi-label">MAU // Month</div>
+          <div class="kpi-label">월간 // 방문자</div>
           <div class="kpi-row">
             <div class="kpi-value blue" id="mau">0</div>
-            <span class="kpi-unit">usr</span>
+            <span class="kpi-unit">명</span>
           </div>
         </div>
         <div class="kpi-cell c-green fade-in">
-          <div class="kpi-label">New // Acquired</div>
+          <div class="kpi-label">신규 // 유입</div>
           <div class="kpi-row">
             <div class="kpi-value green" id="new-users">0</div>
-            <span class="kpi-unit">new</span>
+            <span class="kpi-unit">명</span>
           </div>
         </div>
         <div class="kpi-cell c-magenta fade-in">
-          <div class="kpi-label">Ret // Returning</div>
+          <div class="kpi-label">재방문 // 복귀</div>
           <div class="kpi-row">
             <div class="kpi-value magenta" id="returning-users">0</div>
-            <span class="kpi-unit">ret</span>
+            <span class="kpi-unit">명</span>
           </div>
         </div>
       </div>
 
       <!-- Ratio -->
       <div class="section-header">
-        <span class="section-tag green">USR::RATIO</span>
+        <span class="section-tag green">신규::재방문 비율</span>
         <div class="section-line"></div>
       </div>
       <div class="hud-panel fade-in">
@@ -586,18 +586,18 @@
         <div class="ratio-legend">
           <div class="ratio-legend-item">
             <span class="ratio-dot new"></span>
-            NEW <span class="ratio-count" id="ratio-new-pct">0%</span>
+            신규 <span class="ratio-count" id="ratio-new-pct">0%</span>
           </div>
           <div class="ratio-legend-item">
             <span class="ratio-dot ret"></span>
-            RET <span class="ratio-count" id="ratio-ret-pct">0%</span>
+            재방문 <span class="ratio-count" id="ratio-ret-pct">0%</span>
           </div>
         </div>
       </div>
 
       <!-- 7-day chart -->
       <div class="section-header">
-        <span class="section-tag magenta">DAU::7D_TREND</span>
+        <span class="section-tag magenta">7일간::방문 추이</span>
         <div class="section-line"></div>
       </div>
       <div class="hud-panel fade-in">
@@ -608,7 +608,7 @@
       <div class="status-row fade-in">
         <div class="status-item">
           <span class="status-dot"></span>
-          <span class="status-live">ONLINE</span>
+          <span class="status-live">실시간</span>
         </div>
         <div class="status-item" id="last-update" style="letter-spacing:0.5px"></div>
       </div>
@@ -651,10 +651,10 @@
       return `${y}-${m}`;
     }
     function formatDisplay(d) {
-      const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+      const days = ['일','월','화','수','목','금','토'];
       const m = String(d.getMonth()+1).padStart(2,'0');
       const day = String(d.getDate()).padStart(2,'0');
-      return `${d.getFullYear()}.${m}.${day} // ${days[d.getDay()]}`;
+      return `${d.getFullYear()}.${m}.${day} // ${days[d.getDay()]}요일`;
     }
 
     function updateDateUI() {
@@ -695,7 +695,7 @@
           const h = String(kst.getUTCHours()).padStart(2,'0');
           const mi = String(kst.getUTCMinutes()).padStart(2,'0');
           const s = String(kst.getUTCSeconds()).padStart(2,'0');
-          lastUp.textContent = `UPD ${h}:${mi}:${s}`;
+          lastUp.textContent = `갱신 ${h}:${mi}:${s}`;
         }
 
         loading.style.display = 'none';
@@ -703,7 +703,7 @@
 
         load7DayChart();
       } catch (err) {
-        loading.innerHTML = '<div style="color:var(--red);font-size:11px;letter-spacing:1px">ERR::FETCH_FAILED</div><div style="margin-top:6px;font-size:9px;color:var(--sub)">' + err.message + '</div>';
+        loading.innerHTML = '<div style="color:var(--red);font-size:11px;letter-spacing:1px">오류::데이터 로드 실패</div><div style="margin-top:6px;font-size:9px;color:var(--sub)">' + err.message + '</div>';
       }
     }
 
@@ -753,7 +753,7 @@
       }));
 
       const maxDau = Math.max(...results.map(r => r.dau), 1);
-      const dayNames = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+      const dayNames = ['일','월','화','수','목','금','토'];
 
       results.forEach((r, idx) => {
         const col = document.createElement('div');
