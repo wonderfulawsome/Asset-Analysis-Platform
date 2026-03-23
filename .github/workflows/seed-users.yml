@@ -1,4 +1,4 @@
-name: Delete 24 dummy users
+name: Delete 21 dummy users
 
 on:
   workflow_dispatch:
