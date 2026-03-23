@@ -148,3 +148,17 @@ ALTER TABLE crash_surge_result ADD COLUMN IF NOT EXISTS feature_importance JSONB
 
 ALTER TABLE noise_regime ADD COLUMN IF NOT EXISTS feature_contributions JSONB;
 ALTER TABLE noise_regime ADD COLUMN IF NOT EXISTS feature_values JSONB;
+
+-- 10. 사용자 방문 추적 테이블
+CREATE TABLE IF NOT EXISTS user_visit (
+    id           BIGSERIAL PRIMARY KEY,
+    user_hash    TEXT NOT NULL,
+    visit_date   DATE NOT NULL DEFAULT CURRENT_DATE,
+    is_new       BOOLEAN DEFAULT FALSE,
+    created_at   TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (user_hash, visit_date)
+);
+
+-- 사용자 최초 등장 여부를 빠르게 확인하기 위한 인덱스
+CREATE INDEX IF NOT EXISTS idx_user_visit_hash ON user_visit (user_hash);
+CREATE INDEX IF NOT EXISTS idx_user_visit_date ON user_visit (visit_date);

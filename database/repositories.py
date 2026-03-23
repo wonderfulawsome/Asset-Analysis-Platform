@@ -472,4 +472,114 @@ def fetch_chart_predict(ticker: str) -> Optional[dict]:
     return row
 
 
+# ── user_visit ──────────────────────────────────────────
+
+def track_user_visit(user_hash: str, visit_date: str) -> dict:
+    """사용자 방문을 기록하고 신규/재방문 여부를 반환합니다.
+    Returns: {"is_new": bool, "user_hash": str, "visit_date": str}
+    """
+    client = get_client()
+    # 해당 해시가 DB에 이미 존재하는지 확인 (과거 어떤 날짜든)
+    existing = (
+        client.table("user_visit")
+        .select("id")
+        .eq("user_hash", user_hash)
+        .limit(1)
+        .execute()
+    )
+    is_new = len(existing.data) == 0
+
+    # 오늘 방문 기록 upsert (같은 날 중복 방문은 무시)
+    record = {"user_hash": user_hash, "visit_date": visit_date, "is_new": is_new}
+    client.table("user_visit").upsert(record, on_conflict="user_hash,visit_date").execute()
+    print(f"[DB] user_visit {user_hash[:8]}... ({visit_date}) {'신규' if is_new else '재방문'}")
+    return record
+
+
+def fetch_dau(date: str) -> int:
+    """특정 날짜의 DAU(일간 활성 사용자 수)를 반환합니다."""
+    client = get_client()
+    response = (
+        client.table("user_visit")
+        .select("user_hash")
+        .eq("visit_date", date)
+        .execute()
+    )
+    return len(response.data)
+
+
+def fetch_mau(year_month: str) -> int:
+    """특정 월의 MAU(월간 활성 사용자 수)를 반환합니다.
+    year_month: 'YYYY-MM' 형식 (예: '2026-03')
+    """
+    client = get_client()
+    start_date = f"{year_month}-01"
+    # 월 말일 계산: 다음 달 1일 전날
+    year, month = map(int, year_month.split("-"))
+    if month == 12:
+        end_date = f"{year + 1}-01-01"
+    else:
+        end_date = f"{year}-{month + 1:02d}-01"
+    response = (
+        client.table("user_visit")
+        .select("user_hash")
+        .gte("visit_date", start_date)
+        .lt("visit_date", end_date)
+        .execute()
+    )
+    # 고유 해시 수 계산
+    unique_hashes = set(r["user_hash"] for r in response.data)
+    return len(unique_hashes)
+
+
+def fetch_user_stats(date: str, year_month: str) -> dict:
+    """DAU, MAU, 신규/재방문 사용자 수를 한번에 조회합니다."""
+    client = get_client()
+
+    # DAU: 해당 날짜의 고유 사용자
+    dau_resp = (
+        client.table("user_visit")
+        .select("user_hash")
+        .eq("visit_date", date)
+        .execute()
+    )
+    dau = len(dau_resp.data)
+
+    # 당일 신규 사용자 수
+    new_resp = (
+        client.table("user_visit")
+        .select("user_hash")
+        .eq("visit_date", date)
+        .eq("is_new", True)
+        .execute()
+    )
+    new_users = len(new_resp.data)
+
+    # MAU: 해당 월의 고유 사용자
+    start_date = f"{year_month}-01"
+    year, month = map(int, year_month.split("-"))
+    if month == 12:
+        end_date = f"{year + 1}-01-01"
+    else:
+        end_date = f"{year}-{month + 1:02d}-01"
+    mau_resp = (
+        client.table("user_visit")
+        .select("user_hash")
+        .gte("visit_date", start_date)
+        .lt("visit_date", end_date)
+        .execute()
+    )
+    unique_hashes = set(r["user_hash"] for r in mau_resp.data)
+    mau = len(unique_hashes)
+
+    return {
+        "date": date,
+        "year_month": year_month,
+        "dau": dau,
+        "mau": mau,
+        "new_users": new_users,
+        "returning_users": dau - new_users,
+    }
+
+
 ############ Supabase DB의 각 테이블에 데이터를 저장(upsert)하고 조회(fetch)하는 함수들을 모아놓은 파일

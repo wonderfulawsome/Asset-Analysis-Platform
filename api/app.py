@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware        # CORS 미들웨어 (�
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
-from api.routers import regime, macro, index_feed, sector_cycle, crash_surge, market_summary, chart
+from api.routers import regime, macro, index_feed, sector_cycle, crash_surge, market_summary, chart, tracking
 from scheduler.job import run_pipeline
 
 
@@ -52,6 +52,7 @@ app.include_router(sector_cycle.router,  prefix='/api/sector-cycle', tags=['섹�
 app.include_router(crash_surge.router,  prefix='/api/crash-surge',  tags=['폭락/급등 전조'])
 app.include_router(market_summary.router, prefix='/api/market-summary', tags=['마켓 오버뷰'])
 app.include_router(chart.router, prefix='/api/chart', tags=['차트'])
+app.include_router(tracking.router, prefix='/api/tracking', tags=['사용자 추적'])
 
 # GET / 요청이 오면 index.html을 렌더링해서 반환
 @app.get('/')
