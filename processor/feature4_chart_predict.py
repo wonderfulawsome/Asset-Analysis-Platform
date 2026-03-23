@@ -110,6 +110,16 @@ def _train_models(X, y):
     return models
 
 
+def _safe_float(v):
+    """NaN/Inf를 None으로 변환하여 JSON 직렬화 안전하게 처리."""
+    if v is None:
+        return None
+    f = float(v)
+    if np.isnan(f) or np.isinf(f):
+        return None
+    return f
+
+
 def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
     """5-모델 평균 앙상블 재귀 예측."""
     hist = close_history.copy()
@@ -120,8 +130,14 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
         feat = build_features_v2(hist)
         last_feat = feat.iloc[[-1]][feature_cols].values
 
+        # NaN 피처를 0으로 대체하여 예측 안정성 확보
+        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
+
         preds = [m.predict(last_feat)[0] for m in models]
         pred_ret = np.mean(preds) * 3.0  # 변동성 3배 증폭
+
+        # 비정상 수익률 클램핑 (일일 ±50% 제한)
+        pred_ret = np.clip(pred_ret, -0.5, 0.5)
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
@@ -133,9 +149,9 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
         next_date = last_date + pd.tseries.offsets.BDay(k)
         predictions.append({
             'date': str(next_date.date()),
-            'yhat': round(next_price, 2),
-            'lower': round(lower, 2),
-            'upper': round(upper, 2),
+            'yhat': _safe_float(round(next_price, 2)),
+            'lower': _safe_float(round(lower, 2)),
+            'upper': _safe_float(round(upper, 2)),
         })
         hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
 
