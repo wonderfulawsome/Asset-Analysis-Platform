@@ -336,36 +336,6 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    /* ── Purge button ── */
-    .purge-section {
-      text-align: center;
-      margin-top: 8px;
-    }
-    .purge-btn {
-      background: rgba(255,59,48,0.1);
-      border: 1px solid rgba(255,59,48,0.3);
-      border-radius: 12px;
-      color: var(--red);
-      font-size: 14px;
-      font-weight: 600;
-      padding: 12px 24px;
-      cursor: pointer;
-      font-family: inherit;
-      transition: all 0.2s;
-    }
-    .purge-btn:hover {
-      background: rgba(255,59,48,0.2);
-    }
-    .purge-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    .purge-result {
-      margin-top: 10px;
-      font-size: 13px;
-      color: var(--sub);
-    }
-
     /* ── Back link ── */
     .back-link {
       display: inline-flex;
@@ -487,24 +457,30 @@
         </div>
       </div>
 
-      <!-- Admin: purge dummy -->
-      <div class="purge-section">
-        <button class="purge-btn" id="purge-btn">더미 유저 21명 삭제</button>
-        <div class="purge-result" id="purge-result"></div>
-      </div>
-
     </div>
   </div>
 
   <script>
     const API_BASE = '/api/tracking';
-    let currentDate = new Date();
+
+    // KST(한국 시간) 기준 오늘 날짜
+    function getKSTToday() {
+      const now = new Date();
+      const kst = new Date(now.getTime() + (9 * 60 * 60 * 1000)); // UTC+9
+      return new Date(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate());
+    }
+    let currentDate = getKSTToday();
 
     function formatDate(d) {
-      return d.toISOString().split('T')[0];
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     }
     function formatMonth(d) {
-      return d.toISOString().slice(0, 7);
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      return `${y}-${m}`;
     }
     function formatDisplay(d) {
       const days = ['일', '월', '화', '수', '목', '금', '토'];
@@ -641,9 +617,8 @@
       fetchStats();
     });
     document.getElementById('next-day').addEventListener('click', () => {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      if (currentDate < tomorrow) {
+      const today = getKSTToday();
+      if (currentDate < today) {
         currentDate.setDate(currentDate.getDate() + 1);
         updateDateUI();
         fetchStats();
@@ -654,26 +629,6 @@
       fetchStats().finally(() => {
         setTimeout(() => this.classList.remove('spinning'), 500);
       });
-    });
-
-    // Purge dummy users
-    document.getElementById('purge-btn').addEventListener('click', async function() {
-      if (!confirm('더미 유저 21명을 삭제하시겠습니까?')) return;
-      this.disabled = true;
-      this.textContent = '삭제 중...';
-      const result = document.getElementById('purge-result');
-      try {
-        const resp = await fetch(`${API_BASE}/purge-dummy?count=21`, { method: 'DELETE' });
-        const data = await resp.json();
-        result.textContent = data.message || JSON.stringify(data);
-        result.style.color = data.error ? 'var(--red)' : 'var(--green)';
-        fetchStats(); // 새로고침
-      } catch (err) {
-        result.textContent = '삭제 실패: ' + err.message;
-        result.style.color = 'var(--red)';
-      }
-      this.textContent = '더미 유저 21명 삭제';
-      this.disabled = false;
     });
 
     // Init
