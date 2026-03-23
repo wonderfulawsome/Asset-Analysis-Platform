@@ -64,6 +64,11 @@ if tracking:
 def root(request: Request):
     return templates.TemplateResponse(request=request, name='index.html')
 
+# 사용자 통계 대시보드 페이지
+@app.get('/stats')
+def stats_page(request: Request):
+    return templates.TemplateResponse(request=request, name='stats.html')
+
 # 사이트 도메인 (sitemap, robots.txt에서 사용)
 SITE_URL = 'https://passive-financial-data-analysis-production.up.railway.app'
 

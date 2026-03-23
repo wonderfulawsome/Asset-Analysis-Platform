@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Passive — User Stats</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #000000;
+      --card: #111114;
+      --card-hover: #19191d;
+      --border: rgba(255,255,255,0.06);
+      --text: #E8E8EC;
+      --sub: #7A7A80;
+      --accent: #FF8C00;
+      --accent-glow: rgba(255,140,0,0.15);
+      --green: #00D26A;
+      --red: #FF3B30;
+      --blue: #3B82F6;
+      --purple: #8B5CF6;
+      --radius: 16px;
+    }
+
+    body {
+      font-family: 'Pretendard Variable', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 0;
+    }
+
+    /* ── Top gradient ── */
+    .top-glow {
+      position: fixed;
+      top: -120px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 600px;
+      height: 300px;
+      background: radial-gradient(ellipse, var(--accent-glow) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Container ── */
+    .container {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 48px 20px 60px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── Header ── */
+    .header {
+      margin-bottom: 32px;
+    }
+    .header-label {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .header-title {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 6px;
+    }
+    .header-date {
+      font-size: 14px;
+      color: var(--sub);
+    }
+
+    /* ── Date nav ── */
+    .date-nav {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 16px;
+    }
+    .date-nav button {
+      background: none;
+      border: none;
+      color: var(--sub);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 8px;
+      transition: all 0.2s;
+      line-height: 1;
+    }
+    .date-nav button:hover {
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+    }
+    .date-nav-label {
+      flex: 1;
+      text-align: center;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: var(--radius) var(--radius) 0 0;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .stat-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,0.1);
+      background: var(--card-hover);
+    }
+    .stat-card:hover::before {
+      opacity: 1;
+    }
+    .stat-card.accent-orange::before { background: var(--accent); }
+    .stat-card.accent-blue::before { background: var(--blue); }
+    .stat-card.accent-green::before { background: var(--green); }
+    .stat-card.accent-purple::before { background: var(--purple); }
+
+    .stat-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      margin-bottom: 14px;
+    }
+    .stat-icon.orange { background: rgba(255,140,0,0.12); }
+    .stat-icon.blue { background: rgba(59,130,246,0.12); }
+    .stat-icon.green { background: rgba(0,210,106,0.12); }
+    .stat-icon.purple { background: rgba(139,92,246,0.12); }
+
+    .stat-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--sub);
+      margin-bottom: 6px;
+      letter-spacing: 0.3px;
+    }
+    .stat-value {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+    }
+    .stat-value.orange { color: var(--accent); }
+    .stat-value.blue { color: var(--blue); }
+    .stat-value.green { color: var(--green); }
+    .stat-value.purple { color: var(--purple); }
+
+    /* ── Full-width card ── */
+    .wide-card {
+      grid-column: 1 / -1;
+    }
+
+    /* ── Ratio bar ── */
+    .ratio-section {
+      margin-bottom: 24px;
+    }
+    .ratio-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .ratio-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--sub);
+      margin-bottom: 16px;
+      letter-spacing: 0.3px;
+    }
+    .ratio-bar-wrap {
+      height: 12px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.04);
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 14px;
+    }
+    .ratio-bar-new {
+      background: linear-gradient(90deg, var(--green), #34D399);
+      height: 100%;
+      border-radius: 6px 0 0 6px;
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .ratio-bar-return {
+      background: linear-gradient(90deg, var(--blue), #60A5FA);
+      height: 100%;
+      border-radius: 0 6px 6px 0;
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .ratio-legend {
+      display: flex;
+      justify-content: space-between;
+    }
+    .ratio-legend-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--sub);
+    }
+    .ratio-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    .ratio-dot.new { background: var(--green); }
+    .ratio-dot.ret { background: var(--blue); }
+    .ratio-count {
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    /* ── Weekly chart ── */
+    .chart-section {
+      margin-bottom: 24px;
+    }
+    .chart-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .chart-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--sub);
+      margin-bottom: 16px;
+      letter-spacing: 0.3px;
+    }
+    .chart-bars {
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      height: 120px;
+    }
+    .chart-bar-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      height: 100%;
+      justify-content: flex-end;
+    }
+    .chart-bar {
+      width: 100%;
+      border-radius: 6px 6px 4px 4px;
+      background: linear-gradient(180deg, var(--accent), rgba(255,140,0,0.4));
+      min-height: 4px;
+      transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .chart-bar.today {
+      background: linear-gradient(180deg, #FF8C00, #FF6B00);
+      box-shadow: 0 0 12px rgba(255,140,0,0.3);
+    }
+    .chart-bar-label {
+      font-size: 11px;
+      color: var(--sub);
+      font-weight: 600;
+    }
+    .chart-bar-value {
+      font-size: 11px;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    /* ── Loading / Error ── */
+    .loading {
+      text-align: center;
+      padding: 60px 0;
+      color: var(--sub);
+      font-size: 14px;
+    }
+    .loading-spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 12px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* ── Fade in animation ── */
+    .fade-in {
+      opacity: 0;
+      transform: translateY(12px);
+      animation: fadeUp 0.5s ease forwards;
+    }
+    .fade-in:nth-child(1) { animation-delay: 0.05s; }
+    .fade-in:nth-child(2) { animation-delay: 0.1s; }
+    .fade-in:nth-child(3) { animation-delay: 0.15s; }
+    .fade-in:nth-child(4) { animation-delay: 0.2s; }
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Back link ── */
+    .back-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--sub);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      transition: color 0.2s;
+    }
+    .back-link:hover {
+      color: var(--text);
+    }
+
+    /* ── Refresh button ── */
+    .refresh-btn {
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--sub);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 6px 10px;
+      transition: all 0.2s;
+      line-height: 1;
+    }
+    .refresh-btn:hover {
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+    }
+    .refresh-btn.spinning svg {
+      animation: spin 0.8s linear infinite;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-glow"></div>
+
+  <div class="container">
+    <a href="/" class="back-link">← Passive</a>
+
+    <div class="header">
+      <div class="header-label">Analytics Dashboard</div>
+      <h1 class="header-title">사용자 통계</h1>
+      <div class="header-date" id="header-date"></div>
+    </div>
+
+    <!-- Date navigation -->
+    <div class="date-nav">
+      <button id="prev-day" title="이전 날짜">‹</button>
+      <span class="date-nav-label" id="date-label"></span>
+      <button id="next-day" title="다음 날짜">›</button>
+      <button class="refresh-btn" id="refresh-btn" title="새로고침">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1v5h5"/><path d="M1 6C2.1 3.2 4.8 1.3 8 1.3c3.7 0 6.7 3 6.7 6.7s-3 6.7-6.7 6.7c-2.7 0-5-1.6-6.1-3.9"/></svg>
+      </button>
+    </div>
+
+    <!-- Loading -->
+    <div id="loading" class="loading">
+      <div class="loading-spinner"></div>
+      데이터를 불러오는 중...
+    </div>
+
+    <!-- Stats content (hidden initially) -->
+    <div id="stats-content" style="display:none;">
+
+      <!-- KPI cards -->
+      <div class="stats-grid">
+        <div class="stat-card accent-orange fade-in">
+          <div class="stat-icon orange">👤</div>
+          <div class="stat-label">오늘 방문자 (DAU)</div>
+          <div class="stat-value orange" id="dau">0</div>
+        </div>
+        <div class="stat-card accent-blue fade-in">
+          <div class="stat-icon blue">📊</div>
+          <div class="stat-label">월간 방문자 (MAU)</div>
+          <div class="stat-value blue" id="mau">0</div>
+        </div>
+        <div class="stat-card accent-green fade-in">
+          <div class="stat-icon green">🆕</div>
+          <div class="stat-label">신규 사용자</div>
+          <div class="stat-value green" id="new-users">0</div>
+        </div>
+        <div class="stat-card accent-purple fade-in">
+          <div class="stat-icon purple">🔄</div>
+          <div class="stat-label">재방문 사용자</div>
+          <div class="stat-value purple" id="returning-users">0</div>
+        </div>
+      </div>
+
+      <!-- Ratio bar -->
+      <div class="ratio-section">
+        <div class="ratio-card fade-in">
+          <div class="ratio-title">신규 vs 재방문 비율</div>
+          <div class="ratio-bar-wrap">
+            <div class="ratio-bar-new" id="ratio-new" style="width:0%"></div>
+            <div class="ratio-bar-return" id="ratio-return" style="width:0%"></div>
+          </div>
+          <div class="ratio-legend">
+            <div class="ratio-legend-item">
+              <span class="ratio-dot new"></span>
+              신규 <span class="ratio-count" id="ratio-new-pct">0%</span>
+            </div>
+            <div class="ratio-legend-item">
+              <span class="ratio-dot ret"></span>
+              재방문 <span class="ratio-count" id="ratio-ret-pct">0%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 7-day bar chart -->
+      <div class="chart-section">
+        <div class="chart-card fade-in">
+          <div class="chart-title">최근 7일 DAU 추이</div>
+          <div class="chart-bars" id="chart-bars"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/tracking';
+    let currentDate = new Date();
+
+    function formatDate(d) {
+      return d.toISOString().split('T')[0];
+    }
+    function formatMonth(d) {
+      return d.toISOString().slice(0, 7);
+    }
+    function formatDisplay(d) {
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      return `${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}. (${days[d.getDay()]})`;
+    }
+
+    function updateDateUI() {
+      document.getElementById('date-label').textContent = formatDisplay(currentDate);
+      document.getElementById('header-date').textContent = formatMonth(currentDate) + ' 기준';
+    }
+
+    async function fetchStats() {
+      const loading = document.getElementById('loading');
+      const content = document.getElementById('stats-content');
+      loading.style.display = '';
+      content.style.display = 'none';
+
+      try {
+        const d = formatDate(currentDate);
+        const m = formatMonth(currentDate);
+        const resp = await fetch(`${API_BASE}/stats?d=${d}&m=${m}`);
+        const data = await resp.json();
+
+        document.getElementById('dau').textContent = data.dau ?? 0;
+        document.getElementById('mau').textContent = data.mau ?? 0;
+        document.getElementById('new-users').textContent = data.new_users ?? 0;
+        document.getElementById('returning-users').textContent = data.returning_users ?? 0;
+
+        // Ratio bar
+        const total = (data.new_users || 0) + (data.returning_users || 0);
+        const newPct = total > 0 ? Math.round((data.new_users / total) * 100) : 0;
+        const retPct = total > 0 ? 100 - newPct : 0;
+        document.getElementById('ratio-new').style.width = newPct + '%';
+        document.getElementById('ratio-return').style.width = retPct + '%';
+        document.getElementById('ratio-new-pct').textContent = newPct + '%';
+        document.getElementById('ratio-ret-pct').textContent = retPct + '%';
+
+        // Animate numbers
+        animateNumbers(data);
+
+        loading.style.display = 'none';
+        content.style.display = '';
+
+        // Load 7-day chart
+        load7DayChart();
+      } catch (err) {
+        loading.innerHTML = '<div style="color:var(--red)">데이터 로드 실패</div><div style="margin-top:8px;font-size:12px;color:var(--sub)">' + err.message + '</div>';
+      }
+    }
+
+    function animateNumbers(data) {
+      const targets = [
+        { id: 'dau', val: data.dau ?? 0 },
+        { id: 'mau', val: data.mau ?? 0 },
+        { id: 'new-users', val: data.new_users ?? 0 },
+        { id: 'returning-users', val: data.returning_users ?? 0 },
+      ];
+      targets.forEach(t => {
+        const el = document.getElementById(t.id);
+        let start = 0;
+        const end = t.val;
+        if (end === 0) { el.textContent = '0'; return; }
+        const duration = 600;
+        const startTime = performance.now();
+        function tick(now) {
+          const elapsed = now - startTime;
+          const progress = Math.min(elapsed / duration, 1);
+          const ease = 1 - Math.pow(1 - progress, 3);
+          el.textContent = Math.round(ease * end).toLocaleString();
+          if (progress < 1) requestAnimationFrame(tick);
+        }
+        requestAnimationFrame(tick);
+      });
+    }
+
+    async function load7DayChart() {
+      const container = document.getElementById('chart-bars');
+      container.innerHTML = '';
+      const days = [];
+
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(currentDate);
+        d.setDate(d.getDate() - i);
+        days.push(d);
+      }
+
+      const results = await Promise.all(days.map(async (d) => {
+        try {
+          const resp = await fetch(`${API_BASE}/stats?d=${formatDate(d)}&m=${formatMonth(d)}`);
+          const data = await resp.json();
+          return { date: d, dau: data.dau ?? 0 };
+        } catch {
+          return { date: d, dau: 0 };
+        }
+      }));
+
+      const maxDau = Math.max(...results.map(r => r.dau), 1);
+      const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+
+      results.forEach((r, idx) => {
+        const col = document.createElement('div');
+        col.className = 'chart-bar-col';
+
+        const val = document.createElement('div');
+        val.className = 'chart-bar-value';
+        val.textContent = r.dau;
+
+        const bar = document.createElement('div');
+        bar.className = 'chart-bar' + (idx === results.length - 1 ? ' today' : '');
+        bar.style.height = '0%';
+
+        const label = document.createElement('div');
+        label.className = 'chart-bar-label';
+        label.textContent = dayNames[r.date.getDay()];
+
+        col.appendChild(val);
+        col.appendChild(bar);
+        col.appendChild(label);
+        container.appendChild(col);
+
+        // Animate bar height
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            bar.style.height = Math.max((r.dau / maxDau) * 100, 4) + '%';
+          }, idx * 80);
+        });
+      });
+    }
+
+    // Navigation
+    document.getElementById('prev-day').addEventListener('click', () => {
+      currentDate.setDate(currentDate.getDate() - 1);
+      updateDateUI();
+      fetchStats();
+    });
+    document.getElementById('next-day').addEventListener('click', () => {
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      if (currentDate < tomorrow) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        updateDateUI();
+        fetchStats();
+      }
+    });
+    document.getElementById('refresh-btn').addEventListener('click', function() {
+      this.classList.add('spinning');
+      fetchStats().finally(() => {
+        setTimeout(() => this.classList.remove('spinning'), 500);
+      });
+    });
+
+    // Init
+    updateDateUI();
+    fetchStats();
+  </script>
+</body>
+</html>
