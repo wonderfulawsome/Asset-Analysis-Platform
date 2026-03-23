@@ -98,15 +98,32 @@ def _is_prediction_valid(predicted):
     return len(valid) >= 5  # 최소 5개 유효 포인트
 
 
-# 예측 재생성 락 (동시 요청 방지)
-_predict_lock = threading.Lock()
+# 백그라운드 재생성 상태 관리
 _predict_running = set()
+
+
+def _regenerate_in_background(ticker: str):
+    """백그라운드 스레드에서 예측 데이터를 재생성한다."""
+    try:
+        from processor.feature4_chart_predict import run_chart_predict_single
+        from database.repositories import upsert_chart_predict
+        print(f'[Chart] {ticker} 백그라운드 예측 재생성 시작...')
+        rec = run_chart_predict_single(ticker)
+        if rec:
+            upsert_chart_predict(rec)
+            print(f'[Chart] {ticker} 백그라운드 예측 재생성 완료')
+        else:
+            print(f'[Chart] {ticker} 백그라운드 예측 재생성 실패: 데이터 없음')
+    except Exception as e:
+        print(f'[Chart] {ticker} 백그라운드 예측 재생성 실패: {e}')
+    finally:
+        _predict_running.discard(ticker)
 
 
 @router.get('/predict')
 def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
     """Prophet 30일 예측 결과를 DB에서 조회 (스케줄러가 3시간마다 갱신)"""
-    from database.repositories import fetch_chart_predict, upsert_chart_predict
+    from database.repositories import fetch_chart_predict
 
     ticker = ticker.upper()
     if ticker not in CHART_TICKERS:
@@ -114,35 +131,20 @@ def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
 
     result = fetch_chart_predict(ticker)
 
-    # DB 데이터 유효성 검증 → 깨졌으면 즉시 재생성
+    # DB 데이터 유효성 검증
     if result is not None:
         sanitized_pred = _sanitize_floats(result.get('predicted', []))
         if not _is_prediction_valid(sanitized_pred):
-            print(f'[Chart] {ticker} 예측 데이터 손상 감지, 재생성 시도...')
-            result = None  # 아래에서 재생성 트리거
+            print(f'[Chart] {ticker} 예측 데이터 손상 감지')
+            result = None
 
     if result is None:
-        # DB에 없거나 데이터 손상 → 즉시 재생성 시도
-        with _predict_lock:
-            if ticker in _predict_running:
-                return {'error': 'prediction is being regenerated, please retry shortly'}
+        # 백그라운드에서 재생성 트리거 (사용자는 기다리지 않음)
+        if ticker not in _predict_running:
             _predict_running.add(ticker)
-        try:
-            from processor.feature4_chart_predict import run_chart_predict_single
-            print(f'[Chart] {ticker} 예측 재생성 중...')
-            rec = run_chart_predict_single(ticker)
-            if rec:
-                upsert_chart_predict(rec)
-                result = fetch_chart_predict(ticker)
-                print(f'[Chart] {ticker} 예측 재생성 완료')
-            else:
-                return {'error': 'prediction generation failed'}
-        except Exception as e:
-            print(f'[Chart] {ticker} 예측 재생성 실패: {e}')
-            return {'error': 'prediction generation failed'}
-        finally:
-            with _predict_lock:
-                _predict_running.discard(ticker)
+            threading.Thread(target=_regenerate_in_background, args=(ticker,),
+                             daemon=True).start()
+        return {'error': 'prediction is being prepared, please retry in a moment'}
 
     return {
         'ticker': result['ticker'],
