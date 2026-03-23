@@ -14,3 +14,64 @@ def get_current():
 def get_history(days: int = 30):
     """최근 N일 국면 히스토리."""
     return fetch_noise_regime_history(days)
+
+
+@router.get('/score-distribution')
+def get_score_distribution():
+    """noise_score 전체 분포 통계 (게이지 기준점 튜닝용)."""
+    import numpy as np
+
+    records = fetch_noise_regime_history(days=1000)
+    scores = [r['noise_score'] for r in records
+              if r.get('noise_score') is not None]
+
+    if not scores:
+        return {'error': 'no data'}
+
+    arr = np.array(scores)
+
+    # 국면별 분류
+    by_regime = {}
+    for r in records:
+        ns = r.get('noise_score')
+        name = r.get('regime_name')
+        if ns is not None and name:
+            by_regime.setdefault(name, []).append(ns)
+
+    regime_stats = {}
+    for name, vals in by_regime.items():
+        a = np.array(vals)
+        regime_stats[name] = {
+            'count': len(a),
+            'min': round(float(a.min()), 4),
+            'max': round(float(a.max()), 4),
+            'mean': round(float(a.mean()), 4),
+            'median': round(float(np.median(a)), 4),
+        }
+
+    percentiles = {}
+    for p in [1, 5, 10, 25, 50, 75, 90, 95, 99]:
+        percentiles[f'P{p:02d}'] = round(float(np.percentile(arr, p)), 4)
+
+    # 히스토그램 (0.5 간격)
+    lo = float(int(arr.min()) - 1)
+    hi = float(int(arr.max()) + 2)
+    bins = np.arange(lo, hi + 0.5, 0.5)
+    hist, edges = np.histogram(arr, bins=bins)
+    histogram = [{'range': f'[{edges[i]:.1f}, {edges[i+1]:.1f})', 'count': int(hist[i])}
+                 for i in range(len(hist)) if hist[i] > 0]
+
+    return {
+        'total_count': len(arr),
+        'min': round(float(arr.min()), 4),
+        'max': round(float(arr.max()), 4),
+        'mean': round(float(arr.mean()), 4),
+        'median': round(float(np.median(arr)), 4),
+        'std': round(float(arr.std()), 4),
+        'percentiles': percentiles,
+        'by_regime': regime_stats,
+        'histogram': histogram,
+        'current_config': {'gauge_min': -2, 'gauge_mid': 2.5, 'gauge_max': 7},
+        'all_scores': [{'date': r['date'], 'score': r['noise_score'], 'regime': r.get('regime_name')}
+                       for r in records if r.get('noise_score') is not None],
+    }
