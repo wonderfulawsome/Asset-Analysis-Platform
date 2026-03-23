@@ -3,25 +3,28 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Passive — User Stats</title>
+  <title>PASSIVE // ANALYTICS</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0A0E17;
-      --panel: #0F1923;
-      --panel-alt: #121D2B;
-      --border: #1C2B3A;
-      --border-light: #253546;
-      --text: #D1D5DB;
-      --text-bright: #F1F5F9;
-      --sub: #6B7B8D;
-      --orange: #FF8C00;
-      --green: #00D26A;
-      --blue: #3B82F6;
-      --red: #FF3B30;
-      --cyan: #22D3EE;
-      --amber: #FBBF24;
+      --bg: #05080F;
+      --panel: #0A0F1A;
+      --panel-alt: #0E1524;
+      --border: #0ff3;
+      --border-dim: #0ff1;
+      --text: #C8D6E5;
+      --text-bright: #E0F7FA;
+      --sub: #4A6A7A;
+      --cyan: #00F0FF;
+      --magenta: #FF00AA;
+      --orange: #FF6A00;
+      --green: #00FF9C;
+      --red: #FF2255;
+      --blue: #4488FF;
+      --yellow: #FFD600;
+      --glow-cyan: rgba(0,240,255,0.15);
+      --glow-magenta: rgba(255,0,170,0.1);
     }
 
     body {
@@ -31,64 +34,134 @@
       min-height: 100vh;
       padding: 0;
       -webkit-font-smoothing: antialiased;
+      position: relative;
+      overflow-x: hidden;
     }
 
-    /* ── Top bar ── */
+    /* ── Scanline overlay ── */
+    body::after {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,240,255,0.008) 2px,
+        rgba(0,240,255,0.008) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* ── Grid background ── */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-image:
+        linear-gradient(var(--border-dim) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border-dim) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── HUD Top bar ── */
     .top-bar {
-      background: var(--panel);
+      background: linear-gradient(180deg, rgba(0,240,255,0.06) 0%, var(--panel) 100%);
       border-bottom: 1px solid var(--border);
-      padding: 8px 16px;
+      padding: 10px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       position: sticky;
       top: 0;
       z-index: 10;
+      backdrop-filter: blur(8px);
     }
     .top-bar-left {
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
     .top-bar-logo {
-      color: var(--orange);
+      color: var(--cyan);
       font-weight: 700;
-      font-size: 13px;
-      letter-spacing: 1px;
+      font-size: 14px;
+      letter-spacing: 3px;
+      text-shadow: 0 0 10px var(--glow-cyan), 0 0 30px var(--glow-cyan);
     }
     .top-bar-sep {
-      color: var(--border-light);
-      font-size: 14px;
+      color: var(--cyan);
+      font-size: 10px;
+      opacity: 0.3;
     }
     .top-bar-title {
       color: var(--sub);
-      font-size: 11px;
-      letter-spacing: 0.5px;
+      font-size: 10px;
+      letter-spacing: 2px;
       text-transform: uppercase;
     }
     .top-bar-right {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
     }
     .top-bar-time {
-      color: var(--sub);
+      color: var(--cyan);
       font-size: 11px;
+      text-shadow: 0 0 6px var(--glow-cyan);
+      font-variant-numeric: tabular-nums;
     }
     .back-link {
       color: var(--sub);
       text-decoration: none;
-      font-size: 11px;
-      letter-spacing: 0.5px;
-      transition: color 0.2s;
+      font-size: 10px;
+      letter-spacing: 1px;
+      border: 1px solid var(--border-dim);
+      padding: 4px 10px;
+      transition: all 0.2s;
     }
-    .back-link:hover { color: var(--orange); }
+    .back-link:hover {
+      color: var(--cyan);
+      border-color: var(--border);
+      text-shadow: 0 0 6px var(--glow-cyan);
+    }
 
     /* ── Container ── */
     .container {
-      max-width: 600px;
+      max-width: 580px;
       margin: 0 auto;
-      padding: 12px 12px 40px;
+      padding: 16px 14px 50px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── HUD corners for panels ── */
+    .hud-panel {
+      position: relative;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      padding: 16px;
+      margin-bottom: 12px;
+    }
+    .hud-panel::before,
+    .hud-panel::after {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: var(--cyan);
+      border-style: solid;
+    }
+    .hud-panel::before {
+      top: -1px; left: -1px;
+      border-width: 2px 0 0 2px;
+    }
+    .hud-panel::after {
+      bottom: -1px; right: -1px;
+      border-width: 0 2px 2px 0;
     }
 
     /* ── Section header ── */
@@ -96,23 +169,24 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      margin: 16px 0 8px;
+      margin: 18px 0 8px;
     }
-    .section-indicator {
-      width: 3px;
-      height: 14px;
-      border-radius: 1px;
-    }
-    .section-indicator.orange { background: var(--orange); }
-    .section-indicator.green { background: var(--green); }
-    .section-indicator.blue { background: var(--blue); }
-    .section-indicator.cyan { background: var(--cyan); }
-    .section-label {
-      font-size: 10px;
+    .section-tag {
+      font-size: 9px;
       font-weight: 700;
-      color: var(--sub);
-      letter-spacing: 1.5px;
+      letter-spacing: 2px;
       text-transform: uppercase;
+      padding: 3px 8px;
+      border: 1px solid;
+    }
+    .section-tag.cyan { color: var(--cyan); border-color: var(--border); background: rgba(0,240,255,0.05); }
+    .section-tag.green { color: var(--green); border-color: rgba(0,255,156,0.2); background: rgba(0,255,156,0.05); }
+    .section-tag.magenta { color: var(--magenta); border-color: rgba(255,0,170,0.2); background: rgba(255,0,170,0.05); }
+    .section-tag.blue { color: var(--blue); border-color: rgba(68,136,255,0.2); background: rgba(68,136,255,0.05); }
+    .section-line {
+      flex: 1;
+      height: 1px;
+      background: linear-gradient(90deg, var(--border), transparent);
     }
 
     /* ── Date nav ── */
@@ -121,88 +195,105 @@
       align-items: center;
       background: var(--panel);
       border: 1px solid var(--border);
-      border-radius: 4px;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
       overflow: hidden;
     }
     .date-nav button {
       background: none;
       border: none;
-      border-right: 1px solid var(--border);
+      border-right: 1px solid var(--border-dim);
       color: var(--sub);
-      font-size: 14px;
+      font-size: 12px;
       font-family: inherit;
       cursor: pointer;
-      padding: 10px 14px;
+      padding: 12px 16px;
       transition: all 0.15s;
       line-height: 1;
     }
     .date-nav button:last-child {
       border-right: none;
-      border-left: 1px solid var(--border);
+      border-left: 1px solid var(--border-dim);
     }
     .date-nav button:hover {
-      background: var(--panel-alt);
-      color: var(--orange);
+      background: rgba(0,240,255,0.05);
+      color: var(--cyan);
+      text-shadow: 0 0 6px var(--glow-cyan);
     }
     .date-nav-label {
       flex: 1;
       text-align: center;
       font-size: 12px;
-      font-weight: 600;
+      font-weight: 700;
       color: var(--text-bright);
-      letter-spacing: 0.5px;
+      letter-spacing: 1.5px;
     }
     .refresh-btn {
       background: none;
       border: none;
-      border-left: 1px solid var(--border);
+      border-left: 1px solid var(--border-dim);
       color: var(--sub);
       font-size: 14px;
       cursor: pointer;
-      padding: 10px 14px;
+      padding: 12px 16px;
       transition: all 0.15s;
       line-height: 1;
       display: flex;
       align-items: center;
     }
-    .refresh-btn:hover { background: var(--panel-alt); color: var(--orange); }
-    .refresh-btn.spinning svg { animation: spin 0.6s linear infinite; }
+    .refresh-btn:hover { color: var(--cyan); }
+    .refresh-btn.spinning svg { animation: spin 0.5s linear infinite; }
 
     /* ── KPI Grid ── */
     .kpi-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1px;
-      background: var(--border);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      overflow: hidden;
+      gap: 10px;
       margin-bottom: 12px;
     }
     .kpi-cell {
       background: var(--panel);
-      padding: 14px 16px;
+      border: 1px solid var(--border-dim);
+      padding: 16px;
       position: relative;
+      overflow: hidden;
+      transition: all 0.3s;
     }
-    .kpi-cell::after {
+    .kpi-cell:hover {
+      border-color: var(--border);
+    }
+    .kpi-cell::before {
       content: '';
       position: absolute;
       top: 0; left: 0;
-      width: 3px; height: 100%;
+      width: 100%; height: 2px;
     }
-    .kpi-cell.c-orange::after { background: var(--orange); }
-    .kpi-cell.c-blue::after { background: var(--blue); }
-    .kpi-cell.c-green::after { background: var(--green); }
-    .kpi-cell.c-cyan::after { background: var(--cyan); }
+    .kpi-cell.c-cyan::before { background: linear-gradient(90deg, var(--cyan), transparent); }
+    .kpi-cell.c-blue::before { background: linear-gradient(90deg, var(--blue), transparent); }
+    .kpi-cell.c-green::before { background: linear-gradient(90deg, var(--green), transparent); }
+    .kpi-cell.c-magenta::before { background: linear-gradient(90deg, var(--magenta), transparent); }
+
+    /* Corner accents */
+    .kpi-cell::after {
+      content: '';
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 8px; height: 8px;
+      border-right: 1px solid;
+      border-bottom: 1px solid;
+      opacity: 0.4;
+    }
+    .kpi-cell.c-cyan::after { border-color: var(--cyan); }
+    .kpi-cell.c-blue::after { border-color: var(--blue); }
+    .kpi-cell.c-green::after { border-color: var(--green); }
+    .kpi-cell.c-magenta::after { border-color: var(--magenta); }
 
     .kpi-label {
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 600;
       color: var(--sub);
-      letter-spacing: 0.8px;
+      letter-spacing: 1.5px;
       text-transform: uppercase;
-      margin-bottom: 6px;
+      margin-bottom: 8px;
     }
     .kpi-row {
       display: flex;
@@ -210,45 +301,41 @@
       gap: 6px;
     }
     .kpi-value {
-      font-size: 28px;
+      font-size: 30px;
       font-weight: 700;
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
-    .kpi-value.orange { color: var(--orange); }
-    .kpi-value.blue { color: var(--blue); }
-    .kpi-value.green { color: var(--green); }
-    .kpi-value.cyan { color: var(--cyan); }
+    .kpi-value.cyan { color: var(--cyan); text-shadow: 0 0 12px var(--glow-cyan); }
+    .kpi-value.blue { color: var(--blue); text-shadow: 0 0 12px rgba(68,136,255,0.3); }
+    .kpi-value.green { color: var(--green); text-shadow: 0 0 12px rgba(0,255,156,0.2); }
+    .kpi-value.magenta { color: var(--magenta); text-shadow: 0 0 12px var(--glow-magenta); }
     .kpi-unit {
-      font-size: 11px;
+      font-size: 10px;
       color: var(--sub);
+      letter-spacing: 0.5px;
     }
 
     /* ── Ratio panel ── */
-    .ratio-panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-    }
     .ratio-bar-wrap {
-      height: 6px;
-      border-radius: 3px;
+      height: 4px;
       background: rgba(255,255,255,0.03);
       overflow: hidden;
       display: flex;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
+      border: 1px solid var(--border-dim);
     }
     .ratio-bar-new {
-      background: var(--green);
+      background: linear-gradient(90deg, var(--green), rgba(0,255,156,0.5));
       height: 100%;
       transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 8px rgba(0,255,156,0.3);
     }
     .ratio-bar-return {
-      background: var(--blue);
+      background: linear-gradient(90deg, rgba(68,136,255,0.5), var(--blue));
       height: 100%;
       transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 8px rgba(68,136,255,0.3);
     }
     .ratio-legend {
       display: flex;
@@ -258,35 +345,30 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 11px;
+      font-size: 10px;
       color: var(--sub);
+      letter-spacing: 0.5px;
     }
     .ratio-dot {
       width: 6px;
       height: 6px;
-      border-radius: 1px;
     }
-    .ratio-dot.new { background: var(--green); }
-    .ratio-dot.ret { background: var(--blue); }
+    .ratio-dot.new { background: var(--green); box-shadow: 0 0 4px rgba(0,255,156,0.5); }
+    .ratio-dot.ret { background: var(--blue); box-shadow: 0 0 4px rgba(68,136,255,0.5); }
     .ratio-count {
       font-weight: 700;
       color: var(--text-bright);
     }
 
     /* ── Bar chart ── */
-    .chart-panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 14px 16px;
-      margin-bottom: 12px;
-    }
     .chart-bars {
       display: flex;
       align-items: flex-end;
-      gap: 4px;
+      gap: 6px;
       height: 100px;
       padding-top: 4px;
+      border-bottom: 1px solid var(--border-dim);
+      padding-bottom: 0;
     }
     .chart-bar-col {
       flex: 1;
@@ -299,26 +381,30 @@
     }
     .chart-bar {
       width: 100%;
-      border-radius: 2px 2px 0 0;
-      background: var(--orange);
+      background: linear-gradient(180deg, var(--cyan), rgba(0,240,255,0.15));
       min-height: 2px;
       transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-      opacity: 0.6;
+      opacity: 0.5;
+      position: relative;
     }
     .chart-bar.today {
       opacity: 1;
-      box-shadow: 0 0 8px rgba(255,140,0,0.3);
+      background: linear-gradient(180deg, var(--cyan), rgba(0,240,255,0.3));
+      box-shadow: 0 0 12px var(--glow-cyan), inset 0 0 8px rgba(0,240,255,0.1);
     }
     .chart-bar-label {
-      font-size: 10px;
+      font-size: 9px;
       color: var(--sub);
       font-weight: 600;
+      letter-spacing: 0.5px;
+      padding-top: 6px;
     }
     .chart-bar-value {
       font-size: 10px;
-      color: var(--text);
+      color: var(--cyan);
       font-weight: 700;
       font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 4px var(--glow-cyan);
     }
 
     /* ── Status row ── */
@@ -327,88 +413,116 @@
       justify-content: space-between;
       align-items: center;
       padding: 10px 16px;
+      border: 1px solid var(--border-dim);
       background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      margin-bottom: 12px;
     }
     .status-item {
       display: flex;
       align-items: center;
       gap: 6px;
-      font-size: 11px;
+      font-size: 10px;
       color: var(--sub);
+      letter-spacing: 1px;
     }
     .status-dot {
       width: 6px;
       height: 6px;
       border-radius: 50%;
       background: var(--green);
-      animation: pulse 2s ease-in-out infinite;
+      box-shadow: 0 0 6px rgba(0,255,156,0.6);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .status-live {
+      color: var(--green);
+      font-weight: 700;
+      text-shadow: 0 0 4px rgba(0,255,156,0.3);
     }
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
+      0%, 100% { opacity: 1; box-shadow: 0 0 6px rgba(0,255,156,0.6); }
+      50% { opacity: 0.3; box-shadow: 0 0 2px rgba(0,255,156,0.2); }
     }
+
+    /* ── HUD decorative elements ── */
+    .hud-hex {
+      position: fixed;
+      width: 200px;
+      height: 200px;
+      border: 1px solid rgba(0,240,255,0.04);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .hud-hex.top { top: -60px; right: -40px; }
+    .hud-hex.bottom { bottom: -80px; left: -60px; border-color: rgba(255,0,170,0.04); }
 
     /* ── Loading ── */
     .loading {
       text-align: center;
       padding: 60px 0;
       color: var(--sub);
-      font-size: 12px;
+      font-size: 11px;
+      letter-spacing: 2px;
     }
     .loading-spinner {
-      width: 24px;
-      height: 24px;
-      border: 2px solid var(--border);
-      border-top-color: var(--orange);
+      width: 28px;
+      height: 28px;
+      border: 2px solid var(--border-dim);
+      border-top-color: var(--cyan);
       border-radius: 50%;
       animation: spin 0.6s linear infinite;
-      margin: 0 auto 10px;
+      margin: 0 auto 12px;
+      box-shadow: 0 0 12px var(--glow-cyan);
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── Fade in ── */
+    /* ── Fade / glitch in ── */
     .fade-in {
       opacity: 0;
-      transform: translateY(8px);
-      animation: fadeUp 0.4s ease forwards;
+      transform: translateY(6px);
+      animation: glitchIn 0.4s ease forwards;
     }
     .fade-in:nth-child(1) { animation-delay: 0.05s; }
     .fade-in:nth-child(2) { animation-delay: 0.1s; }
     .fade-in:nth-child(3) { animation-delay: 0.15s; }
     .fade-in:nth-child(4) { animation-delay: 0.2s; }
-    @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+    @keyframes glitchIn {
+      0% { opacity: 0; transform: translateY(6px) skewX(-2deg); }
+      60% { opacity: 1; transform: translateY(0) skewX(0.5deg); }
+      100% { opacity: 1; transform: translateY(0) skewX(0); }
+    }
 
     /* ── Scrollbar ── */
-    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar { width: 3px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
-    ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb { background: var(--cyan); border-radius: 0; opacity: 0.3; }
   </style>
 </head>
 <body>
+
+  <!-- HUD decorative -->
+  <div class="hud-hex top"></div>
+  <div class="hud-hex bottom"></div>
 
   <!-- Top bar -->
   <div class="top-bar">
     <div class="top-bar-left">
       <span class="top-bar-logo">PASSIVE</span>
-      <span class="top-bar-sep">|</span>
-      <span class="top-bar-title">User Analytics</span>
+      <span class="top-bar-sep">///</span>
+      <span class="top-bar-title">Analytics HUD</span>
     </div>
     <div class="top-bar-right">
       <span class="top-bar-time" id="live-time"></span>
-      <a href="/" class="back-link">← MAIN</a>
+      <a href="/" class="back-link">[ MAIN ]</a>
     </div>
   </div>
 
   <div class="container">
 
     <!-- Date nav -->
-    <div class="date-nav" style="margin-top:12px;">
-      <button id="prev-day" title="이전 날짜">◀</button>
+    <div class="date-nav" style="margin-top:14px;">
+      <button id="prev-day" title="이전 날짜">&#9664;</button>
       <span class="date-nav-label" id="date-label"></span>
-      <button id="next-day" title="다음 날짜">▶</button>
+      <button id="next-day" title="다음 날짜">&#9654;</button>
       <button class="refresh-btn" id="refresh-btn" title="새로고침">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M1 1v5h5"/><path d="M1 6C2.1 3.2 4.8 1.3 8 1.3c3.7 0 6.7 3 6.7 6.7s-3 6.7-6.7 6.7c-2.7 0-5-1.6-6.1-3.9"/></svg>
       </button>
@@ -417,7 +531,7 @@
     <!-- Loading -->
     <div id="loading" class="loading">
       <div class="loading-spinner"></div>
-      LOADING DATA...
+      INITIALIZING...
     </div>
 
     <!-- Stats content -->
@@ -425,35 +539,35 @@
 
       <!-- KPI -->
       <div class="section-header">
-        <div class="section-indicator orange"></div>
-        <span class="section-label">Key Metrics</span>
+        <span class="section-tag cyan">SYS::METRICS</span>
+        <div class="section-line"></div>
       </div>
-      <div class="kpi-grid fade-in">
-        <div class="kpi-cell c-orange">
-          <div class="kpi-label">DAU (Today)</div>
+      <div class="kpi-grid">
+        <div class="kpi-cell c-cyan fade-in">
+          <div class="kpi-label">DAU // Today</div>
           <div class="kpi-row">
-            <div class="kpi-value orange" id="dau">0</div>
-            <span class="kpi-unit">users</span>
+            <div class="kpi-value cyan" id="dau">0</div>
+            <span class="kpi-unit">usr</span>
           </div>
         </div>
-        <div class="kpi-cell c-blue">
-          <div class="kpi-label">MAU (Month)</div>
+        <div class="kpi-cell c-blue fade-in">
+          <div class="kpi-label">MAU // Month</div>
           <div class="kpi-row">
             <div class="kpi-value blue" id="mau">0</div>
-            <span class="kpi-unit">users</span>
+            <span class="kpi-unit">usr</span>
           </div>
         </div>
-        <div class="kpi-cell c-green">
-          <div class="kpi-label">New Users</div>
+        <div class="kpi-cell c-green fade-in">
+          <div class="kpi-label">New // Acquired</div>
           <div class="kpi-row">
             <div class="kpi-value green" id="new-users">0</div>
             <span class="kpi-unit">new</span>
           </div>
         </div>
-        <div class="kpi-cell c-cyan">
-          <div class="kpi-label">Returning</div>
+        <div class="kpi-cell c-magenta fade-in">
+          <div class="kpi-label">Ret // Returning</div>
           <div class="kpi-row">
-            <div class="kpi-value cyan" id="returning-users">0</div>
+            <div class="kpi-value magenta" id="returning-users">0</div>
             <span class="kpi-unit">ret</span>
           </div>
         </div>
@@ -461,10 +575,10 @@
 
       <!-- Ratio -->
       <div class="section-header">
-        <div class="section-indicator green"></div>
-        <span class="section-label">New vs Returning</span>
+        <span class="section-tag green">USR::RATIO</span>
+        <div class="section-line"></div>
       </div>
-      <div class="ratio-panel fade-in">
+      <div class="hud-panel fade-in">
         <div class="ratio-bar-wrap">
           <div class="ratio-bar-new" id="ratio-new" style="width:0%"></div>
           <div class="ratio-bar-return" id="ratio-return" style="width:0%"></div>
@@ -476,17 +590,17 @@
           </div>
           <div class="ratio-legend-item">
             <span class="ratio-dot ret"></span>
-            RETURN <span class="ratio-count" id="ratio-ret-pct">0%</span>
+            RET <span class="ratio-count" id="ratio-ret-pct">0%</span>
           </div>
         </div>
       </div>
 
       <!-- 7-day chart -->
       <div class="section-header">
-        <div class="section-indicator blue"></div>
-        <span class="section-label">7-Day DAU Trend</span>
+        <span class="section-tag magenta">DAU::7D_TREND</span>
+        <div class="section-line"></div>
       </div>
-      <div class="chart-panel fade-in">
+      <div class="hud-panel fade-in">
         <div class="chart-bars" id="chart-bars"></div>
       </div>
 
@@ -494,9 +608,9 @@
       <div class="status-row fade-in">
         <div class="status-item">
           <span class="status-dot"></span>
-          LIVE
+          <span class="status-live">ONLINE</span>
         </div>
-        <div class="status-item" id="last-update"></div>
+        <div class="status-item" id="last-update" style="letter-spacing:0.5px"></div>
       </div>
 
     </div>
@@ -512,7 +626,7 @@
       const h = String(kst.getUTCHours()).padStart(2,'0');
       const m = String(kst.getUTCMinutes()).padStart(2,'0');
       const s = String(kst.getUTCSeconds()).padStart(2,'0');
-      document.getElementById('live-time').textContent = `KST ${h}:${m}:${s}`;
+      document.getElementById('live-time').textContent = `${h}:${m}:${s} KST`;
     }
     setInterval(updateClock, 1000);
     updateClock();
@@ -540,7 +654,7 @@
       const days = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
       const m = String(d.getMonth()+1).padStart(2,'0');
       const day = String(d.getDate()).padStart(2,'0');
-      return `${d.getFullYear()}.${m}.${day} ${days[d.getDay()]}`;
+      return `${d.getFullYear()}.${m}.${day} // ${days[d.getDay()]}`;
     }
 
     function updateDateUI() {
@@ -580,7 +694,8 @@
           const kst = new Date(now.getTime() + (9*60*60*1000));
           const h = String(kst.getUTCHours()).padStart(2,'0');
           const mi = String(kst.getUTCMinutes()).padStart(2,'0');
-          lastUp.textContent = `UPDATED ${h}:${mi} KST`;
+          const s = String(kst.getUTCSeconds()).padStart(2,'0');
+          lastUp.textContent = `UPD ${h}:${mi}:${s}`;
         }
 
         loading.style.display = 'none';
@@ -588,7 +703,7 @@
 
         load7DayChart();
       } catch (err) {
-        loading.innerHTML = '<div style="color:var(--red);font-size:12px">ERR: FETCH FAILED</div><div style="margin-top:6px;font-size:10px;color:var(--sub)">' + err.message + '</div>';
+        loading.innerHTML = '<div style="color:var(--red);font-size:11px;letter-spacing:1px">ERR::FETCH_FAILED</div><div style="margin-top:6px;font-size:9px;color:var(--sub)">' + err.message + '</div>';
       }
     }
 
