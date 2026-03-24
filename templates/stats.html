@@ -369,10 +369,10 @@
       display: flex;
       align-items: flex-end;
       gap: 10px;
-      height: 100%;
-      min-height: 200px;
+      flex: 1;
+      min-height: 250px;
     }
-    @media (min-width: 1200px) { .chart-bars { min-height: 260px; } }
+    @media (min-width: 1200px) { .chart-bars { min-height: 300px; } }
     .bar-col {
       flex: 1;
       display: flex;
@@ -380,8 +380,10 @@
       align-items: center;
       gap: 6px;
       height: 100%;
+      min-height: 250px;
       justify-content: flex-end;
     }
+    @media (min-width: 1200px) { .bar-col { min-height: 300px; } }
     .bar-val {
       font-family: var(--mono);
       font-size: 12px;
@@ -772,7 +774,9 @@
 
         requestAnimationFrame(() => {
           setTimeout(() => {
-            bar.style.height = Math.max((r.dau / max) * 100, 5) + '%';
+            /* sqrt 스케일: 작은 값도 눈에 보이게 */
+            const ratio = r.dau > 0 ? Math.sqrt(r.dau / max) * 100 : 0;
+            bar.style.height = Math.max(ratio, 8) + '%';
             val.classList.add('show');
           }, 200 + i * 90);
         });
