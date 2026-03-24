@@ -17,7 +17,6 @@
       --text-hi: #ffffff;
       --dim: #4a4a58;
       --orange: #ff8c00;
-      --orange-glow: rgba(255,140,0,0.15);
       --green: #00d26a;
       --blue: #448aff;
       --red: #ff3b30;
@@ -35,29 +34,30 @@
       overflow-x: hidden;
     }
 
-    /* ═══ AMBIENT BACKGROUND ═══ */
+    /* ═══ AMBIENT ═══ */
     body::before {
       content: '';
       position: fixed;
       top: -200px; left: 50%;
       transform: translateX(-50%);
-      width: 900px; height: 500px;
-      background: radial-gradient(ellipse, rgba(255,140,0,0.06) 0%, transparent 70%);
+      width: 1000px; height: 600px;
+      background: radial-gradient(ellipse, rgba(255,140,0,0.07) 0%, rgba(255,140,0,0.02) 40%, transparent 70%);
       pointer-events: none;
       z-index: 0;
       animation: ambientBreath 8s ease-in-out infinite;
     }
     @keyframes ambientBreath {
-      0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
-      50% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+      0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+      50% { opacity: 1; transform: translateX(-50%) scale(1.2); }
     }
 
     /* ═══ TOP BAR ═══ */
     .topbar {
-      background: rgba(12,12,18,0.85);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(12,12,18,0.9);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       border-bottom: 2px solid var(--orange);
+      box-shadow: 0 2px 20px rgba(255,140,0,0.08);
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -67,11 +67,7 @@
       top: 0;
       z-index: 100;
     }
-    .topbar-left {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
     .topbar-tag {
       background: var(--orange);
       color: #000;
@@ -87,11 +83,7 @@
       color: var(--dim);
       letter-spacing: 1px;
     }
-    .topbar-right {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
     .topbar-clock {
       font-family: var(--mono);
       font-size: 12px;
@@ -116,12 +108,11 @@
 
     /* ═══ LAYOUT ═══ */
     .layout {
-      position: relative;
-      z-index: 1;
+      position: relative; z-index: 1;
       padding: 16px 24px;
     }
     @media (min-width: 1400px) { .layout { padding: 20px 48px; } }
-    @media (max-width: 640px) { .layout { padding: 10px 10px; } }
+    @media (max-width: 640px) { .layout { padding: 10px; } }
 
     /* ═══ COMMAND BAR ═══ */
     .cmd-bar {
@@ -176,7 +167,7 @@
     }
     .panel:hover {
       border-color: #2a2a38;
-      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 30px rgba(0,0,0,0.4);
     }
     .panel-head {
       display: flex;
@@ -199,9 +190,7 @@
       color: var(--dim);
       letter-spacing: 0.5px;
     }
-    .panel-body {
-      padding: 20px;
-    }
+    .panel-body { padding: 20px; }
     @media (min-width: 1200px) { .panel-body { padding: 28px; } }
 
     /* ═══ KPI GRID ═══ */
@@ -212,16 +201,17 @@
       gap: 1px;
       background: var(--border);
     }
-    @media (max-width: 640px) {
-      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-    }
+    @media (max-width: 640px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+
     .kpi-cell {
       background: var(--surface);
-      padding: 26px 22px;
+      padding: 28px 22px;
       position: relative;
+      overflow: hidden;
       transition: background 0.3s;
     }
     .kpi-cell:hover { background: var(--surface2); }
+    /* 상단 컬러 바 */
     .kpi-cell::before {
       content: '';
       position: absolute;
@@ -229,40 +219,61 @@
       height: 3px;
       transition: box-shadow 0.3s;
     }
+    /* 배경 글로우 */
+    .kpi-cell::after {
+      content: '';
+      position: absolute;
+      top: -40px; left: 50%;
+      transform: translateX(-50%);
+      width: 150px; height: 80px;
+      border-radius: 50%;
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+    }
+    .kpi-cell:hover::after { opacity: 1; }
+
     .kpi-cell:nth-child(1)::before { background: var(--orange); }
     .kpi-cell:nth-child(2)::before { background: var(--blue); }
     .kpi-cell:nth-child(3)::before { background: var(--green); }
     .kpi-cell:nth-child(4)::before { background: var(--yellow); }
-    .kpi-cell:nth-child(1):hover::before { box-shadow: 0 0 16px rgba(255,140,0,0.4); }
-    .kpi-cell:nth-child(2):hover::before { box-shadow: 0 0 16px rgba(68,138,255,0.4); }
-    .kpi-cell:nth-child(3):hover::before { box-shadow: 0 0 16px rgba(0,210,106,0.4); }
-    .kpi-cell:nth-child(4):hover::before { box-shadow: 0 0 16px rgba(255,214,0,0.4); }
+    .kpi-cell:nth-child(1):hover::before { box-shadow: 0 0 20px rgba(255,140,0,0.5); }
+    .kpi-cell:nth-child(2):hover::before { box-shadow: 0 0 20px rgba(68,138,255,0.5); }
+    .kpi-cell:nth-child(3):hover::before { box-shadow: 0 0 20px rgba(0,210,106,0.5); }
+    .kpi-cell:nth-child(4):hover::before { box-shadow: 0 0 20px rgba(255,214,0,0.5); }
+    .kpi-cell:nth-child(1)::after { background: radial-gradient(ellipse, rgba(255,140,0,0.08), transparent); }
+    .kpi-cell:nth-child(2)::after { background: radial-gradient(ellipse, rgba(68,138,255,0.08), transparent); }
+    .kpi-cell:nth-child(3)::after { background: radial-gradient(ellipse, rgba(0,210,106,0.08), transparent); }
+    .kpi-cell:nth-child(4)::after { background: radial-gradient(ellipse, rgba(255,214,0,0.08), transparent); }
+
     .kpi-label {
       font-size: 11px;
       font-weight: 600;
       color: var(--dim);
       letter-spacing: 0.5px;
-      margin-bottom: 10px;
+      margin-bottom: 12px;
+      position: relative;
     }
     @media (min-width: 1200px) {
-      .kpi-label { font-size: 12px; margin-bottom: 14px; }
-      .kpi-cell { padding: 32px 28px; }
+      .kpi-label { font-size: 12px; }
+      .kpi-cell { padding: 34px 28px; }
     }
     .kpi-val {
       font-family: var(--mono);
-      font-size: 40px;
+      font-size: 42px;
       font-weight: 700;
       line-height: 1;
       font-variant-numeric: tabular-nums;
+      position: relative;
     }
-    @media (min-width: 1200px) { .kpi-val { font-size: 52px; } }
-    .kpi-val.c-orange { color: var(--orange); text-shadow: 0 0 20px rgba(255,140,0,0.2); }
-    .kpi-val.c-blue { color: var(--blue); text-shadow: 0 0 20px rgba(68,138,255,0.2); }
-    .kpi-val.c-green { color: var(--green); text-shadow: 0 0 20px rgba(0,210,106,0.2); }
-    .kpi-val.c-yellow { color: var(--yellow); text-shadow: 0 0 20px rgba(255,214,0,0.2); }
+    @media (min-width: 1200px) { .kpi-val { font-size: 56px; } }
+    .kpi-val.c-orange { color: var(--orange); text-shadow: 0 0 24px rgba(255,140,0,0.25); }
+    .kpi-val.c-blue { color: var(--blue); text-shadow: 0 0 24px rgba(68,138,255,0.25); }
+    .kpi-val.c-green { color: var(--green); text-shadow: 0 0 24px rgba(0,210,106,0.25); }
+    .kpi-val.c-yellow { color: var(--yellow); text-shadow: 0 0 24px rgba(255,214,0,0.25); }
     .kpi-unit {
       font-family: var(--sans);
-      font-size: 13px;
+      font-size: 14px;
       color: var(--dim);
       margin-left: 3px;
     }
@@ -270,54 +281,86 @@
     /* ═══ GRID ROW ═══ */
     .grid-row {
       display: grid;
-      grid-template-columns: 1fr 1.6fr;
+      grid-template-columns: 340px 1fr;
       gap: 14px;
       margin-bottom: 14px;
     }
     .grid-row .panel { margin-bottom: 0; }
-    @media (max-width: 640px) {
-      .grid-row { grid-template-columns: 1fr; }
-    }
+    @media (max-width: 900px) { .grid-row { grid-template-columns: 1fr; } }
 
-    /* ═══ RATIO ═══ */
-    .ratio-track {
-      height: 10px;
+    /* ═══ DONUT CHART ═══ */
+    .donut-wrap {
       display: flex;
-      overflow: hidden;
-      background: rgba(255,255,255,0.03);
-      margin-bottom: 18px;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
     }
-    @media (min-width: 1200px) { .ratio-track { height: 14px; margin-bottom: 22px; } }
-    .ratio-new {
-      background: linear-gradient(90deg, #00b85c, var(--green));
-      height: 100%;
-      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-      box-shadow: 0 0 10px rgba(0,210,106,0.2);
+    .donut-svg {
+      width: 160px; height: 160px;
+      transform: rotate(-90deg);
     }
-    .ratio-ret {
-      background: linear-gradient(90deg, var(--blue), #6ea8ff);
-      height: 100%;
-      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-      box-shadow: 0 0 10px rgba(68,138,255,0.2);
+    @media (min-width: 1200px) { .donut-svg { width: 200px; height: 200px; } }
+    .donut-track {
+      fill: none;
+      stroke: rgba(255,255,255,0.04);
+      stroke-width: 18;
     }
-    .ratio-legend {
+    .donut-new {
+      fill: none;
+      stroke: var(--green);
+      stroke-width: 18;
+      stroke-linecap: butt;
+      filter: drop-shadow(0 0 6px rgba(0,210,106,0.3));
+      transition: stroke-dasharray 1s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .donut-ret {
+      fill: none;
+      stroke: var(--blue);
+      stroke-width: 18;
+      stroke-linecap: butt;
+      filter: drop-shadow(0 0 6px rgba(68,138,255,0.3));
+      transition: stroke-dasharray 1s cubic-bezier(0.16, 1, 0.3, 1), stroke-dashoffset 1s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .donut-center {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+    .donut-center-val {
+      font-family: var(--mono);
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-hi);
+    }
+    .donut-center-label {
+      font-size: 11px;
+      color: var(--dim);
+      margin-top: 2px;
+    }
+    .donut-container {
+      position: relative;
+      display: inline-block;
+    }
+    .donut-legend {
       display: flex;
-      justify-content: space-between;
+      gap: 24px;
+      justify-content: center;
     }
-    .ratio-item {
+    .donut-legend-item {
       display: flex;
       align-items: center;
       gap: 8px;
       font-size: 13px;
       color: var(--dim);
     }
-    .ratio-dot { width: 10px; height: 10px; border-radius: 2px; }
-    .ratio-dot.g { background: var(--green); box-shadow: 0 0 6px rgba(0,210,106,0.3); }
-    .ratio-dot.b { background: var(--blue); box-shadow: 0 0 6px rgba(68,138,255,0.3); }
-    .ratio-pct {
+    .legend-dot { width: 10px; height: 10px; border-radius: 2px; }
+    .legend-dot.g { background: var(--green); box-shadow: 0 0 6px rgba(0,210,106,0.3); }
+    .legend-dot.b { background: var(--blue); box-shadow: 0 0 6px rgba(68,138,255,0.3); }
+    .legend-pct {
       font-family: var(--mono);
       font-weight: 700;
-      font-size: 16px;
+      font-size: 15px;
       color: var(--text-hi);
     }
 
@@ -326,9 +369,10 @@
       display: flex;
       align-items: flex-end;
       gap: 10px;
-      height: 200px;
+      height: 100%;
+      min-height: 200px;
     }
-    @media (min-width: 1200px) { .chart-bars { height: 280px; } }
+    @media (min-width: 1200px) { .chart-bars { min-height: 260px; } }
     .bar-col {
       flex: 1;
       display: flex;
@@ -345,31 +389,30 @@
       color: var(--text);
       font-variant-numeric: tabular-nums;
       opacity: 0;
-      transform: translateY(4px);
-      transition: opacity 0.3s, transform 0.3s;
+      transform: translateY(6px);
+      transition: opacity 0.4s, transform 0.4s;
     }
     .bar-val.show { opacity: 1; transform: translateY(0); }
     @media (min-width: 1200px) { .bar-val { font-size: 14px; } }
     .bar-fill {
       width: 100%;
-      min-height: 2px;
-      background: linear-gradient(to top, rgba(255,140,0,0.15), rgba(255,140,0,0.30));
-      border-radius: 2px 2px 0 0;
+      min-height: 4px;
+      border-radius: 3px 3px 0 0;
       transition: height 0.8s cubic-bezier(0.16, 1, 0.3, 1);
       position: relative;
     }
+    .bar-fill.dim {
+      background: linear-gradient(to top, rgba(255,140,0,0.10), rgba(255,140,0,0.25));
+    }
     .bar-fill.today {
       background: linear-gradient(to top, #cc7000, var(--orange), #ffaa33);
-      box-shadow: 0 0 20px rgba(255,140,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+      box-shadow: 0 0 24px rgba(255,140,0,0.3), 0 0 8px rgba(255,140,0,0.15);
     }
-    .bar-fill:hover {
-      filter: brightness(1.2);
-    }
+    .bar-fill:hover { filter: brightness(1.25); }
     .bar-day {
       font-family: var(--mono);
       font-size: 11px;
       color: var(--dim);
-      transition: color 0.2s;
     }
     .bar-col:last-child .bar-day { color: var(--orange); font-weight: 700; }
     @media (min-width: 1200px) { .bar-day { font-size: 12px; } }
@@ -402,10 +445,10 @@
     .status-live { color: var(--green); font-weight: 700; }
     @keyframes pulse {
       0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(0,210,106,0.5); }
-      50% { opacity: 0.4; box-shadow: 0 0 4px rgba(0,210,106,0.2); }
+      50% { opacity: 0.3; box-shadow: 0 0 4px rgba(0,210,106,0.2); }
     }
 
-    /* ═══ FUNCTION BAR ═══ */
+    /* ═══ FN BAR ═══ */
     .fn-bar {
       display: flex;
       gap: 1px;
@@ -422,7 +465,7 @@
       color: var(--dim);
       cursor: default;
       user-select: none;
-      transition: background 0.15s, color 0.15s;
+      transition: background 0.15s;
     }
     .fn-key:hover { background: var(--surface2); color: var(--text); }
     .fn-key span { color: var(--orange); font-weight: 700; }
@@ -447,26 +490,22 @@
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ═══ STAGGER REVEAL ═══ */
+    /* ═══ REVEAL ═══ */
     .reveal {
       opacity: 0;
-      transform: translateY(16px);
-      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
-                  transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      transform: translateY(18px);
+      transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    .reveal.show {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    .reveal.d1 { transition-delay: 0.05s; }
-    .reveal.d2 { transition-delay: 0.15s; }
-    .reveal.d3 { transition-delay: 0.25s; }
-    .reveal.d4 { transition-delay: 0.35s; }
+    .reveal.show { opacity: 1; transform: translateY(0); }
+    .reveal.d1 { transition-delay: 0.06s; }
+    .reveal.d2 { transition-delay: 0.18s; }
+    .reveal.d3 { transition-delay: 0.30s; }
+    .reveal.d4 { transition-delay: 0.42s; }
   </style>
 </head>
 <body>
 
-  <!-- ── TOP BAR ── -->
   <div class="topbar">
     <div class="topbar-left">
       <span class="topbar-tag">PASSIVE</span>
@@ -480,7 +519,6 @@
 
   <div class="layout">
 
-    <!-- ── COMMAND BAR ── -->
     <div class="cmd-bar">
       <button class="cmd-btn" id="prev-day">◀</button>
       <div class="cmd-date" id="date-label"></div>
@@ -490,13 +528,11 @@
       </button>
     </div>
 
-    <!-- ── LOADING ── -->
     <div id="loading" class="loading-wrap">
       <div class="ld-spinner"></div>
       데이터 로딩 중 ...
     </div>
 
-    <!-- ── CONTENT ── -->
     <div id="stats-content" style="display:none;">
 
       <!-- KPI -->
@@ -525,40 +561,53 @@
         </div>
       </div>
 
-      <!-- Ratio + Chart -->
+      <!-- Donut + Chart -->
       <div class="grid-row">
+
+        <!-- 도넛 차트 -->
         <div class="panel reveal d2">
           <div class="panel-head">
             <span class="panel-label">신규 vs 재방문</span>
             <span class="panel-tag">RATIO</span>
           </div>
           <div class="panel-body">
-            <div class="ratio-track">
-              <div class="ratio-new" id="ratio-new" style="width:0%"></div>
-              <div class="ratio-ret" id="ratio-ret" style="width:0%"></div>
-            </div>
-            <div class="ratio-legend">
-              <div class="ratio-item">
-                <span class="ratio-dot g"></span>
-                신규 <span class="ratio-pct" id="ratio-new-pct">0%</span>
+            <div class="donut-wrap">
+              <div class="donut-container">
+                <svg class="donut-svg" viewBox="0 0 200 200">
+                  <circle class="donut-track" cx="100" cy="100" r="70"/>
+                  <circle class="donut-new" id="donut-new" cx="100" cy="100" r="70" stroke-dasharray="0 440"/>
+                  <circle class="donut-ret" id="donut-ret" cx="100" cy="100" r="70" stroke-dasharray="0 440" stroke-dashoffset="0"/>
+                </svg>
+                <div class="donut-center">
+                  <div class="donut-center-val" id="donut-total">0</div>
+                  <div class="donut-center-label">총 방문</div>
+                </div>
               </div>
-              <div class="ratio-item">
-                <span class="ratio-dot b"></span>
-                재방문 <span class="ratio-pct" id="ratio-ret-pct">0%</span>
+              <div class="donut-legend">
+                <div class="donut-legend-item">
+                  <span class="legend-dot g"></span>
+                  신규 <span class="legend-pct" id="ratio-new-pct">0%</span>
+                </div>
+                <div class="donut-legend-item">
+                  <span class="legend-dot b"></span>
+                  재방문 <span class="legend-pct" id="ratio-ret-pct">0%</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
+        <!-- 7일 차트 -->
         <div class="panel reveal d3">
           <div class="panel-head">
             <span class="panel-label">최근 7일 추이</span>
             <span class="panel-tag">DAU TREND</span>
           </div>
-          <div class="panel-body">
+          <div class="panel-body" style="display:flex; flex-direction:column;">
             <div class="chart-bars" id="chart-bars"></div>
           </div>
         </div>
+
       </div>
 
       <!-- Status -->
@@ -570,7 +619,6 @@
         <div class="status-item" id="last-update"></div>
       </div>
 
-      <!-- Fn keys -->
       <div class="fn-bar reveal d4">
         <div class="fn-key"><span>F1</span> 도움말</div>
         <div class="fn-key"><span>F2</span> 새로고침</div>
@@ -584,6 +632,7 @@
 
   <script>
     const API = '/api/tracking';
+    const CIRC = 2 * Math.PI * 70; /* donut circumference */
 
     /* ── Clock ── */
     function tickClock() {
@@ -596,32 +645,28 @@
     setInterval(tickClock, 1000);
     tickClock();
 
-    /* ── Date helpers ── */
+    /* ── Date ── */
     function getKSTToday() {
       const now = new Date();
       const kst = new Date(now.getTime() + 9 * 3600000);
       return new Date(kst.getUTCFullYear(), kst.getUTCMonth(), kst.getUTCDate());
     }
     let currentDate = getKSTToday();
-
     const pad2 = n => String(n).padStart(2, '0');
     const fmtDate = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
     const fmtMonth = d => `${d.getFullYear()}-${pad2(d.getMonth()+1)}`;
     const dayKo = ['일','월','화','수','목','금','토'];
     const fmtDisplay = d => `${d.getFullYear()}. ${d.getMonth()+1}. ${d.getDate()}. (${dayKo[d.getDay()]})`;
+    function updateDateUI() { document.getElementById('date-label').textContent = fmtDisplay(currentDate); }
 
-    function updateDateUI() {
-      document.getElementById('date-label').textContent = fmtDisplay(currentDate);
-    }
-
-    /* ── Stagger reveal ── */
+    /* ── Reveal ── */
     function triggerReveal() {
       requestAnimationFrame(() => {
         document.querySelectorAll('.reveal').forEach(el => el.classList.add('show'));
       });
     }
 
-    /* ── Fetch & Render ── */
+    /* ── Fetch ── */
     async function fetchStats() {
       const $ld = document.getElementById('loading');
       const $ct = document.getElementById('stats-content');
@@ -630,27 +675,31 @@
       document.querySelectorAll('.reveal').forEach(el => el.classList.remove('show'));
 
       try {
-        const d = fmtDate(currentDate);
-        const m = fmtMonth(currentDate);
+        const d = fmtDate(currentDate), m = fmtMonth(currentDate);
         const res = await fetch(`${API}/stats?d=${d}&m=${m}`);
         const data = await res.json();
 
-        /* KPI */
         animateNum('dau', data.dau ?? 0);
         animateNum('mau', data.mau ?? 0);
         animateNum('new-users', data.new_users ?? 0);
         animateNum('returning-users', data.returning_users ?? 0);
 
-        /* Ratio */
-        const total = (data.new_users || 0) + (data.returning_users || 0);
-        const nPct = total > 0 ? Math.round((data.new_users / total) * 100) : 0;
+        /* Donut */
+        const nw = data.new_users || 0, rt = data.returning_users || 0;
+        const total = nw + rt;
+        const nPct = total > 0 ? Math.round((nw / total) * 100) : 0;
         const rPct = total > 0 ? 100 - nPct : 0;
-        document.getElementById('ratio-new').style.width = nPct + '%';
-        document.getElementById('ratio-ret').style.width = rPct + '%';
+        const nLen = total > 0 ? (nw / total) * CIRC : 0;
+        const rLen = total > 0 ? (rt / total) * CIRC : 0;
+
+        document.getElementById('donut-new').setAttribute('stroke-dasharray', `${nLen} ${CIRC}`);
+        document.getElementById('donut-ret').setAttribute('stroke-dasharray', `${rLen} ${CIRC}`);
+        document.getElementById('donut-ret').setAttribute('stroke-dashoffset', `-${nLen}`);
+        document.getElementById('donut-total').textContent = total;
         document.getElementById('ratio-new-pct').textContent = nPct + '%';
         document.getElementById('ratio-ret-pct').textContent = rPct + '%';
 
-        /* Last update */
+        /* Update time */
         const now = new Date();
         const kst = new Date(now.getTime() + 9 * 3600000);
         document.getElementById('last-update').textContent =
@@ -665,16 +714,14 @@
       }
     }
 
-    /* ── Number animation (bounce-ease) ── */
+    /* ── Number animation ── */
     function animateNum(id, end) {
       const el = document.getElementById(id);
       if (end === 0) { el.textContent = '0'; return; }
-      const t0 = performance.now();
-      const dur = 700;
+      const t0 = performance.now(), dur = 800;
       (function tick(now) {
         const p = Math.min((now - t0) / dur, 1);
-        /* overshoot ease */
-        const ease = p < 1 ? 1 - Math.pow(1 - p, 4) : 1;
+        const ease = 1 - Math.pow(1 - p, 4);
         el.textContent = Math.round(ease * end).toLocaleString();
         if (p < 1) requestAnimationFrame(tick);
       })(t0);
@@ -684,7 +731,6 @@
     async function load7Day() {
       const $c = document.getElementById('chart-bars');
       $c.innerHTML = '';
-
       const days = [];
       for (let i = 6; i >= 0; i--) {
         const d = new Date(currentDate);
@@ -703,6 +749,7 @@
       const max = Math.max(...results.map(r => r.dau), 1);
 
       results.forEach((r, i) => {
+        const isToday = i === results.length - 1;
         const col = document.createElement('div');
         col.className = 'bar-col';
 
@@ -711,7 +758,7 @@
         val.textContent = r.dau;
 
         const bar = document.createElement('div');
-        bar.className = 'bar-fill' + (i === results.length - 1 ? ' today' : '');
+        bar.className = 'bar-fill ' + (isToday ? 'today' : 'dim');
         bar.style.height = '0%';
 
         const lbl = document.createElement('div');
@@ -725,9 +772,9 @@
 
         requestAnimationFrame(() => {
           setTimeout(() => {
-            bar.style.height = Math.max((r.dau / max) * 100, 4) + '%';
+            bar.style.height = Math.max((r.dau / max) * 100, 5) + '%';
             val.classList.add('show');
-          }, 150 + i * 80);
+          }, 200 + i * 90);
         });
       });
     }
@@ -735,14 +782,12 @@
     /* ── Navigation ── */
     document.getElementById('prev-day').addEventListener('click', () => {
       currentDate.setDate(currentDate.getDate() - 1);
-      updateDateUI();
-      fetchStats();
+      updateDateUI(); fetchStats();
     });
     document.getElementById('next-day').addEventListener('click', () => {
       if (currentDate < getKSTToday()) {
         currentDate.setDate(currentDate.getDate() + 1);
-        updateDateUI();
-        fetchStats();
+        updateDateUI(); fetchStats();
       }
     });
     document.getElementById('refresh-btn').addEventListener('click', function () {
@@ -750,7 +795,7 @@
       fetchStats().finally(() => setTimeout(() => this.classList.remove('spinning'), 500));
     });
 
-    /* ── Keyboard shortcuts ── */
+    /* ── Keyboard ── */
     document.addEventListener('keydown', e => {
       if (e.key === 'F2') { e.preventDefault(); document.getElementById('refresh-btn').click(); }
       if (e.key === 'F3') { e.preventDefault(); window.location.href = '/'; }
@@ -758,7 +803,6 @@
       if (e.key === 'F6') { e.preventDefault(); document.getElementById('next-day').click(); }
     });
 
-    /* ── Init ── */
     updateDateUI();
     fetchStats();
   </script>
