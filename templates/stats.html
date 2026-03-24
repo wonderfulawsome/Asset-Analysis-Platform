@@ -9,20 +9,17 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0a0a0a;
-      --surface: #111111;
-      --surface2: #1a1a1a;
-      --border: #222222;
-      --border-hi: #333333;
-      --text: #cccccc;
+      --bg: #06060a;
+      --surface: #0c0c12;
+      --surface2: #131318;
+      --border: #1e1e28;
+      --text: #c8c8d0;
       --text-hi: #ffffff;
-      --dim: #555555;
+      --dim: #4a4a58;
       --orange: #ff8c00;
-      --orange-dim: rgba(255,140,0,0.10);
+      --orange-glow: rgba(255,140,0,0.15);
       --green: #00d26a;
-      --green-dim: rgba(0,210,106,0.10);
       --blue: #448aff;
-      --blue-dim: rgba(68,138,255,0.10);
       --red: #ff3b30;
       --yellow: #ffd600;
       --mono: 'SF Mono', 'Cascadia Code', 'Consolas', 'Menlo', monospace;
@@ -35,19 +32,37 @@
       color: var(--text);
       min-height: 100vh;
       -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
     }
 
-    /* ═══════════════════════════════════════════
-       TOP BAR — Bloomberg signature orange line
-       ═══════════════════════════════════════════ */
+    /* ═══ AMBIENT BACKGROUND ═══ */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -200px; left: 50%;
+      transform: translateX(-50%);
+      width: 900px; height: 500px;
+      background: radial-gradient(ellipse, rgba(255,140,0,0.06) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+      animation: ambientBreath 8s ease-in-out infinite;
+    }
+    @keyframes ambientBreath {
+      0%, 100% { opacity: 0.6; transform: translateX(-50%) scale(1); }
+      50% { opacity: 1; transform: translateX(-50%) scale(1.15); }
+    }
+
+    /* ═══ TOP BAR ═══ */
     .topbar {
-      background: #111111;
+      background: rgba(12,12,18,0.85);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       border-bottom: 2px solid var(--orange);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 20px;
-      height: 42px;
+      padding: 0 24px;
+      height: 44px;
       position: sticky;
       top: 0;
       z-index: 100;
@@ -55,7 +70,7 @@
     .topbar-left {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
     }
     .topbar-tag {
       background: var(--orange);
@@ -63,62 +78,58 @@
       font-family: var(--mono);
       font-weight: 800;
       font-size: 11px;
-      letter-spacing: 1.5px;
-      padding: 3px 8px;
+      letter-spacing: 2px;
+      padding: 4px 10px;
     }
     .topbar-sub {
       font-family: var(--mono);
       font-size: 11px;
       color: var(--dim);
-      letter-spacing: 0.5px;
+      letter-spacing: 1px;
     }
     .topbar-right {
       display: flex;
       align-items: center;
-      gap: 14px;
+      gap: 16px;
     }
     .topbar-clock {
       font-family: var(--mono);
       font-size: 12px;
       color: var(--orange);
       font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 8px rgba(255,140,0,0.3);
     }
     .topbar-link {
       font-family: var(--mono);
       font-size: 11px;
       color: var(--dim);
       text-decoration: none;
-      padding: 3px 10px;
+      padding: 4px 12px;
       border: 1px solid var(--border);
-      transition: all 0.12s;
+      transition: all 0.2s;
     }
     .topbar-link:hover {
       color: var(--orange);
       border-color: var(--orange);
+      box-shadow: 0 0 12px rgba(255,140,0,0.15);
     }
 
-    /* ═══════════════════════════════════════════
-       LAYOUT — 화면 꽉 차게
-       ═══════════════════════════════════════════ */
+    /* ═══ LAYOUT ═══ */
     .layout {
-      padding: 12px 20px;
+      position: relative;
+      z-index: 1;
+      padding: 16px 24px;
     }
-    @media (min-width: 1400px) {
-      .layout { padding: 16px 40px; }
-    }
-    @media (max-width: 640px) {
-      .layout { padding: 10px 10px; }
-    }
+    @media (min-width: 1400px) { .layout { padding: 20px 48px; } }
+    @media (max-width: 640px) { .layout { padding: 10px 10px; } }
 
-    /* ═══════════════════════════════════════════
-       COMMAND BAR — Date Navigation
-       ═══════════════════════════════════════════ */
+    /* ═══ COMMAND BAR ═══ */
     .cmd-bar {
       display: flex;
       align-items: stretch;
       background: var(--border);
       gap: 1px;
-      margin-bottom: 12px;
+      margin-bottom: 14px;
     }
     .cmd-btn {
       background: var(--surface);
@@ -127,11 +138,12 @@
       font-family: var(--mono);
       font-size: 14px;
       cursor: pointer;
-      padding: 0 18px;
-      transition: all 0.1s;
-      line-height: 40px;
+      padding: 0 20px;
+      transition: all 0.15s;
+      line-height: 42px;
     }
     .cmd-btn:hover { background: var(--surface2); color: var(--orange); }
+    .cmd-btn:active { transform: scale(0.95); }
     .cmd-date {
       flex: 1;
       background: var(--surface);
@@ -140,7 +152,7 @@
       font-size: 13px;
       font-weight: 700;
       color: var(--text-hi);
-      line-height: 40px;
+      line-height: 42px;
       letter-spacing: 0.5px;
     }
     .cmd-refresh {
@@ -148,26 +160,29 @@
       border: none;
       color: var(--dim);
       cursor: pointer;
-      padding: 0 14px;
+      padding: 0 16px;
       display: flex;
       align-items: center;
-      transition: all 0.1s;
+      transition: all 0.15s;
     }
     .cmd-refresh:hover { color: var(--orange); background: var(--surface2); }
     .cmd-refresh.spinning svg { animation: spin 0.5s linear infinite; }
 
-    /* ═══════════════════════════════════════════
-       PANEL — Terminal window style
-       ═══════════════════════════════════════════ */
+    /* ═══ PANEL ═══ */
     .panel {
       background: var(--surface);
       border: 1px solid var(--border);
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    .panel:hover {
+      border-color: #2a2a38;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.3);
     }
     .panel-head {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 6px 12px;
+      padding: 8px 14px;
       border-bottom: 1px solid var(--border);
       background: var(--surface2);
     }
@@ -176,24 +191,21 @@
       font-size: 11px;
       font-weight: 700;
       color: var(--orange);
-      letter-spacing: 0.8px;
+      letter-spacing: 1px;
     }
     .panel-tag {
       font-family: var(--mono);
       font-size: 10px;
       color: var(--dim);
+      letter-spacing: 0.5px;
     }
     .panel-body {
-      padding: 18px;
+      padding: 20px;
     }
-    @media (min-width: 1200px) {
-      .panel-body { padding: 24px; }
-    }
+    @media (min-width: 1200px) { .panel-body { padding: 28px; } }
 
-    /* ═══════════════════════════════════════════
-       KPI GRID
-       ═══════════════════════════════════════════ */
-    .kpi-panel { margin-bottom: 12px; }
+    /* ═══ KPI GRID ═══ */
+    .kpi-panel { margin-bottom: 14px; }
     .kpi-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
@@ -205,19 +217,26 @@
     }
     .kpi-cell {
       background: var(--surface);
-      padding: 24px 20px;
+      padding: 26px 22px;
       position: relative;
+      transition: background 0.3s;
     }
+    .kpi-cell:hover { background: var(--surface2); }
     .kpi-cell::before {
       content: '';
       position: absolute;
       top: 0; left: 0; right: 0;
-      height: 2px;
+      height: 3px;
+      transition: box-shadow 0.3s;
     }
     .kpi-cell:nth-child(1)::before { background: var(--orange); }
     .kpi-cell:nth-child(2)::before { background: var(--blue); }
     .kpi-cell:nth-child(3)::before { background: var(--green); }
     .kpi-cell:nth-child(4)::before { background: var(--yellow); }
+    .kpi-cell:nth-child(1):hover::before { box-shadow: 0 0 16px rgba(255,140,0,0.4); }
+    .kpi-cell:nth-child(2):hover::before { box-shadow: 0 0 16px rgba(68,138,255,0.4); }
+    .kpi-cell:nth-child(3):hover::before { box-shadow: 0 0 16px rgba(0,210,106,0.4); }
+    .kpi-cell:nth-child(4):hover::before { box-shadow: 0 0 16px rgba(255,214,0,0.4); }
     .kpi-label {
       font-size: 11px;
       font-weight: 600;
@@ -226,66 +245,60 @@
       margin-bottom: 10px;
     }
     @media (min-width: 1200px) {
-      .kpi-label { font-size: 12px; margin-bottom: 12px; }
-      .kpi-cell { padding: 28px 24px; }
+      .kpi-label { font-size: 12px; margin-bottom: 14px; }
+      .kpi-cell { padding: 32px 28px; }
     }
     .kpi-val {
       font-family: var(--mono);
-      font-size: 38px;
+      font-size: 40px;
       font-weight: 700;
       line-height: 1;
       font-variant-numeric: tabular-nums;
     }
-    @media (min-width: 1200px) {
-      .kpi-val { font-size: 48px; }
-    }
-    .kpi-val.c-orange { color: var(--orange); }
-    .kpi-val.c-blue { color: var(--blue); }
-    .kpi-val.c-green { color: var(--green); }
-    .kpi-val.c-yellow { color: var(--yellow); }
+    @media (min-width: 1200px) { .kpi-val { font-size: 52px; } }
+    .kpi-val.c-orange { color: var(--orange); text-shadow: 0 0 20px rgba(255,140,0,0.2); }
+    .kpi-val.c-blue { color: var(--blue); text-shadow: 0 0 20px rgba(68,138,255,0.2); }
+    .kpi-val.c-green { color: var(--green); text-shadow: 0 0 20px rgba(0,210,106,0.2); }
+    .kpi-val.c-yellow { color: var(--yellow); text-shadow: 0 0 20px rgba(255,214,0,0.2); }
     .kpi-unit {
       font-family: var(--sans);
-      font-size: 12px;
+      font-size: 13px;
       color: var(--dim);
-      margin-left: 2px;
+      margin-left: 3px;
     }
 
-    /* ═══════════════════════════════════════════
-       DESKTOP TWO-COLUMN
-       ═══════════════════════════════════════════ */
+    /* ═══ GRID ROW ═══ */
     .grid-row {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      margin-bottom: 12px;
+      grid-template-columns: 1fr 1.6fr;
+      gap: 14px;
+      margin-bottom: 14px;
     }
     .grid-row .panel { margin-bottom: 0; }
     @media (max-width: 640px) {
-      .grid-row { grid-template-columns: 1fr; gap: 12px; }
+      .grid-row { grid-template-columns: 1fr; }
     }
 
-    /* ═══════════════════════════════════════════
-       RATIO
-       ═══════════════════════════════════════════ */
+    /* ═══ RATIO ═══ */
     .ratio-track {
-      height: 8px;
+      height: 10px;
       display: flex;
       overflow: hidden;
       background: rgba(255,255,255,0.03);
-      margin-bottom: 16px;
+      margin-bottom: 18px;
     }
-    @media (min-width: 1200px) {
-      .ratio-track { height: 12px; margin-bottom: 20px; }
-    }
+    @media (min-width: 1200px) { .ratio-track { height: 14px; margin-bottom: 22px; } }
     .ratio-new {
-      background: var(--green);
+      background: linear-gradient(90deg, #00b85c, var(--green));
       height: 100%;
-      transition: width 0.7s ease;
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 10px rgba(0,210,106,0.2);
     }
     .ratio-ret {
-      background: var(--blue);
+      background: linear-gradient(90deg, var(--blue), #6ea8ff);
       height: 100%;
-      transition: width 0.7s ease;
+      transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      box-shadow: 0 0 10px rgba(68,138,255,0.2);
     }
     .ratio-legend {
       display: flex;
@@ -294,39 +307,34 @@
     .ratio-item {
       display: flex;
       align-items: center;
-      gap: 6px;
-      font-size: 12px;
+      gap: 8px;
+      font-size: 13px;
       color: var(--dim);
     }
-    .ratio-dot {
-      width: 8px; height: 8px;
-    }
-    .ratio-dot.g { background: var(--green); }
-    .ratio-dot.b { background: var(--blue); }
+    .ratio-dot { width: 10px; height: 10px; border-radius: 2px; }
+    .ratio-dot.g { background: var(--green); box-shadow: 0 0 6px rgba(0,210,106,0.3); }
+    .ratio-dot.b { background: var(--blue); box-shadow: 0 0 6px rgba(68,138,255,0.3); }
     .ratio-pct {
       font-family: var(--mono);
       font-weight: 700;
-      color: var(--text);
+      font-size: 16px;
+      color: var(--text-hi);
     }
 
-    /* ═══════════════════════════════════════════
-       7-DAY CHART
-       ═══════════════════════════════════════════ */
+    /* ═══ 7-DAY CHART ═══ */
     .chart-bars {
       display: flex;
       align-items: flex-end;
-      gap: 8px;
-      height: 180px;
+      gap: 10px;
+      height: 200px;
     }
-    @media (min-width: 1200px) {
-      .chart-bars { height: 240px; }
-    }
+    @media (min-width: 1200px) { .chart-bars { height: 280px; } }
     .bar-col {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
       height: 100%;
       justify-content: flex-end;
     }
@@ -336,35 +344,42 @@
       font-weight: 700;
       color: var(--text);
       font-variant-numeric: tabular-nums;
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity 0.3s, transform 0.3s;
     }
-    @media (min-width: 1200px) {
-      .bar-val { font-size: 14px; }
-      .bar-day { font-size: 12px; }
-    }
+    .bar-val.show { opacity: 1; transform: translateY(0); }
+    @media (min-width: 1200px) { .bar-val { font-size: 14px; } }
     .bar-fill {
       width: 100%;
       min-height: 2px;
-      background: rgba(255,140,0,0.25);
-      transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+      background: linear-gradient(to top, rgba(255,140,0,0.15), rgba(255,140,0,0.30));
+      border-radius: 2px 2px 0 0;
+      transition: height 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
     }
     .bar-fill.today {
-      background: var(--orange);
-      box-shadow: 0 0 12px rgba(255,140,0,0.25);
+      background: linear-gradient(to top, #cc7000, var(--orange), #ffaa33);
+      box-shadow: 0 0 20px rgba(255,140,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+    }
+    .bar-fill:hover {
+      filter: brightness(1.2);
     }
     .bar-day {
       font-family: var(--mono);
-      font-size: 10px;
+      font-size: 11px;
       color: var(--dim);
+      transition: color 0.2s;
     }
+    .bar-col:last-child .bar-day { color: var(--orange); font-weight: 700; }
+    @media (min-width: 1200px) { .bar-day { font-size: 12px; } }
 
-    /* ═══════════════════════════════════════════
-       STATUS BAR
-       ═══════════════════════════════════════════ */
+    /* ═══ STATUS BAR ═══ */
     .status-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 12px;
+      padding: 10px 14px;
       background: var(--surface);
       border: 1px solid var(--border);
       border-top: 2px solid var(--orange);
@@ -372,80 +387,81 @@
     .status-item {
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       font-family: var(--mono);
       font-size: 11px;
       color: var(--dim);
     }
     .status-dot {
-      width: 6px; height: 6px;
+      width: 7px; height: 7px;
       border-radius: 50%;
       background: var(--green);
+      box-shadow: 0 0 8px rgba(0,210,106,0.5);
       animation: pulse 2s ease-in-out infinite;
     }
     .status-live { color: var(--green); font-weight: 700; }
     @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.3; }
+      0%, 100% { opacity: 1; box-shadow: 0 0 8px rgba(0,210,106,0.5); }
+      50% { opacity: 0.4; box-shadow: 0 0 4px rgba(0,210,106,0.2); }
     }
 
-    /* ═══════════════════════════════════════════
-       FUNCTION BAR (bottom)
-       ═══════════════════════════════════════════ */
+    /* ═══ FUNCTION BAR ═══ */
     .fn-bar {
       display: flex;
       gap: 1px;
       background: var(--border);
-      margin-top: 12px;
+      margin-top: 14px;
     }
     .fn-key {
       flex: 1;
       background: var(--surface);
       text-align: center;
-      padding: 6px 0;
+      padding: 7px 0;
       font-family: var(--mono);
       font-size: 10px;
       color: var(--dim);
       cursor: default;
       user-select: none;
+      transition: background 0.15s, color 0.15s;
     }
-    .fn-key span {
-      color: var(--orange);
-      font-weight: 700;
-    }
-    @media (max-width: 640px) {
-      .fn-bar { display: none; }
-    }
+    .fn-key:hover { background: var(--surface2); color: var(--text); }
+    .fn-key span { color: var(--orange); font-weight: 700; }
+    @media (max-width: 640px) { .fn-bar { display: none; } }
 
-    /* ═══════════════════════════════════════════
-       LOADING
-       ═══════════════════════════════════════════ */
+    /* ═══ LOADING ═══ */
     .loading-wrap {
       text-align: center;
-      padding: 80px 0;
+      padding: 100px 0;
       font-family: var(--mono);
       font-size: 12px;
       color: var(--dim);
     }
     .ld-spinner {
-      width: 24px; height: 24px;
+      width: 28px; height: 28px;
       border: 2px solid var(--border);
       border-top-color: var(--orange);
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
-      margin: 0 auto 12px;
+      margin: 0 auto 14px;
+      box-shadow: 0 0 12px rgba(255,140,0,0.15);
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ═══════════════════════════════════════════
-       ANIMATION
-       ═══════════════════════════════════════════ */
-    .fade-in {
+    /* ═══ STAGGER REVEAL ═══ */
+    .reveal {
       opacity: 0;
-      transform: translateY(4px);
-      animation: fadeUp 0.3s ease forwards;
+      transform: translateY(16px);
+      transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+                  transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
     }
-    @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+    .reveal.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal.d1 { transition-delay: 0.05s; }
+    .reveal.d2 { transition-delay: 0.15s; }
+    .reveal.d3 { transition-delay: 0.25s; }
+    .reveal.d4 { transition-delay: 0.35s; }
   </style>
 </head>
 <body>
@@ -484,7 +500,7 @@
     <div id="stats-content" style="display:none;">
 
       <!-- KPI -->
-      <div class="kpi-panel panel fade-in">
+      <div class="kpi-panel panel reveal d1">
         <div class="panel-head">
           <span class="panel-label">핵심 지표</span>
           <span class="panel-tag">KEY METRICS</span>
@@ -509,11 +525,9 @@
         </div>
       </div>
 
-      <!-- Two-column: Ratio + Chart -->
-      <div class="grid-row fade-in">
-
-        <!-- Ratio panel -->
-        <div class="panel">
+      <!-- Ratio + Chart -->
+      <div class="grid-row">
+        <div class="panel reveal d2">
           <div class="panel-head">
             <span class="panel-label">신규 vs 재방문</span>
             <span class="panel-tag">RATIO</span>
@@ -536,8 +550,7 @@
           </div>
         </div>
 
-        <!-- 7-day chart panel -->
-        <div class="panel">
+        <div class="panel reveal d3">
           <div class="panel-head">
             <span class="panel-label">최근 7일 추이</span>
             <span class="panel-tag">DAU TREND</span>
@@ -546,11 +559,10 @@
             <div class="chart-bars" id="chart-bars"></div>
           </div>
         </div>
-
       </div>
 
-      <!-- Status bar -->
-      <div class="status-bar fade-in">
+      <!-- Status -->
+      <div class="status-bar reveal d4">
         <div class="status-item">
           <span class="status-dot"></span>
           <span class="status-live">LIVE</span>
@@ -558,8 +570,8 @@
         <div class="status-item" id="last-update"></div>
       </div>
 
-      <!-- Function keys -->
-      <div class="fn-bar fade-in">
+      <!-- Fn keys -->
+      <div class="fn-bar reveal d4">
         <div class="fn-key"><span>F1</span> 도움말</div>
         <div class="fn-key"><span>F2</span> 새로고침</div>
         <div class="fn-key"><span>F3</span> 메인</div>
@@ -602,12 +614,20 @@
       document.getElementById('date-label').textContent = fmtDisplay(currentDate);
     }
 
+    /* ── Stagger reveal ── */
+    function triggerReveal() {
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.reveal').forEach(el => el.classList.add('show'));
+      });
+    }
+
     /* ── Fetch & Render ── */
     async function fetchStats() {
       const $ld = document.getElementById('loading');
       const $ct = document.getElementById('stats-content');
       $ld.style.display = '';
       $ct.style.display = 'none';
+      document.querySelectorAll('.reveal').forEach(el => el.classList.remove('show'));
 
       try {
         const d = fmtDate(currentDate);
@@ -638,20 +658,23 @@
 
         $ld.style.display = 'none';
         $ct.style.display = '';
+        triggerReveal();
         load7Day();
       } catch (err) {
         $ld.innerHTML = '<div style="color:var(--red)">데이터 로드 실패</div><div style="margin-top:8px;font-size:11px;color:var(--dim)">' + err.message + '</div>';
       }
     }
 
-    /* ── Number animation ── */
+    /* ── Number animation (bounce-ease) ── */
     function animateNum(id, end) {
       const el = document.getElementById(id);
       if (end === 0) { el.textContent = '0'; return; }
       const t0 = performance.now();
+      const dur = 700;
       (function tick(now) {
-        const p = Math.min((now - t0) / 500, 1);
-        const ease = 1 - Math.pow(1 - p, 3);
+        const p = Math.min((now - t0) / dur, 1);
+        /* overshoot ease */
+        const ease = p < 1 ? 1 - Math.pow(1 - p, 4) : 1;
         el.textContent = Math.round(ease * end).toLocaleString();
         if (p < 1) requestAnimationFrame(tick);
       })(t0);
@@ -702,8 +725,9 @@
 
         requestAnimationFrame(() => {
           setTimeout(() => {
-            bar.style.height = Math.max((r.dau / max) * 100, 3) + '%';
-          }, i * 60);
+            bar.style.height = Math.max((r.dau / max) * 100, 4) + '%';
+            val.classList.add('show');
+          }, 150 + i * 80);
         });
       });
     }
