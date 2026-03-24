@@ -369,21 +369,21 @@
       display: flex;
       align-items: flex-end;
       gap: 10px;
-      flex: 1;
-      min-height: 250px;
+      height: 300px;
     }
-    @media (min-width: 1200px) { .chart-bars { min-height: 300px; } }
+    @media (min-width: 1200px) { .chart-bars { height: 360px; } }
+    @media (max-width: 640px) { .chart-bars { height: 220px; } }
     .bar-col {
       flex: 1;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      height: 100%;
-      min-height: 250px;
+      height: 300px;
       justify-content: flex-end;
     }
-    @media (min-width: 1200px) { .bar-col { min-height: 300px; } }
+    @media (min-width: 1200px) { .bar-col { height: 360px; } }
+    @media (max-width: 640px) { .bar-col { height: 220px; } }
     .bar-val {
       font-family: var(--mono);
       font-size: 12px;
