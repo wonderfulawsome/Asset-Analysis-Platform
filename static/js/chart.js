@@ -159,7 +159,7 @@ async function loadCandleChart() {
 
     renderCandlestickChart(chartEl, data.candles);
     if (volEl) renderVolumeChart(volEl, data.candles);
-    if (sumEl) renderChartSummary(sumEl, data.candles);
+    renderChartSummary(sumEl, data.candles);
     renderMALegend();
   } catch (err) {
     chartEl.innerHTML = `<div class="candle-empty">${t('chart.noData')}</div>`;
