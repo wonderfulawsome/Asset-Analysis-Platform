@@ -88,9 +88,18 @@ def fetch_macro(days: int = 0) -> pd.DataFrame:
     # 6개 티커 데이터를 각각 수집
     raw = {}
     for ticker in SYMBOLS:
-        raw[ticker] = _fetch_df(ticker, from_ts, to_ts)    # 티커별 API 호출
-        if raw[ticker].empty:
-            raise RuntimeError(f'[Collector] 데이터 수집 실패: {ticker}')
+        try:
+            raw[ticker] = _fetch_df(ticker, from_ts, to_ts)    # 티커별 API 호출
+            if raw[ticker].empty:
+                print(f'[Collector] {ticker}: 빈 데이터 반환')
+                raw[ticker] = pd.DataFrame(columns=['close', 'volume'])
+        except Exception as e:
+            print(f'[Collector] {ticker}: 수집 실패, 건너뜀 ({e})')
+            raw[ticker] = pd.DataFrame(columns=['close', 'volume'])
+
+    # S&P 500은 필수 — 없으면 피처 계산 불가
+    if raw.get('^GSPC') is None or raw['^GSPC'].empty:
+        raise RuntimeError('[Collector] S&P 500 데이터 수집 실패 — 파이프라인 중단')
     # 티커 순회 하며 정의 한 날자에 맞춰 데이터 수집
     ### raw 에 데이터 저장
 
