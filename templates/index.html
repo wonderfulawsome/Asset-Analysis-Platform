@@ -25,7 +25,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=99">
+  <link rel="stylesheet" href="/static/css/main.css?v=100">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(!t){t='dark';localStorage.setItem('theme','dark');}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
@@ -266,6 +266,18 @@
         <div id="chart-ticker-chips" class="chart-ticker-chips"></div>
       </div>
 
+      <!-- 가격 헤더 (JS에서 채움) -->
+      <div id="chart-price-header" class="chart-price-header fade-target"></div>
+
+      <!-- 상단 요약 카드 3개 (JS에서 채움) -->
+      <div id="chart-top-stats" class="chart-top-stats fade-target"></div>
+
+      <!-- 30일 예측 버튼 -->
+      <div class="fade-target" style="margin-top:10px;">
+        <button id="predict-toggle-btn" class="predict-btn-wide" data-i18n="chart.predictBtn">↗ 30일 예측 보기 →</button>
+        <div id="predict-legend" class="predict-legend" style="margin-top:8px;"></div>
+      </div>
+
       <!-- 봉 간격 선택 -->
       <div class="chart-interval-bar fade-target">
         <button class="chart-iv-btn active" data-iv="1d" data-i18n="chart.daily">일봉</button>
@@ -273,17 +285,12 @@
         <button class="chart-iv-btn" data-iv="1mo" data-i18n="chart.monthly">월봉</button>
       </div>
 
-      <!-- 30일 예측 토글 + 범례 -->
-      <div class="fade-target" style="margin-top:6px; text-align:center;">
-        <button id="predict-toggle-btn" class="predict-btn" data-i18n="chart.predictBtn">30일 예측</button>
-        <div id="predict-legend" class="predict-legend" style="margin-top:8px;"></div>
-      </div>
-
       <!-- MA 범례 -->
       <div id="ma-legend" class="ma-legend fade-target"></div>
 
       <!-- 캔들스틱 차트 -->
       <div class="card fade-target" style="padding:10px 4px 6px; position:relative;">
+        <div class="chart-hint" id="chart-hint">차트를 터치하면 상세 정보를 볼 수 있어요</div>
         <div id="candle-chart" class="candle-chart-wrap"></div>
         <div class="chart-zoom-btns">
           <button class="chart-zoom-btn" id="zoom-in-btn">+</button>
@@ -297,8 +304,8 @@
         <div id="volume-chart" class="volume-chart-wrap"></div>
       </div>
 
-      <!-- 요약 정보 -->
-      <div id="chart-summary" class="chart-summary fade-target"></div>
+      <!-- 가격 범위 바 (JS에서 채움) -->
+      <div id="chart-range-bar" class="chart-range-section fade-target"></div>
 
       <!-- 면책 문구 -->
       <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
@@ -355,6 +362,6 @@
   </script>
   <script src="/static/js/main.js?v=99"></script>
   <script src="/static/js/sector.js?v=5"></script>
-  <script src="/static/js/chart.js?v=13"></script>
+  <script src="/static/js/chart.js?v=14"></script>
 </body>
 </html>

@@ -1,5 +1,10 @@
 // ── 캔들스틱 차트 탭 ──
 const CHART_MAIN_TICKERS = ['SPY','QQQ','DIA','IWM','VOO','SOXX','SMH','GLD','TLT','SCHD'];
+const TICKER_NAMES = {
+  SPY:'S&P 500 ETF', QQQ:'Nasdaq 100', DIA:'Dow Jones', IWM:'Russell 2000',
+  VOO:'S&P 500 (V)', SOXX:'Semiconductor', SMH:'Semiconductor (VN)',
+  GLD:'Gold', TLT:'Treasury 20Y+', SCHD:'Dividend',
+};
 
 // 이동평균선 설정 (기간, 색상)
 const MA_CONFIG = [
@@ -646,6 +651,8 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     tip.style.left = visibleX > containerW * 0.5 ? `${visibleX - tipW - 8}px` : `${visibleX + 12}px`;
     tip.style.top = `${pad.top}px`;
     tip.style.opacity = '1';
+    const hint = document.getElementById('chart-hint');
+    if (hint) hint.style.display = 'none';
 
     const ch = getCrosshair();
     if (ch) {
@@ -721,9 +728,10 @@ function renderVolumeChart(el, allCandles, scrollRatio) {
   }, { passive: true });
 }
 
-// ── 요약 정보 카드 ──
+// ── 요약 정보 (가격 헤더 + 상단 스탯 + 하단 범위 바) ──
 function renderChartSummary(el, candles) {
-  if (candles.length < 2) { el.innerHTML = ''; return; }
+  // el은 기존 chart-summary (미사용, 호환 유지)
+  if (candles.length < 2) return;
   const latest = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
   const first = candles[0];
@@ -732,43 +740,70 @@ function renderChartSummary(el, candles) {
   const periodChg = ((latest.c - first.o) / first.o * 100);
   const high = Math.max(...candles.map(c => c.h));
   const low = Math.min(...candles.map(c => c.l));
+  const range = low > 0 ? ((high - low) / low * 100) : 0;
+  const pos = high > low ? ((latest.c - low) / (high - low) * 100) : 50;
 
-  const periodLabel = _chartInterval === '1d' ? t('chart.period6m')
-    : _chartInterval === '1wk' ? t('chart.period2y') : t('chart.period5y');
+  const periodLabel = _chartInterval === '1d' ? '6개월'
+    : _chartInterval === '1wk' ? '2년' : '5년';
+  const chgColor = dayChg >= 0 ? '#10B981' : '#EF4444';
+  const chgSign = dayChg >= 0 ? '+' : '';
+  const pChgColor = periodChg >= 0 ? '#10B981' : '#EF4444';
+  const pChgSign = periodChg >= 0 ? '+' : '';
+  const name = TICKER_NAMES[_chartTicker] || _chartTicker;
 
-  function fmtChg(v) {
-    const s = v > 0 ? '+' : '';
-    const color = v > 0 ? '#10B981' : v < 0 ? '#EF4444' : 'var(--sub)';
-    return `<span style="color:${color};font-weight:700">${s}${v.toFixed(2)}%</span>`;
+  // ① 가격 헤더
+  const headerEl = document.getElementById('chart-price-header');
+  if (headerEl) {
+    headerEl.innerHTML = `
+      <div class="chart-price-row">
+        <span class="chart-price-val">$${latest.c.toFixed(2)}</span>
+        <span class="chart-price-chg" style="color:${chgColor}">${chgSign}${dayChg.toFixed(2)}%</span>
+      </div>
+      <div class="chart-price-name">${_chartTicker} · ${name}</div>`;
   }
 
-  el.innerHTML = `
-    <div class="chart-sum-grid">
-      <div class="chart-sum-item">
-        <div class="chart-sum-label">${t('chart.lastClose')}</div>
-        <div class="chart-sum-val">$${latest.c.toFixed(2)}</div>
-      </div>
-      <div class="chart-sum-item">
-        <div class="chart-sum-label">${t('chart.prevChg')}</div>
-        <div class="chart-sum-val">${fmtChg(dayChg)}</div>
-      </div>
-      <div class="chart-sum-item">
-        <div class="chart-sum-label">${periodLabel}</div>
-        <div class="chart-sum-val">${fmtChg(periodChg)}</div>
-      </div>
-      <div class="chart-sum-item">
-        <div class="chart-sum-label">${t('chart.high')}</div>
-        <div class="chart-sum-val" style="color:#10B981">$${high.toFixed(2)}</div>
-      </div>
-      <div class="chart-sum-item">
-        <div class="chart-sum-label">${t('chart.low')}</div>
-        <div class="chart-sum-val" style="color:#EF4444">$${low.toFixed(2)}</div>
-      </div>
-      <div class="chart-sum-item">
-        <div class="chart-sum-label">${t('chart.range')}</div>
-        <div class="chart-sum-val">${((high - low) / low * 100).toFixed(1)}%</div>
-      </div>
-    </div>`;
+  // ② 상단 3카드
+  const statsEl = document.getElementById('chart-top-stats');
+  if (statsEl) {
+    statsEl.innerHTML = `
+      <div class="chart-stats-grid">
+        <div class="chart-stat-card">
+          <div class="chart-stat-label">${periodLabel}</div>
+          <div class="chart-stat-val" style="color:${pChgColor}">${pChgSign}${periodChg.toFixed(1)}%</div>
+        </div>
+        <div class="chart-stat-card">
+          <div class="chart-stat-label">${t('chart.high')}</div>
+          <div class="chart-stat-val">$${high.toFixed(1)}</div>
+        </div>
+        <div class="chart-stat-card">
+          <div class="chart-stat-label">${t('chart.low')}</div>
+          <div class="chart-stat-val">$${low.toFixed(1)}</div>
+        </div>
+      </div>`;
+  }
+
+  // ③ 하단 범위 바
+  const rangeEl = document.getElementById('chart-range-bar');
+  if (rangeEl) {
+    rangeEl.innerHTML = `
+      <div class="chart-range-card">
+        <div class="chart-range-head">
+          <span class="chart-range-label">${periodLabel} 가격 범위</span>
+          <span class="chart-range-badge">${range.toFixed(1)}% 변동</span>
+        </div>
+        <div class="chart-range-track">
+          <div class="chart-range-fill" style="width:${Math.min(pos, 100)}%"></div>
+          <div class="chart-range-dot" style="left:${Math.min(Math.max(pos, 3), 97)}%"></div>
+        </div>
+        <div class="chart-range-minmax">
+          <span>$${low.toFixed(1)}</span>
+          <span>$${high.toFixed(1)}</span>
+        </div>
+      </div>`;
+  }
+
+  // 기존 chart-summary 비우기
+  if (el) el.innerHTML = '';
 }
 
 // ═════════════════════════════════

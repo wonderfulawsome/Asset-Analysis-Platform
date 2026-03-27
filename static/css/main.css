@@ -2313,3 +2313,176 @@ html[lang="en"] .card-tappable::after {
 @keyframes predFadeIn {
   to { opacity: 1; }
 }
+
+/* ═══ Chart Price Header ═══ */
+.chart-price-header {
+  padding: 8px 0 4px;
+}
+.chart-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.chart-price-val {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.chart-price-chg {
+  font-size: 15px;
+  font-weight: 700;
+}
+.chart-price-name {
+  font-size: 13px;
+  color: var(--sub);
+  margin-top: 2px;
+}
+
+/* ═══ Chart Top Stats ═══ */
+.chart-top-stats {
+  margin: 8px 0;
+}
+.chart-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.chart-stat-card {
+  background: var(--card);
+  border: 1px solid var(--sep);
+  border-radius: 14px;
+  padding: 12px 10px;
+  text-align: center;
+}
+.chart-stat-label {
+  font-size: 10px;
+  color: var(--sub);
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+.chart-stat-val {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+[data-theme="dark"] .chart-stat-card {
+  background: #1C1C20;
+  border-color: #2a2a2e;
+}
+
+/* ═══ Wide Predict Button ═══ */
+.predict-btn-wide {
+  display: block;
+  width: 100%;
+  padding: 14px 0;
+  border-radius: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(135deg, #3B82F6, #06B6D4);
+  color: #fff;
+  font-family: inherit;
+  letter-spacing: 0.3px;
+  transition: all 0.25s;
+  box-shadow: 0 4px 16px rgba(59,130,246,0.25);
+}
+.predict-btn-wide:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 24px rgba(59,130,246,0.35);
+}
+.predict-btn-wide:active {
+  transform: scale(0.98);
+}
+.predict-btn-wide.active {
+  background: linear-gradient(135deg, #2563EB, #0891B2);
+  box-shadow: 0 4px 20px rgba(59,130,246,0.4);
+  animation: predictGlow 2s ease-in-out infinite;
+}
+.predict-btn-wide:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* ═══ Chart Hint ═══ */
+.chart-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--sub2);
+  padding: 4px 0 2px;
+}
+
+/* ═══ Price Range Bar ═══ */
+.chart-range-section {
+  margin-top: 10px;
+}
+.chart-range-card {
+  background: var(--card);
+  border: 1px solid var(--sep);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+[data-theme="dark"] .chart-range-card {
+  background: #1C1C20;
+  border-color: #2a2a2e;
+}
+.chart-range-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.chart-range-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sub);
+}
+.chart-range-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--sep);
+  color: var(--text);
+}
+[data-theme="dark"] .chart-range-badge {
+  background: #2a2a2e;
+}
+.chart-range-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--sep);
+  margin-bottom: 8px;
+}
+[data-theme="dark"] .chart-range-track {
+  background: #2a2a2e;
+}
+.chart-range-fill {
+  position: absolute;
+  top: 0; left: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #3B82F6, #06B6D4);
+}
+.chart-range-dot {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 3px solid #3B82F6;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+}
+.chart-range-minmax {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sub);
+  font-variant-numeric: tabular-nums;
+}
