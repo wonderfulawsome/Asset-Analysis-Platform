@@ -718,11 +718,12 @@ function switchTab(idx, addHistory) {
       }, 50);
     }
   }
-  // AI차트 탭 최초 진입 시 초기화 (idx=1)
-  if (idx === 1 && typeof initChartTab === 'function' && !window._chartLoaded) {
+  // AI차트 탭 최초 진입 시 초기화 (idx=0)
+  if (idx === 0 && typeof initChartTab === 'function' && !window._chartLoaded) {
     window._chartLoaded = true;
     initChartTab();
   }
+  // 시장 탭 최초 진입 시 데이터 로드 (idx=1) — 기존 자동 로드 유지
   // 신호 탭 최초 진입 시 데이터 로드 (idx=2)
   if (idx === 2 && !window._signalLoaded) {
     window._signalLoaded = true;
@@ -742,7 +743,7 @@ function switchTab(idx, addHistory) {
 }
 
 // ── 탭 전환 ──
-const TAB_IDS = ['tab-market', 'tab-chart', 'tab-signal', 'tab-sector'];
+const TAB_IDS = ['tab-chart', 'tab-market', 'tab-signal', 'tab-sector'];
 const tabs = document.querySelectorAll('.tab');
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
@@ -1659,15 +1660,15 @@ function renderNoiseDetail(body) {
 async function refreshCurrentTab() {
   const idx = _currentTabIdx;
   if (idx === 0) {
+    // AI차트 탭
+    if (typeof loadCandleChart === 'function') await loadCandleChart();
+  } else if (idx === 1) {
     // 시장 탭
     await Promise.allSettled([
       loadRegime(), loadMacro(), loadFeed(),
       loadMarketOverview(), loadNoiseChart(),
       loadHoldingsSummary()
     ]);
-  } else if (idx === 1) {
-    // AI차트 탭
-    if (typeof loadCandleChart === 'function') await loadCandleChart();
   } else if (idx === 2) {
     // 신호 탭
     await Promise.allSettled([
@@ -1853,6 +1854,11 @@ function trackVisit() {
   const safetyTimer = setTimeout(safeDismiss, 6000);
 
   try {
+    // AI차트(idx=0)가 기본 탭이므로 차트 초기화 + 시장 데이터 모두 로드
+    if (typeof initChartTab === 'function' && !window._chartLoaded) {
+      window._chartLoaded = true;
+      initChartTab();
+    }
     await Promise.allSettled([loadRegime(), loadMacro(), loadFeed(), loadMarketOverview(), loadNoiseChart()]);
   } catch (e) {
     console.error('Init load error:', e);
