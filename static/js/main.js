@@ -969,22 +969,38 @@ async function loadCrashSurge() {
 
     _csData = d;  // 상세페이지용 캐시
 
+    // 변동성 판정: 둘 다 60 미만이면 보통, 하나라도 60 이상이면 높음
+    const isHighVol = d.crash_score >= 60 || d.surge_score >= 60;
+    const volLabel = isHighVol ? '변동성 높음' : '변동성 보통';
+    const volCls = isHighVol ? 'badge-red' : 'badge-green';
+
     const badge = document.getElementById('cs-badge');
-    const maxGrade = d.crash_score >= d.surge_score ? d.crash_grade : d.surge_grade;
-    const bs = CS_GRADE_STYLE[maxGrade] || CS_GRADE_STYLE['보통'];
-    badge.className = `badge ${bs.cls}`;
-    badge.textContent = tGrade(maxGrade);             // 등급 번역
+    badge.className = `badge ${volCls}`;
+    badge.textContent = volLabel;
+
+    // 하락 가능성: 점수 기반 라벨 (경고 없음)
+    const crashLabel = d.crash_score < 40 ? '낮음' : d.crash_score < 60 ? '보통' : '높음';
+    const crashS = d.crash_score < 40
+      ? { cls: 'badge-green', color: '#10B981' }
+      : d.crash_score < 60
+      ? { cls: 'badge-yellow', color: '#F59E0B' }
+      : { cls: 'badge-red', color: '#EF4444' };
+
+    // 상승 기대도: 점수 기반 라벨 (낮음/보통/높음)
+    const surgeLabel = d.surge_score < 40 ? '낮음' : d.surge_score < 60 ? '보통' : '높음';
+    const surgeS = d.surge_score < 40
+      ? { cls: 'badge-green', color: '#10B981' }
+      : d.surge_score < 60
+      ? { cls: 'badge-yellow', color: '#F59E0B' }
+      : { cls: 'badge-green', color: '#22C55E' };
 
     const el = document.getElementById('cs-card');
-    const crashS = CS_GRADE_STYLE[d.crash_grade] || CS_GRADE_STYLE['보통'];
-    const surgeS = SURGE_GRADE_STYLE[d.surge_grade] || SURGE_GRADE_STYLE['보통'];
-
     el.innerHTML = `
       <div class="cs-row">
         <div class="cs-item">
           <div class="cs-item-header">
             <span class="cs-item-label">${t('cs.crashRisk')}</span>
-            <span class="badge ${crashS.cls}" style="font-size:10px">${tGrade(d.crash_grade)}</span>
+            <span class="badge ${crashS.cls}" style="font-size:10px">${crashLabel}</span>
           </div>
           <div class="cs-score" style="color:${crashS.color}">
             <span class="cs-score-num" data-target="${d.crash_score}">0</span>
@@ -997,7 +1013,7 @@ async function loadCrashSurge() {
         <div class="cs-item">
           <div class="cs-item-header">
             <span class="cs-item-label">${t('cs.surgeExpect')}</span>
-            <span class="badge ${surgeS.cls}" style="font-size:10px">${tGrade(d.surge_grade)}</span>
+            <span class="badge ${surgeS.cls}" style="font-size:10px">${surgeLabel}</span>
           </div>
           <div class="cs-score" style="color:${surgeS.color}">
             <span class="cs-score-num" data-target="${d.surge_score}">0</span>
