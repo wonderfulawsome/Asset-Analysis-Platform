@@ -723,12 +723,17 @@ function switchTab(idx, addHistory) {
     window._chartLoaded = true;
     initChartTab();
   }
-  // 시장 탭 최초 진입 시 데이터 로드 (idx=1) — 기존 자동 로드 유지
-  // 신호 탭 최초 진입 시 데이터 로드 (idx=2)
-  if (idx === 2 && !window._signalLoaded) {
-    window._signalLoaded = true;
-    loadCrashSurge();
-    loadCrashSurgeChart();
+  // 시장 탭 진입 시 noise 차트 재렌더 (숨김→표시 전환 시 너비 0 문제 대비)
+  if (idx === 1) {
+    setTimeout(() => { if (typeof loadNoiseChart === 'function') loadNoiseChart(); }, 100);
+  }
+  // 신호 탭 진입 시 차트 로드 (숨김→표시 전환 후 렌더)
+  if (idx === 2) {
+    if (!window._signalLoaded) {
+      window._signalLoaded = true;
+      loadCrashSurge();
+    }
+    setTimeout(() => loadCrashSurgeChart(), 100);
   }
   // 거시경제 탭 최초 진입 시 데이터 로드 (idx=3)
   if (idx === 3 && typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
@@ -1056,7 +1061,8 @@ function renderLineChart(containerId, points, options = {}) {
     return;
   }
 
-  const W = el.clientWidth - 2;                                    // SVG 너비 (패딩 고려)
+  const rawW = el.clientWidth - 2;
+  const W = rawW > 50 ? rawW : (el.parentElement?.clientWidth || window.innerWidth - 40) - 2; // 숨겨진 탭 대비 fallback
   const H = options.height || 140;                                 // SVG 높이
   const hasYSideLabels = options.yTopLabel || options.yBottomLabel; // Y축 사이드 라벨 존재 여부
   const pad = { top: 12, right: 12, bottom: 22, left: hasYSideLabels ? 56 : 36 }; // 라벨 있으면 좌측 패딩 확장
@@ -1195,7 +1201,8 @@ function renderDualLineChart(containerId, labels, crashVals, surgeVals) {
   const el = document.getElementById(containerId);
   if (!el || labels.length < 2) return;
 
-  const W = el.clientWidth - 2;
+  const rawW = el.clientWidth - 2;
+  const W = rawW > 50 ? rawW : (el.parentElement?.clientWidth || window.innerWidth - 40) - 2;
   const H = 180;
   const pad = { top: 16, right: 14, bottom: 32, left: 38 };
   const cW = W - pad.left - pad.right;
