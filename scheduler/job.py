@@ -108,8 +108,7 @@ def run_pipeline(light: bool = False) -> None:
                 existing = fetch_noise_regime_all()
                 existing_dates = {r['date'] for r in existing}
 
-                # 최초 백필 500일(~2년), 이후 60일 (4000일은 메모리 초과 위험)
-                backfill_days = 500 if len(existing_dates) < 500 else 60
+                backfill_days = 50
                 print(f'[Step 3f] 백필 범위: {backfill_days}일 (기존 {len(existing_dates)}건)')
                 backfill_records = backfill_noise_regime(noise_bundle, noise_model_bundle, days=backfill_days)
                 new_records = [r for r in backfill_records if r['date'] not in existing_dates]
