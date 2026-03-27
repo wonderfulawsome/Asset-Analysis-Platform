@@ -1,6 +1,53 @@
 // ── 상세페이지 캐시 ──
 var _csData = null;
 var _nrData = null;
+var _fgData = null;  // 공포탐욕 데이터 캐시 (인사이트 연동용)
+
+// ── 공포탐욕 × Noise 인사이트 ──
+function _buildFgNoiseInsight(noiseScore) {
+  if (!_fgData || noiseScore == null) return '';
+  const rating = _fgData.rating;
+  const score = _fgData.score;
+  const FEAR_SET = new Set(['공포', '극도 공포']);
+  const GREED_SET = new Set(['탐욕', '극도 탐욕']);
+
+  let icon, msg, color;
+  if (FEAR_SET.has(rating)) {
+    if (noiseScore >= 0) {
+      // 공포 + 펀더멘털 괴리 → 비합리적 공포
+      icon = '🧊';
+      msg = `현재 공포(${score})는 비합리적일 수 있습니다 — 펀더멘털과 주가가 괴리된 상태에서의 과도한 공포`;
+      color = '#3B82F6';
+    } else {
+      // 공포 + 펀더멘털 일치 → 합리적 공포
+      icon = '⚠️';
+      msg = `현재 공포(${score})는 합리적일 수 있습니다 — 펀더멘털이 실제로 약화된 상태`;
+      color = '#EF4444';
+    }
+  } else if (GREED_SET.has(rating)) {
+    if (noiseScore >= 0) {
+      // 탐욕 + 펀더멘털 괴리 → 비합리적 탐욕
+      icon = '🔥';
+      msg = `현재 탐욕(${score})은 비합리적일 수 있습니다 — 펀더멘털과 괴리된 상태에서의 과도한 낙관`;
+      color = '#EF4444';
+    } else {
+      // 탐욕 + 펀더멘털 일치 → 합리적 탐욕
+      icon = '✅';
+      msg = `현재 탐욕(${score})은 합리적일 수 있습니다 — 펀더멘털이 뒷받침하는 상승`;
+      color = '#22C55E';
+    }
+  } else {
+    // 중립
+    icon = '⚖️';
+    msg = `시장 심리 중립(${score}) — 특별한 괴리 신호 없음`;
+    color = '#F97316';
+  }
+
+  return `<div class="nr-insight" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:${color}10;border:1px solid ${color}25;">
+    <div style="font-size:13px;font-weight:600;color:${color};margin-bottom:2px">${icon} 공포탐욕 × 노이즈 분석</div>
+    <div style="font-size:12px;color:var(--sub);line-height:1.5">${msg}</div>
+  </div>`;
+}
 
 // ── Lucide SVG Inline Icons ──
 const LUCIDE_PATHS = {
@@ -271,6 +318,9 @@ async function loadMarketOverview() {
     const res = await fetch('/api/market-summary/today');
     const d = await res.json();
 
+    // Fear & Greed 데이터 캐시 (인사이트 연동용)
+    _fgData = d.fear_greed;
+
     // Fear & Greed 등급별 색상 결정 (탐욕=초록, 공포=빨강, 나머지=기본)
     const GREED_SET = new Set(['탐욕', '극도 탐욕']);    // API 한글 등급 비교용
     const FEAR_SET = new Set(['공포', '극도 공포']);    // API 한글 등급 비교용
@@ -427,7 +477,8 @@ async function loadRegime() {
         <span>${t('nr.match')}</span>
         <span>${t('nr.gap')}</span>
       </div>
-    </div>`;
+    </div>
+    ${_buildFgNoiseInsight(ns)}`;
 
   // 카드 터치 → 상세페이지
   const card = container.closest('.card');
