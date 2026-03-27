@@ -11,40 +11,38 @@ function _buildFgNoiseInsight(noiseScore) {
   const FEAR_SET = new Set(['공포', '극도 공포']);
   const GREED_SET = new Set(['탐욕', '극도 탐욕']);
 
-  let icon, msg, color;
+  let msg, color, tag, tagColor;
   if (FEAR_SET.has(rating)) {
     if (noiseScore >= 0) {
-      // 공포 + 펀더멘털 괴리 → 비합리적 공포
-      icon = '🧊';
-      msg = `현재 공포(${score})는 비합리적일 수 있습니다 — 펀더멘털과 주가가 괴리된 상태에서의 과도한 공포`;
-      color = '#3B82F6';
+      tag = 'IRRATIONAL FEAR';
+      msg = `공포 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 공포가 감지됩니다`;
+      color = '#3B82F6'; tagColor = '#60A5FA';
     } else {
-      // 공포 + 펀더멘털 일치 → 합리적 공포
-      icon = '⚠️';
-      msg = `현재 공포(${score})는 합리적일 수 있습니다 — 펀더멘털이 실제로 약화된 상태`;
-      color = '#EF4444';
+      tag = 'RATIONAL FEAR';
+      msg = `공포 지수 ${score} — 펀더멘털 약화가 확인된 구간으로, 현재 공포는 근거가 있습니다`;
+      color = '#EF4444'; tagColor = '#F87171';
     }
   } else if (GREED_SET.has(rating)) {
     if (noiseScore >= 0) {
-      // 탐욕 + 펀더멘털 괴리 → 비합리적 탐욕
-      icon = '🔥';
-      msg = `현재 탐욕(${score})은 비합리적일 수 있습니다 — 펀더멘털과 괴리된 상태에서의 과도한 낙관`;
-      color = '#EF4444';
+      tag = 'IRRATIONAL GREED';
+      msg = `탐욕 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 낙관이 감지됩니다`;
+      color = '#EF4444'; tagColor = '#F87171';
     } else {
-      // 탐욕 + 펀더멘털 일치 → 합리적 탐욕
-      icon = '✅';
-      msg = `현재 탐욕(${score})은 합리적일 수 있습니다 — 펀더멘털이 뒷받침하는 상승`;
-      color = '#22C55E';
+      tag = 'RATIONAL GREED';
+      msg = `탐욕 지수 ${score} — 펀더멘털이 뒷받침하는 상승 구간입니다`;
+      color = '#22C55E'; tagColor = '#4ADE80';
     }
   } else {
-    // 중립
-    icon = '⚖️';
-    msg = `시장 심리 중립(${score}) — 특별한 괴리 신호 없음`;
-    color = '#F97316';
+    tag = 'NEUTRAL';
+    msg = `심리 지수 ${score} — 시장 심리와 펀더멘털 간 뚜렷한 괴리 없음`;
+    color = '#F97316'; tagColor = '#FB923C';
   }
 
-  return `<div class="nr-insight" style="margin-top:12px;padding:10px 12px;border-radius:10px;background:${color}10;border:1px solid ${color}25;">
-    <div style="font-size:13px;font-weight:600;color:${color};margin-bottom:2px">${icon} 공포탐욕 × 노이즈 분석</div>
+  return `<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:${color}08;border-left:3px solid ${color}">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <span style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:1px;color:${tagColor};padding:2px 6px;border:1px solid ${color}30;border-radius:3px">${tag}</span>
+      <span style="font-family:'SF Mono',Consolas,monospace;font-size:10px;color:var(--sub2)">SENTIMENT × NOISE</span>
+    </div>
     <div style="font-size:12px;color:var(--sub);line-height:1.5">${msg}</div>
   </div>`;
 }
