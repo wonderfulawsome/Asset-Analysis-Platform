@@ -27,9 +27,9 @@ _fred_session = requests.Session()                       # FRED 전용 세션 (T
 _fred_session.headers.update(HEADERS)
 
 
-def _fetch_fred(series_id: str, col_name: str, retries: int = 3,
-                timeout: tuple = (10, 30)) -> pd.DataFrame:
-    """FRED CSV 다운로드 (지수 백오프 재시도, connect=10s/read=30s 타임아웃)"""
+def _fetch_fred(series_id: str, col_name: str, retries: int = 5,
+                timeout: tuple = (15, 60)) -> pd.DataFrame:
+    """FRED CSV 다운로드 (지수 백오프 재시도, connect=15s/read=60s 타임아웃)"""
     url = FRED_BASE + series_id                          # 다운로드할 URL 생성
     for attempt in range(retries):                       # 최대 retries번 시도
         try:
@@ -41,7 +41,7 @@ def _fetch_fred(series_id: str, col_name: str, retries: int = 3,
             return df                                    # 성공 시 반환
         except Exception as e:
             if attempt < retries - 1:                    # 마지막 시도 전이면
-                wait = 3 * (3 ** attempt)                # 3초, 9초, 27초 대기
+                wait = 3 * (2 ** attempt)                # 3초, 6초, 12초, 24초 대기
                 print(f'  [{series_id}] 재시도 {attempt+1}/{retries} ({wait}초 대기) — {type(e).__name__}')
                 time.sleep(wait)                         # 대기 후 재시도
             else:
@@ -57,9 +57,18 @@ def fetch_sector_macro() -> pd.DataFrame:
     """
     print('[SectorMacro] FRED 데이터 수집 중...')
     raw = {}                                             # 수집 결과를 담을 딕셔너리
+    failed = []                                          # 실패한 시리즈 목록
     for sid, col in FRED_SERIES.items():                  # 8개 시리즈 순회
-        raw[sid] = _fetch_fred(sid, col)                  # 각 시리즈를 다운로드하여 저장
-        print(f'  ✓ {sid}')
+        try:
+            raw[sid] = _fetch_fred(sid, col)              # 각 시리즈를 다운로드하여 저장
+            print(f'  OK {sid}')
+        except Exception as e:
+            print(f'  FAIL {sid}: {e}')
+            raw[sid] = pd.DataFrame({col: []}, index=pd.DatetimeIndex([]))
+            failed.append(sid)
+
+    if len(failed) > 4:                                  # 절반 이상 실패하면 중단
+        raise RuntimeError(f'[SectorMacro] FRED {len(failed)}/8개 실패 — 데이터 부족으로 중단')
 
     # ── INDPRO → PMI 유사 지수 변환 ──
     indpro_mom = raw['INDPRO']['indpro'].pct_change(3) * 100  # 3개월 전 대비 변화율(%)
