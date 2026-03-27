@@ -69,16 +69,80 @@ def root(request: Request):
 def stats_page(request: Request):
     return templates.TemplateResponse(request=request, name='stats.html')
 
-# 파이프라인 헬스체크: 모델 파일 존재 여부 확인
+# 파이프라인 헬스체크: 모델 파일 존재 여부 + 에러 진단
 @app.get('/api/health')
 def health_check():
     import os
     models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
-    return {
+    result = {
         'noise_model': os.path.exists(os.path.join(models_dir, 'noise_hmm.pkl')),
         'cs_model': os.path.exists(os.path.join(models_dir, 'crash_surge_xgb.pkl')),
         'fred_cache': os.path.exists(os.path.join(models_dir, 'fred_cache.pkl')),
     }
+    # 모델 디렉토리 파일 목록
+    try:
+        result['model_files'] = os.listdir(models_dir)
+    except Exception:
+        result['model_files'] = []
+    return result
+
+@app.get('/api/health/diagnose')
+def diagnose():
+    """Step 3 각 단계를 개별 실행하여 어디서 실패하는지 진단."""
+    import traceback, datetime
+    diag = {}
+
+    # 1) Shiller
+    try:
+        from collector.noise_regime_data import fetch_shiller
+        shiller = fetch_shiller()
+        diag['shiller'] = f'OK ({len(shiller)}rows)'
+    except Exception as e:
+        diag['shiller'] = f'FAIL: {e}'
+
+    # 2) FRED
+    try:
+        from collector.noise_regime_data import fetch_fred_regime
+        fred = fetch_fred_regime()
+        diag['fred'] = f'OK ({list(fred.keys())})'
+    except Exception as e:
+        diag['fred'] = f'FAIL: {e}'
+
+    # 3) Sector stocks
+    try:
+        from collector.noise_regime_data import fetch_sector_stocks
+        start_date = str(datetime.date.today() - datetime.timedelta(days=365 * 18 + 30))
+        stocks = fetch_sector_stocks(start_date)
+        diag['sector_stocks'] = f'OK ({stocks.shape})'
+    except Exception as e:
+        diag['sector_stocks'] = f'FAIL: {e}'
+
+    # 4) Amihud
+    try:
+        from collector.noise_regime_data import fetch_amihud_stocks
+        start_date = str(datetime.date.today() - datetime.timedelta(days=365 * 18 + 30))
+        amihud = fetch_amihud_stocks(start_date)
+        diag['amihud'] = f'OK ({len(amihud)} tickers)'
+    except Exception as e:
+        diag['amihud'] = f'FAIL: {e}'
+
+    # 5) Monthly features
+    try:
+        from collector.noise_regime_data import compute_monthly_features
+        bundle = compute_monthly_features(shiller, fred, stocks, amihud)
+        diag['monthly_features'] = f'OK ({len(bundle["features"])}rows)'
+    except Exception as e:
+        diag['monthly_features'] = f'FAIL: {e}'
+
+    # 6) HMM train
+    try:
+        from processor.feature1_regime import train_hmm
+        model_bundle = train_hmm(bundle['features'], monthly_bundle=bundle)
+        diag['hmm_train'] = f'OK (month: {model_bundle.get("train_month")})'
+    except Exception as e:
+        diag['hmm_train'] = f'FAIL: {e}'
+
+    return diag
 
 # 사이트 도메인 (sitemap, robots.txt에서 사용)
 SITE_URL = 'https://passive-financial-data-analysis-production.up.railway.app'
