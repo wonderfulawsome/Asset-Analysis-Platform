@@ -718,21 +718,21 @@ function switchTab(idx, addHistory) {
       }, 50);
     }
   }
-  // 신호 탭 최초 진입 시 데이터 로드
-  if (idx === 1 && !window._signalLoaded) {
+  // AI차트 탭 최초 진입 시 초기화 (idx=1)
+  if (idx === 1 && typeof initChartTab === 'function' && !window._chartLoaded) {
+    window._chartLoaded = true;
+    initChartTab();
+  }
+  // 신호 탭 최초 진입 시 데이터 로드 (idx=2)
+  if (idx === 2 && !window._signalLoaded) {
     window._signalLoaded = true;
     loadCrashSurge();
     loadCrashSurgeChart();
   }
-  // 거시경제 탭 최초 진입 시 데이터 로드
-  if (idx === 2 && typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
+  // 거시경제 탭 최초 진입 시 데이터 로드 (idx=3)
+  if (idx === 3 && typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
     window._sectorLoaded = true;
     loadSectorCycle();
-  }
-  // 차트 탭 최초 진입 시 초기화
-  if (idx === 3 && typeof initChartTab === 'function' && !window._chartLoaded) {
-    window._chartLoaded = true;
-    initChartTab();
   }
   // 히스토리에 상태 추가 (뒤로가기 지원)
   if (addHistory && idx !== _currentTabIdx) {
@@ -742,7 +742,7 @@ function switchTab(idx, addHistory) {
 }
 
 // ── 탭 전환 ──
-const TAB_IDS = ['tab-market', 'tab-signal', 'tab-sector', 'tab-chart'];
+const TAB_IDS = ['tab-market', 'tab-chart', 'tab-signal', 'tab-sector'];
 const tabs = document.querySelectorAll('.tab');
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
@@ -971,7 +971,7 @@ async function loadCrashSurge() {
 
     // 변동성 판정: 둘 다 60 미만이면 보통, 하나라도 60 이상이면 높음
     const isHighVol = d.crash_score >= 60 || d.surge_score >= 60;
-    const volLabel = isHighVol ? '변동성 높음' : '변동성 보통';
+    const volLabel = isHighVol ? '향후 변동성 높음' : '향후 변동성 보통';
     const volCls = isHighVol ? 'badge-red' : 'badge-green';
 
     const badge = document.getElementById('cs-badge');
@@ -986,10 +986,10 @@ async function loadCrashSurge() {
       ? { cls: 'badge-yellow', color: '#F59E0B' }
       : { cls: 'badge-red', color: '#EF4444' };
 
-    // 상승 기대도: 점수 기반 라벨 (낮음/보통/높음)
+    // 상승 기대도: 점수 기반 라벨 (낮음=빨강/보통=노랑/높음=초록)
     const surgeLabel = d.surge_score < 40 ? '낮음' : d.surge_score < 60 ? '보통' : '높음';
     const surgeS = d.surge_score < 40
-      ? { cls: 'badge-green', color: '#10B981' }
+      ? { cls: 'badge-red', color: '#EF4444' }
       : d.surge_score < 60
       ? { cls: 'badge-yellow', color: '#F59E0B' }
       : { cls: 'badge-green', color: '#22C55E' };
@@ -1566,7 +1566,13 @@ function renderCrashSurgeDetail(body) {
       <span class="badge ${surgeS.cls}">${tGrade(d.surge_grade)}</span>
     </div>
   </div>
-  <div style="text-align:center;font-size:11px;color:var(--sub2);margin-bottom:16px">${d.date} ${t('cs.asOf')} · ${t('cs.modelF1')} ${d.macro_f1}</div>`;
+  <div style="margin:12px 0 16px;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(255,140,0,0.08),rgba(255,140,0,0.02));border:1px solid rgba(255,140,0,0.15)">
+    <div style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;color:#FF8C00;letter-spacing:1px;margin-bottom:6px">ML MODEL INFO</div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub)">
+      <span>기준일 <b style="color:var(--text)">${d.date}</b></span>
+      <span>Macro F1 <b style="color:#FF8C00">${d.macro_f1}</b></span>
+    </div>
+  </div>`;
 
 
   // SHAP 값
@@ -1611,7 +1617,13 @@ function renderNoiseDetail(body) {
     <div style="font-size:14px;color:var(--sub);font-weight:600">${t('detail.currentPhase')}</div>
     <div style="font-size:24px;font-weight:800;color:${nrIcon.color};display:flex;align-items:center;justify-content:center;gap:8px">${nrIcon.icon ? lucideIcon(nrIcon.icon, 28, 1.8) : ''} ${tNrPhase(d.regime_name)}</div>
     <div style="font-size:13px;color:var(--sub);margin-top:4px">${t('detail.noiseScore')} ${d.noise_score?.toFixed(4) ?? '--'}</div>
-    <div style="font-size:11px;color:var(--sub2);margin-top:2px">${d.date} ${t('cs.asOf')}</div>
+  </div>
+  <div style="margin:0 0 16px;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(255,140,0,0.08),rgba(255,140,0,0.02));border:1px solid rgba(255,140,0,0.15)">
+    <div style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;color:#FF8C00;letter-spacing:1px;margin-bottom:6px">ML MODEL INFO</div>
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub)">
+      <span>기준일 <b style="color:var(--text)">${d.date}</b></span>
+      <span>모델 <b style="color:#FF8C00">4-State HMM</b></span>
+    </div>
   </div>`;
 
   // 피처 기여도
@@ -1654,16 +1666,16 @@ async function refreshCurrentTab() {
       loadHoldingsSummary()
     ]);
   } else if (idx === 1) {
+    // AI차트 탭
+    if (typeof loadCandleChart === 'function') await loadCandleChart();
+  } else if (idx === 2) {
     // 신호 탭
     await Promise.allSettled([
       loadCrashSurge(), loadCrashSurgeChart()
     ]);
-  } else if (idx === 2) {
+  } else if (idx === 3) {
     // 거시경제 탭
     if (typeof loadSectorCycle === 'function') await loadSectorCycle();
-  } else if (idx === 3) {
-    // 차트 탭
-    if (typeof loadCandleChart === 'function') await loadCandleChart();
   }
 }
 
