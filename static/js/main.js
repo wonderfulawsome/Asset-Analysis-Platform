@@ -1154,33 +1154,145 @@ function renderLineChart(containerId, points, options = {}) {
   svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });  // 터치 종료 후 숨김
 }
 
-// ── Crash/Surge Net Score 30일 그래프 ──
+// ── Crash/Surge 이중 그래프 (하락 가능성 vs 상승 가능성) ──
 async function loadCrashSurgeChart() {
   try {
-    const res = await fetch('/api/crash-surge/history?days=30');    // 30일 히스토리 요청
-    const list = await res.json();                                  // JSON 파싱
-    if (!Array.isArray(list) || list.length < 2) return;            // 데이터 부족 시 종료
+    const res = await fetch('/api/crash-surge/history?days=30');
+    const list = await res.json();
+    if (!Array.isArray(list) || list.length < 2) return;
 
     const sorted = list.slice()
-      .sort((a, b) => a.date.localeCompare(b.date))                // 날짜 오름차순 정렬
-      .filter(r => { const d = new Date(r.date + 'T00:00:00').getDay(); return d !== 0 && d !== 6; });  // 주말 제외 (0=일, 6=토)
-    const points = sorted.map(r => ({                              // 그래프 포인트 변환
-      label: r.date.slice(5),                                      // MM-DD 형식 라벨
-      fullLabel: r.date,                                           // 전체 날짜 (툴팁용)
-      value: r.net_score || 0,                                     // net_score 값
-    }));
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .filter(r => { const d = new Date(r.date + 'T00:00:00').getDay(); return d !== 0 && d !== 6; });
 
-    const lastVal = points[points.length - 1].value;               // 최신 값
-    const lineColor = lastVal >= 0 ? 'var(--green)' : 'var(--red)';  // 양수 초록, 음수 빨강
+    const labels = sorted.map(r => ({ label: r.date.slice(5), fullLabel: r.date }));
+    const crashVals = sorted.map(r => r.crash_score || 0);
+    const surgeVals = sorted.map(r => r.surge_score || 0);
 
-    renderLineChart('cs-chart', points, {                          // 그래프 렌더링
-      color: lineColor,                                            // 선 색상
-      zeroLine: true,                                              // 0 기준선 표시
-      dotColor: v => v >= 0 ? 'var(--green)' : 'var(--red)',       // 점 색상 (값 기반)
-    });
+    renderDualLineChart('cs-chart', labels, crashVals, surgeVals);
   } catch (e) {
-    console.error('CS chart error:', e);                           // 에러 로그
+    console.error('CS chart error:', e);
   }
+}
+
+function renderDualLineChart(containerId, labels, crashVals, surgeVals) {
+  const el = document.getElementById(containerId);
+  if (!el || labels.length < 2) return;
+
+  const W = el.clientWidth - 2;
+  const H = 180;
+  const pad = { top: 16, right: 14, bottom: 32, left: 38 };
+  const cW = W - pad.left - pad.right;
+  const cH = H - pad.top - pad.bottom;
+
+  const allVals = [...crashVals, ...surgeVals];
+  const yMin = Math.min(...allVals);
+  const yMax = Math.max(...allVals);
+  const yRange = yMax - yMin || 1;
+
+  const x = i => pad.left + (i / (labels.length - 1)) * cW;
+  const y = v => pad.top + (1 - (v - yMin) / yRange) * cH;
+
+  const makePath = vals => vals.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
+  const crashPath = makePath(crashVals);
+  const surgePath = makePath(surgeVals);
+
+  // 영역 채우기 (선 아래 → yMax 라인까지)
+  const baseY = y(yMin).toFixed(1);
+  const crashArea = crashPath + ` L${x(labels.length-1).toFixed(1)},${baseY} L${x(0).toFixed(1)},${baseY} Z`;
+  const surgeArea = surgePath + ` L${x(labels.length-1).toFixed(1)},${baseY} L${x(0).toFixed(1)},${baseY} Z`;
+
+  const crashColor = '#EF4444';
+  const surgeColor = '#22C55E';
+
+  // X축 라벨
+  const labelCount = Math.min(7, labels.length);
+  const labelStep = Math.max(1, Math.floor((labels.length - 1) / (labelCount - 1)));
+  let xLabels = '';
+  for (let i = 0; i < labels.length; i += labelStep) {
+    xLabels += `<text class="chart-label" x="${x(i).toFixed(1)}" y="${H - 4}" text-anchor="middle">${labels[i].label}</text>`;
+  }
+
+  // Y축 라벨 + 격자
+  let yLabels = '', gridLines = '';
+  for (let i = 0; i <= 4; i++) {
+    const val = yMin + (yRange * i) / 4;
+    const yPos = y(val);
+    yLabels += `<text class="chart-label" x="${pad.left - 4}" y="${yPos.toFixed(1)}" text-anchor="end" dominant-baseline="middle">${val.toFixed(0)}</text>`;
+    gridLines += `<line class="chart-grid-line" x1="${pad.left}" y1="${yPos.toFixed(1)}" x2="${W - pad.right}" y2="${yPos.toFixed(1)}"/>`;
+  }
+
+  // 마지막 값 포인트
+  const lastCrash = crashVals[crashVals.length - 1];
+  const lastSurge = surgeVals[surgeVals.length - 1];
+  const lastX = x(labels.length - 1).toFixed(1);
+
+  el.innerHTML = `
+    <div style="display:flex;justify-content:center;gap:16px;margin-bottom:6px">
+      <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sub)">
+        <span style="width:12px;height:3px;border-radius:2px;background:${crashColor};display:inline-block"></span>
+        하락 가능성 <b style="color:${crashColor}">${lastCrash.toFixed(0)}</b>
+      </span>
+      <span style="display:flex;align-items:center;gap:5px;font-size:11px;color:var(--sub)">
+        <span style="width:12px;height:3px;border-radius:2px;background:${surgeColor};display:inline-block"></span>
+        상승 가능성 <b style="color:${surgeColor}">${lastSurge.toFixed(0)}</b>
+      </span>
+    </div>
+    <div class="line-chart-wrap">
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <linearGradient id="${containerId}-cg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${crashColor}" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="${crashColor}" stop-opacity="0"/>
+          </linearGradient>
+          <linearGradient id="${containerId}-sg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${surgeColor}" stop-opacity="0.15"/>
+            <stop offset="100%" stop-color="${surgeColor}" stop-opacity="0"/>
+          </linearGradient>
+        </defs>
+        ${gridLines}
+        <path d="${crashArea}" fill="url(#${containerId}-cg)"/>
+        <path d="${surgeArea}" fill="url(#${containerId}-sg)"/>
+        <path d="${crashPath}" fill="none" stroke="${crashColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="${surgePath}" fill="none" stroke="${surgeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="${lastX}" cy="${y(lastCrash).toFixed(1)}" r="4" fill="${crashColor}" stroke="var(--card)" stroke-width="1.5"/>
+        <circle cx="${lastX}" cy="${y(lastSurge).toFixed(1)}" r="4" fill="${surgeColor}" stroke="var(--card)" stroke-width="1.5"/>
+        ${xLabels}
+        ${yLabels}
+      </svg>
+      <div class="chart-tooltip" id="${containerId}-tip"></div>
+    </div>`;
+
+  // 터치/호버 툴팁
+  const wrap = el.querySelector('.line-chart-wrap');
+  const tip = document.getElementById(containerId + '-tip');
+  const svg = wrap.querySelector('svg');
+  const showTip = (idx) => {
+    const lb = labels[idx];
+    const cv = crashVals[idx], sv = surgeVals[idx];
+    tip.innerHTML = `<b>${lb.fullLabel || lb.label}</b><br><span style="color:${crashColor}">하락 ${cv.toFixed(1)}</span> · <span style="color:${surgeColor}">상승 ${sv.toFixed(1)}</span>`;
+    tip.style.left = `${x(idx)}px`;
+    tip.style.top = `${Math.min(y(cv), y(sv)) - 36}px`;
+    tip.style.transform = 'translateX(-50%)';
+    tip.style.opacity = '1';
+  };
+  const hideTip = () => { tip.style.opacity = '0'; };
+  svg.addEventListener('touchstart', e => {
+    const rect = svg.getBoundingClientRect();
+    const tx = (e.touches[0].clientX - rect.left) / rect.width * W;
+    let closest = 0, minDist = Infinity;
+    labels.forEach((_, i) => { const d = Math.abs(x(i) - tx); if (d < minDist) { minDist = d; closest = i; } });
+    showTip(closest);
+  }, { passive: true });
+  svg.addEventListener('mousemove', e => {
+    const rect = svg.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) / rect.width * W;
+    let closest = 0, minDist = Infinity;
+    labels.forEach((_, i) => { const d = Math.abs(x(i) - mx); if (d < minDist) { minDist = d; closest = i; } });
+    showTip(closest);
+  });
+  svg.addEventListener('mouseleave', hideTip);
+  svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });
 }
 
 // ── Noise Score 30일 그래프 ──
