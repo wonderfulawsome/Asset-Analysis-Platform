@@ -69,6 +69,17 @@ def root(request: Request):
 def stats_page(request: Request):
     return templates.TemplateResponse(request=request, name='stats.html')
 
+# 파이프라인 헬스체크: 모델 파일 존재 여부 확인
+@app.get('/api/health')
+def health_check():
+    import os
+    models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+    return {
+        'noise_model': os.path.exists(os.path.join(models_dir, 'noise_hmm.pkl')),
+        'cs_model': os.path.exists(os.path.join(models_dir, 'crash_surge_xgb.pkl')),
+        'fred_cache': os.path.exists(os.path.join(models_dir, 'fred_cache.pkl')),
+    }
+
 # 사이트 도메인 (sitemap, robots.txt에서 사용)
 SITE_URL = 'https://passive-financial-data-analysis-production.up.railway.app'
 

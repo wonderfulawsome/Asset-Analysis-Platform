@@ -1,4 +1,5 @@
 import datetime
+import traceback
 from collector.market_data import fetch_macro, to_macro_records
 from collector.fear_greed import fetch_fear_greed, fetch_putcall_ratio
 from collector.index_price import fetch_index_prices
@@ -51,8 +52,12 @@ def run_pipeline(light: bool = False) -> None:
     fred_cache = {}                                          # FRED 시리즈 공유 캐시
 
     # 경량 모드가 아닐 때만 무거운 작업 실행
+    noise_bundle = None                                      # 백필에서 재사용할 변수
+    noise_model_bundle = None
+    noise_should_retrain = False
+
     if not light:
-        # Step 3: Noise vs Signal HMM 국면 판별
+        # Step 3: Noise vs Signal HMM 국면 판별 (모델 학습 + 오늘 예측)
         print('\n[Step 3] Noise vs Signal 국면 판별...')
         try:
             start_date = str(datetime.date.today() - datetime.timedelta(days=365 * 18 + 30))
@@ -61,56 +66,60 @@ def run_pipeline(light: bool = False) -> None:
             shiller = fetch_shiller()
             fred = fetch_fred_regime()
             # Step 3에서 수집한 FRED 데이터를 캐시에 저장 (Step 7에서 재사용)
-            # 컬럼명을 Step 7 형식(FRED_MAP의 value)으로 변환하여 저장
-            if 'hy_spread' in fred:                          # BAMLH0A0HYM2 → HY_OAS
-                hy_df = fred['hy_spread'].copy()             # DataFrame 복사
-                hy_df.columns = ['HY_OAS']                   # 컬럼명 변환: hy_spread → HY_OAS
-                fred_cache['HY_OAS'] = hy_df                 # Step 7 형식으로 캐시 저장
-            if 'tips_rate' in fred:                          # DFII10 → DFII10
-                tips_df = fred['tips_rate'].copy()           # DataFrame 복사
-                tips_df.columns = ['DFII10']                 # 컬럼명 변환: tips_rate → DFII10
-                fred_cache['DFII10'] = tips_df               # Step 7 형식으로 캐시 저장
+            if 'hy_spread' in fred:
+                hy_df = fred['hy_spread'].copy()
+                hy_df.columns = ['HY_OAS']
+                fred_cache['HY_OAS'] = hy_df
+            if 'tips_rate' in fred:
+                tips_df = fred['tips_rate'].copy()
+                tips_df.columns = ['DFII10']
+                fred_cache['DFII10'] = tips_df
             stock_prices = fetch_sector_stocks(start_date)
             amihud_data = fetch_amihud_stocks(start_date)
 
             # 3b: 월별 피처 계산
-            bundle = compute_monthly_features(shiller, fred, stock_prices, amihud_data)
+            noise_bundle = compute_monthly_features(shiller, fred, stock_prices, amihud_data)
 
             # 3c: 모델 학습 또는 로드
-            model_bundle = load_model()
+            noise_model_bundle = load_model()
             current_month = datetime.date.today().strftime('%Y-%m')
-            should_retrain = (model_bundle is None or
-                              model_bundle.get('train_month') != current_month)
-            if should_retrain:
+            noise_should_retrain = (noise_model_bundle is None or
+                                    noise_model_bundle.get('train_month') != current_month)
+            if noise_should_retrain:
                 print('[Step 3] 모델 재학습...')
-                model_bundle = train_hmm(bundle['features'], monthly_bundle=bundle)
+                noise_model_bundle = train_hmm(noise_bundle['features'], monthly_bundle=noise_bundle)
             else:
-                print(f'[Step 3] 기존 모델 사용 (학습 월: {model_bundle["train_month"]})')
+                print(f'[Step 3] 기존 모델 사용 (학습 월: {noise_model_bundle["train_month"]})')
 
             # 3d: 일별 피처 계산 + 예측
-            daily_feat = compute_daily_features(bundle)
-            result = predict_regime(daily_feat, model_bundle)
+            daily_feat = compute_daily_features(noise_bundle)
+            result = predict_regime(daily_feat, noise_model_bundle)
 
             # 3e: DB 저장
             upsert_noise_regime(result)
+        except Exception as e:
+            print(f'[Step 3] Noise HMM 실패, 건너뜀: {e}')
+            traceback.print_exc()
 
-            # 3f: 백필 (기존 히스토리 보존)
-            if should_retrain:
+        # Step 3f: 백필 (모델 학습/예측과 분리 — 백필 실패해도 모델+오늘 예측은 보존)
+        if noise_should_retrain and noise_bundle is not None and noise_model_bundle is not None:
+            try:
                 print('[Step 3f] Noise Regime 백필...')
-                existing = fetch_noise_regime_all()                                      # 기존 DB 날짜 조회
-                existing_dates = {r['date'] for r in existing}                           # 기존 날짜 set 변환
+                existing = fetch_noise_regime_all()
+                existing_dates = {r['date'] for r in existing}
 
-                # 히스토리 < 500건이면 대량 백필 (최초 1회), 이후 60일
-                backfill_days = 4000 if len(existing_dates) < 500 else 60
+                # 최초 백필 500일(~2년), 이후 60일 (4000일은 메모리 초과 위험)
+                backfill_days = 500 if len(existing_dates) < 500 else 60
                 print(f'[Step 3f] 백필 범위: {backfill_days}일 (기존 {len(existing_dates)}건)')
-                backfill_records = backfill_noise_regime(bundle, model_bundle, days=backfill_days)
-                new_records = [r for r in backfill_records if r['date'] not in existing_dates]  # 신규 날짜만 필터
+                backfill_records = backfill_noise_regime(noise_bundle, noise_model_bundle, days=backfill_days)
+                new_records = [r for r in backfill_records if r['date'] not in existing_dates]
                 print(f'[Step 3f] 전체 {len(backfill_records)}건 중 신규 {len(new_records)}건 백필')
-                for rec in new_records:                                                  # 신규 레코드만 저장
+                for rec in new_records:
                     upsert_noise_regime(rec)
                 print(f'[Step 3f] 백필 완료: {len(new_records)}건 DB 저장')
-        except Exception as e:
-            print(f'[Step 3] Noise HMM 실패, 건너뜀: {e}')    # 실패해도 다음 Step 계속 진행
+            except Exception as e:
+                print(f'[Step 3f] Noise Regime 백필 실패, 건너뜀: {e}')
+                traceback.print_exc()
 
     # Step 4: Fear & Greed + PUT/CALL Ratio 수집 및 저장 (항상 실행)
     print('\n[Step 4] Fear & Greed 수집...')
@@ -162,6 +171,7 @@ def run_pipeline(light: bool = False) -> None:
                 print('  [CrashSurge-Light] 저장된 모델 없음, 건너뜀 (전체 파이프라인에서 학습 필요)')
         except Exception as e:
             print(f'  [CrashSurge-Light] 실시간 예측 실패: {e}')
+            traceback.print_exc()
 
         # Step 5c: 경량 모드 Noise HMM 실시간 예측 (기존 모델 사용, 학습 없음)
         print('\n[Step 5c] Noise HMM 실시간 예측...')
@@ -175,6 +185,7 @@ def run_pipeline(light: bool = False) -> None:
                 print('  [NoiseHMM-Light] 저장된 모델 또는 캐시값 없음, 건너뜀 (전체 파이프라인에서 학습 필요)')
         except Exception as e:
             print(f'  [NoiseHMM-Light] 실시간 예측 실패: {e}')
+            traceback.print_exc()
 
     # 경량 모드가 아닐 때만 무거운 작업 실행
     if not light:
@@ -190,17 +201,21 @@ def run_pipeline(light: bool = False) -> None:
             cycle_result = run_sector_cycle(sector_macro, sector_ret, holding_ret)
             upsert_sector_cycle(cycle_result)
         except Exception as e:
-            print(f'[Step 6] 섹터 경기국면 실패, 건너뜀: {e}')  # 실패해도 다음 Step 계속 진행
+            print(f'[Step 6] 섹터 경기국면 실패, 건너뜀: {e}')
+            traceback.print_exc()
 
-        # Step 7: XGBoost 폭락/급등 전조 탐지
+        # Step 7: XGBoost 폭락/급등 전조 탐지 (모델 학습 + 오늘 예측)
         print('\n[Step 7] 폭락/급등 전조 탐지...')
+        cs_datasets = None
+        cs_model = None
+        cs_should_retrain = False
         try:
             raw = fetch_crash_surge_raw(fred_cache=fred_cache)  # Step 3 캐시 재사용
             save_fred_cache(raw['fred'])                      # 경량 파이프라인용 파일 캐시 저장
             features = compute_features(raw['spy'], raw['fred'], raw['cboe'],
                                                   raw['yahoo_macro'])
             labels = compute_labels(raw['spy']['Close'])
-            datasets = prepare_datasets(features, labels, raw['spy']['Close'])
+            cs_datasets = prepare_datasets(features, labels, raw['spy']['Close'])
 
             cs_model = load_crash_surge_model()
             current_month = datetime.date.today().strftime('%Y-%m')
@@ -208,35 +223,38 @@ def run_pipeline(light: bool = False) -> None:
                                  cs_model.get('train_month') != current_month)
             if cs_should_retrain:
                 print('[Step 7] 모델 재학습 (Optuna 50 trials)...')
-                X_tr, y_tr = datasets['train']
-                X_cal, y_cal = datasets['calib']
-                X_te, y_te = datasets['test']
-                X_dev, y_dev = datasets['dev']
-                X_full = datasets['df_full'][ALL_FEATURES].values
+                X_tr, y_tr = cs_datasets['train']
+                X_cal, y_cal = cs_datasets['calib']
+                X_te, y_te = cs_datasets['test']
+                X_dev, y_dev = cs_datasets['dev']
+                X_full = cs_datasets['df_full'][ALL_FEATURES].values
                 cs_model = train_crash_surge(X_tr, y_tr, X_cal, y_cal, X_te, y_te,
                                              X_dev, y_dev, X_full, n_trials=50)
             else:
                 print(f'[Step 7] 기존 모델 사용 (학습 월: {cs_model["train_month"]})')
 
-            latest_row = datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
+            latest_row = cs_datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
             cs_result = predict_crash_surge(latest_row, cs_model)
             upsert_crash_surge(cs_result)
+        except Exception as e:
+            print(f'[Step 7] 폭락/급등 전조 실패, 건너뜀: {e}')
+            traceback.print_exc()
 
-            # Step 7b: 신규 날짜만 백필 (기존 히스토리 보존, redeploy 시에도 과거 점수 유지)
-            if cs_should_retrain:
+        # Step 7b: 백필 (모델 학습/예측과 분리)
+        if cs_should_retrain and cs_datasets is not None and cs_model is not None:
+            try:
                 print('\n[Step 7b] 신규 날짜 점수 백필...')
-                backfill_records = backfill_crash_surge(datasets['df_full'], cs_model)  # 전체 기간 점수 계산
-                # DB에서 기존 날짜 목록 조회
-                existing = fetch_crash_surge_all()                                      # 기존 DB 레코드 전체 조회
-                existing_dates = {r['date'] for r in existing}                          # 기존 날짜를 set으로 변환
-                # 기존에 없는 날짜만 필터링
-                new_records = [r for r in backfill_records if r['date'] not in existing_dates]  # 신규 날짜만 추출
+                backfill_records = backfill_crash_surge(cs_datasets['df_full'], cs_model)
+                existing = fetch_crash_surge_all()
+                existing_dates = {r['date'] for r in existing}
+                new_records = [r for r in backfill_records if r['date'] not in existing_dates]
                 print(f'[Step 7b] 전체 {len(backfill_records)}건 중 신규 {len(new_records)}건 백필')
-                for rec in new_records:                                                 # 신규 레코드만 DB 저장
+                for rec in new_records:
                     upsert_crash_surge(rec)
                 print(f'[Step 7b] 백필 완료: {len(new_records)}건 DB 저장')
-        except Exception as e:
-            print(f'[Step 7] 폭락/급등 전조 실패, 건너뜀: {e}')  # 실패해도 파이프라인 완료 처리
+            except Exception as e:
+                print(f'[Step 7b] 폭락/급등 백필 실패, 건너뜀: {e}')
+                traceback.print_exc()
 
         # Step 8: Prophet ETF 30일 가격 예측 (16 tickers)
         print('\n[Step 8] ETF Prophet 예측...')
@@ -247,6 +265,7 @@ def run_pipeline(light: bool = False) -> None:
             print(f'[Step 8] {len(predict_results)}건 예측 완료')
         except Exception as e:
             print(f'[Step 8] Prophet 예측 실패, 건너뜀: {e}')
+            traceback.print_exc()
 
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')
