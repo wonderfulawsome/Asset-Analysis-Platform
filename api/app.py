@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse            # 텍스트 응답 (robots.txt 등)
@@ -12,24 +13,30 @@ except Exception:
     tracking = None
 from scheduler.job import run_pipeline
 
+# 환경변수로 스케줄러 ON/OFF 제어 (기본값: true — 단일 서비스 운영 시 스케줄러 활성)
+# 별도 스케줄러 서비스 분리 후 웹 서비스에서 RUN_SCHEDULER=false 로 전환
+_scheduler_enabled = os.getenv('RUN_SCHEDULER', 'true').lower() == 'true'
+
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    # 백그라운드 스레드에서 동작하는 스케줄러 인스턴스 생성
-    scheduler = BackgroundScheduler()
-    # 경량 파이프라인: 10분마다 최근 데이터만 갱신 (거시지표 + ETF 가격 + 실시간 예측)
-    scheduler.add_job(run_pipeline, 'interval', minutes=10, id='light_pipeline', kwargs={'light': True})
-    # 전체 파이프라인: 3시간마다 실행 (100년치 수집 + HMM/XGBoost 모델 학습)
-    scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')
-    # 서버 시작 30초 후 전체 파이프라인 1회 실행 (모델 학습 + 저장, Railway 재시작 대비)
-    from datetime import datetime, timedelta
-    scheduler.add_job(run_pipeline, 'date', run_date=datetime.now() + timedelta(seconds=30),
-                      id='init_pipeline')
-    scheduler.start()
+    scheduler = None
+    if _scheduler_enabled:
+        scheduler = BackgroundScheduler()
+        # 경량 파이프라인: 10분마다 최근 데이터만 갱신 (거시지표 + ETF 가격 + 실시간 예측)
+        scheduler.add_job(run_pipeline, 'interval', minutes=10, id='light_pipeline', kwargs={'light': True})
+        # 전체 파이프라인: 3시간마다 실행 (100년치 수집 + HMM/XGBoost 모델 학습)
+        scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')
+        # init_pipeline 제거 — 배포마다 full pipeline 실행 방지 (비용 절감)
+        scheduler.start()
+        print('[App] 스케줄러 활성화 (RUN_SCHEDULER=true)')
+    else:
+        print('[App] 스케줄러 비활성화 — 웹 서버 전용 모드 (RUN_SCHEDULER=false)')
     # FastAPI 앱 실행 구간 (요청 처리)
     yield
     # 서버 종료 시 스케줄러 정리
-    scheduler.shutdown()
+    if scheduler:
+        scheduler.shutdown()
 
 # FastAPI로 서버 생성
 app = FastAPI(title='Passive 투자 비서 API', version='0.1.0', lifespan=lifespan)
@@ -69,17 +76,16 @@ def root(request: Request):
 def stats_page(request: Request):
     return templates.TemplateResponse(request=request, name='stats.html')
 
-# 파이프라인 헬스체크: 모델 파일 존재 여부 + 에러 진단
+# 파이프라인 헬스체크: 스케줄러 상태 + 모델 파일 존재 여부
 @app.get('/api/health')
 def health_check():
-    import os
     models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
     result = {
+        'scheduler_enabled': _scheduler_enabled,
         'noise_model': os.path.exists(os.path.join(models_dir, 'noise_hmm.pkl')),
         'cs_model': os.path.exists(os.path.join(models_dir, 'crash_surge_xgb.pkl')),
         'fred_cache': os.path.exists(os.path.join(models_dir, 'fred_cache.pkl')),
     }
-    # 모델 디렉토리 파일 목록
     try:
         result['model_files'] = os.listdir(models_dir)
     except Exception:
