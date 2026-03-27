@@ -722,7 +722,6 @@ function switchTab(idx, addHistory) {
   if (idx === 1 && !window._signalLoaded) {
     window._signalLoaded = true;
     loadCrashSurge();
-    loadDirection();
     loadCrashSurgeChart();
   }
   // 거시경제 탭 최초 진입 시 데이터 로드
@@ -1641,7 +1640,7 @@ async function refreshCurrentTab() {
   } else if (idx === 1) {
     // 신호 탭
     await Promise.allSettled([
-      loadCrashSurge(), loadDirection(), loadCrashSurgeChart()
+      loadCrashSurge(), loadCrashSurgeChart()
     ]);
   } else if (idx === 2) {
     // 거시경제 탭
