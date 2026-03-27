@@ -735,8 +735,9 @@ function renderChartSummary(el, candles) {
   const latest = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
 
-  // 6개월치 캔들만 잘라서 변동률 계산 (일봉: 약 126 영업일)
-  const sixMonthIdx = Math.max(0, candles.length - 126);
+  // 6개월치 캔들 수: 일봉=126, 주봉=26, 월봉=6
+  const sixMonthCount = _chartInterval === '1mo' ? 6 : _chartInterval === '1wk' ? 26 : 126;
+  const sixMonthIdx = Math.max(0, candles.length - sixMonthCount);
   const sixMonthBase = candles[sixMonthIdx];
 
   const dayChg = ((latest.c - prev.c) / prev.c * 100);
