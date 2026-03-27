@@ -100,8 +100,7 @@ def run_pipeline(light: bool = False) -> None:
                 existing = fetch_noise_regime_all()                                      # 기존 DB 날짜 조회
                 existing_dates = {r['date'] for r in existing}                           # 기존 날짜 set 변환
 
-                # 히스토리 < 500건이면 대량 백필 (최초 1회), 이후 60일
-                backfill_days = 4000 if len(existing_dates) < 500 else 60
+                backfill_days = 50
                 print(f'[Step 3f] 백필 범위: {backfill_days}일 (기존 {len(existing_dates)}건)')
                 backfill_records = backfill_noise_regime(bundle, model_bundle, days=backfill_days)
                 new_records = [r for r in backfill_records if r['date'] not in existing_dates]  # 신규 날짜만 필터
@@ -231,7 +230,7 @@ def run_pipeline(light: bool = False) -> None:
             # Step 7b: 신규 날짜만 백필 (기존 히스토리 보존, redeploy 시에도 과거 점수 유지)
             if cs_should_retrain:
                 print('\n[Step 7b] 신규 날짜 점수 백필...')
-                backfill_records = backfill_crash_surge(datasets['df_full'], cs_model)  # 전체 기간 점수 계산
+                backfill_records = backfill_crash_surge(datasets['df_full'].iloc[-50:], cs_model)  # 최근 50일만 백필
                 # DB에서 기존 날짜 목록 조회
                 existing = fetch_crash_surge_all()                                      # 기존 DB 레코드 전체 조회
                 existing_dates = {r['date'] for r in existing}                          # 기존 날짜를 set으로 변환
