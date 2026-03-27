@@ -734,17 +734,21 @@ function renderChartSummary(el, candles) {
   if (candles.length < 2) return;
   const latest = candles[candles.length - 1];
   const prev = candles[candles.length - 2];
-  const first = candles[0];
+
+  // 6개월치 캔들만 잘라서 변동률 계산 (일봉: 약 126 영업일)
+  const sixMonthIdx = Math.max(0, candles.length - 126);
+  const sixMonthBase = candles[sixMonthIdx];
 
   const dayChg = ((latest.c - prev.c) / prev.c * 100);
-  const periodChg = ((latest.c - first.o) / first.o * 100);
-  const high = Math.max(...candles.map(c => c.h));
-  const low = Math.min(...candles.map(c => c.l));
+  const periodChg = ((latest.c - sixMonthBase.o) / sixMonthBase.o * 100);
+  // 최고/최저도 6개월 범위에서 계산
+  const recentCandles = candles.slice(sixMonthIdx);
+  const high = Math.max(...recentCandles.map(c => c.h));
+  const low = Math.min(...recentCandles.map(c => c.l));
   const range = low > 0 ? ((high - low) / low * 100) : 0;
   const pos = high > low ? ((latest.c - low) / (high - low) * 100) : 50;
 
-  const periodLabel = _chartInterval === '1d' ? '6개월'
-    : _chartInterval === '1wk' ? '2년' : '5년';
+  const periodLabel = '6개월';
   const chgColor = dayChg >= 0 ? '#10B981' : '#EF4444';
   const chgSign = dayChg >= 0 ? '+' : '';
   const pChgColor = periodChg >= 0 ? '#10B981' : '#EF4444';
