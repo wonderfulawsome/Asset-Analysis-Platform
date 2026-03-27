@@ -145,6 +145,12 @@ async function loadCandleChart() {
   chartEl.innerHTML = '<div class="candle-loading"><div class="loading-spinner"></div></div>';
   if (volEl) volEl.innerHTML = '';
   if (sumEl) sumEl.innerHTML = '';
+  // 가격헤더/스탯/범위바 로딩 스켈레톤
+  const _skl = '<div class="skeleton" style="height:16px;width:60%;border-radius:6px;margin:6px 0"></div>';
+  const headerEl = document.getElementById('chart-price-header');
+  if (headerEl && !headerEl.innerHTML.trim()) headerEl.innerHTML = `<div style="padding:8px 0">${_skl}<div class="skeleton" style="height:10px;width:40%;border-radius:4px;margin-top:6px"></div></div>`;
+  const statsEl = document.getElementById('chart-top-stats');
+  if (statsEl && !statsEl.innerHTML.trim()) statsEl.innerHTML = `<div class="chart-stats-grid"><div class="chart-stat-card">${_skl}</div><div class="chart-stat-card">${_skl}</div><div class="chart-stat-card">${_skl}</div></div>`;
 
   try {
     const res = await fetch(`/api/chart/ohlc?ticker=${_chartTicker}&interval=${_chartInterval}`);
