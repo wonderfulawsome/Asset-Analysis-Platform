@@ -789,11 +789,11 @@ function renderChartSummary(el, candles) {
       <div class="chart-range-card">
         <div class="chart-range-head">
           <span class="chart-range-label">${periodLabel} 가격 범위</span>
-          <span class="chart-range-badge">${range.toFixed(1)}% 변동</span>
+          <span class="chart-range-badge" style="color:${pChgColor}">${pChgSign}${periodChg.toFixed(1)}% 변동</span>
         </div>
         <div class="chart-range-track">
-          <div class="chart-range-fill" style="width:${Math.min(pos, 100)}%"></div>
-          <div class="chart-range-dot" style="left:${Math.min(Math.max(pos, 3), 97)}%"></div>
+          <div class="chart-range-fill" style="width:${Math.min(pos, 100)}%;background:linear-gradient(90deg, ${periodChg >= 0 ? '#10B981' : '#EF4444'}, ${periodChg >= 0 ? '#06B6D4' : '#F97316'})"></div>
+          <div class="chart-range-dot" style="left:${Math.min(Math.max(pos, 3), 97)}%;border-color:${periodChg >= 0 ? '#10B981' : '#EF4444'}"></div>
         </div>
         <div class="chart-range-minmax">
           <span>$${low.toFixed(1)}</span>

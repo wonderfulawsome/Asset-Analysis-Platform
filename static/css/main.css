@@ -1950,6 +1950,7 @@ html[lang="en"] .card-tappable::after {
   gap: 5px;
   margin-bottom: 8px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 .ma-chip {
   display: flex;
