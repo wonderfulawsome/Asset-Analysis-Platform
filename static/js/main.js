@@ -38,7 +38,7 @@ function _buildFgNoiseInsight(noiseScore) {
     color = '#F97316'; tagColor = '#FB923C';
   }
 
-  return `<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:${color}08;border-left:3px solid ${color}">
+  return `<div class="nr-insight" style="margin-top:12px;padding:10px 12px;border-radius:8px;background:${color}08;border-left:3px solid ${color}">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <span style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:1px;color:${tagColor};padding:2px 6px;border:1px solid ${color}30;border-radius:3px">${tag}</span>
       <span style="font-family:'SF Mono',Consolas,monospace;font-size:10px;color:var(--sub2)">SENTIMENT × NOISE</span>
@@ -360,6 +360,8 @@ async function loadMarketOverview() {
         </span>
       </div>
     </div>`;
+    // 공포탐욕 로드 완료 → 인사이트 갱신 (regime이 먼저 로드됐을 경우 대비)
+    _tryUpdateFgInsight();
   } catch (e) {
     // API 실패 시 대체 표시
     el.innerHTML = `<div class="mo-card">
@@ -369,6 +371,18 @@ async function loadMarketOverview() {
       <div class="mo-row"><span class="mo-label">${t('mo.rsi')}</span><span class="mo-value">-</span></div>
     </div>`;
   }
+}
+
+// 인사이트 갱신: 두 데이터 모두 있을 때 regime 카드에 삽입
+function _tryUpdateFgInsight() {
+  if (!_fgData || !_nrData) return;
+  const existing = document.querySelector('.nr-insight');
+  if (existing) return;  // 이미 있으면 스킵
+  const container = document.getElementById('regime-card');
+  if (!container) return;
+  const ns = _nrData.noise_score ?? null;
+  const html = _buildFgNoiseInsight(ns);
+  if (html) container.insertAdjacentHTML('beforeend', html);
 }
 
 // ── Holdings Summary (시장 탭 하단) ──
