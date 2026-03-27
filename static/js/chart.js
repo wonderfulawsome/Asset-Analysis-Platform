@@ -1,5 +1,5 @@
 // ── 캔들스틱 차트 탭 ──
-const CHART_MAIN_TICKERS = ['SPY','QQQ','DIA','IWM','VOO','SOXX','SMH','GLD','TLT','SCHD'];
+const CHART_MAIN_TICKERS = ['VOO','QQQ','DIA','IWM','SOXX','SMH','GLD','TLT','SCHD'];
 const TICKER_NAMES = {
   SPY:'S&P 500 ETF', QQQ:'Nasdaq 100', DIA:'Dow Jones', IWM:'Russell 2000',
   VOO:'S&P 500 (V)', SOXX:'Semiconductor', SMH:'Semiconductor (VN)',
@@ -14,7 +14,7 @@ const MA_CONFIG = [
   { period: 120, color: '#6C5CE7', label: 'MA120' },
 ];
 
-let _chartTicker = 'SPY';
+let _chartTicker = 'VOO';
 let _chartInterval = '1d';
 let _chartData = null;
 let _maVisible = { 5: true, 20: true, 60: true, 120: false };
