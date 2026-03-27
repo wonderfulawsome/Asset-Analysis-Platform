@@ -38,14 +38,14 @@ def run_pipeline(light: bool = False) -> None:
     print(f'[Pipeline-{mode}] 시작: {start.strftime("%Y-%m-%d %H:%M:%S")}')
     print(f'{"="*50}')
 
-    # Step 1: 거시 지표 수집 (경량: 최근 60일, 전체: 100년)
-    print('\n[Step 1] 거시 지표 수집...')
-    df = fetch_macro(days=60 if light else 0)  # 경량 모드면 60일치만 수집
-
-    # Step 2: macro_raw 저장
-    print('\n[Step 2] macro_raw DB 저장...')
-    records = to_macro_records(df)  # DataFrame → dict 리스트 변환
-    upsert_macro(records)  # Supabase에 upsert
+    # Step 1-2: 거시 지표 수집 + 저장
+    print('\n[Step 1-2] 거시 지표 수집...')
+    try:
+        df = fetch_macro(days=60 if light else 0)  # 경량 모드면 60일치만 수집
+        records = to_macro_records(df)  # DataFrame → dict 리스트 변환
+        upsert_macro(records)  # Supabase에 upsert
+    except Exception as e:
+        print(f'[Step 1-2] 거시 지표 실패, 건너뜀: {e}')
 
     # FRED 캐시: Step 3에서 수집한 데이터를 Step 7에서 재사용 (중복 호출 방지)
     fred_cache = {}                                          # FRED 시리즈 공유 캐시
@@ -114,26 +114,32 @@ def run_pipeline(light: bool = False) -> None:
 
     # Step 4: Fear & Greed + PUT/CALL Ratio 수집 및 저장 (항상 실행)
     print('\n[Step 4] Fear & Greed 수집...')
-    fear_greed = fetch_fear_greed()  # CNN Fear & Greed 웹 스크래핑
-    upsert_fear_greed(fear_greed)
+    try:
+        fear_greed = fetch_fear_greed()  # CNN Fear & Greed 웹 스크래핑
+        upsert_fear_greed(fear_greed)
 
-    # PUT/CALL Ratio 수집 후 macro_raw 최신 레코드에 추가 저장
-    print('[Step 4] PUT/CALL Ratio 수집...')
-    pcr = fetch_putcall_ratio()  # CBOE Put/Call Ratio 스크래핑
-    if pcr is not None:
-        # 오늘 날짜 기준으로 putcall_ratio 컬럼 upsert
-        upsert_macro([{'date': fear_greed['date'], 'putcall_ratio': pcr}])
+        # PUT/CALL Ratio 수집 후 macro_raw 최신 레코드에 추가 저장
+        print('[Step 4] PUT/CALL Ratio 수집...')
+        pcr = fetch_putcall_ratio()  # CBOE Put/Call Ratio 스크래핑
+        if pcr is not None:
+            # 오늘 날짜 기준으로 putcall_ratio 컬럼 upsert
+            upsert_macro([{'date': fear_greed['date'], 'putcall_ratio': pcr}])
+    except Exception as e:
+        print(f'[Step 4] Fear & Greed 실패, 건너뜀: {e}')
 
     # Step 5: ETF 가격 수집 및 저장 (항상 실행)
     print('\n[Step 5] ETF 가격 수집...')
-    index_prices = fetch_index_prices()  # 31개 ETF 종가/등락률 수집
-    # non_zero: 31개 ETF 종가/등락률 데이터를 반복하고 0이 아닌 데이터 정의
-    non_zero = [r for r in index_prices if r['change_pct'] != 0]
-    if not non_zero and index_prices:
-        print('[Step 5] 모든 change_pct가 0 → stale 데이터, upsert 건너뜀')
-    else:
-        # 0이 아닌 index_prices를 DB에 저장
-        upsert_index_prices(index_prices)
+    try:
+        index_prices = fetch_index_prices()  # 31개 ETF 종가/등락률 수집
+        # non_zero: 31개 ETF 종가/등락률 데이터를 반복하고 0이 아닌 데이터 정의
+        non_zero = [r for r in index_prices if r['change_pct'] != 0]
+        if not non_zero and index_prices:
+            print('[Step 5] 모든 change_pct가 0 → stale 데이터, upsert 건너뜀')
+        else:
+            # 0이 아닌 index_prices를 DB에 저장
+            upsert_index_prices(index_prices)
+    except Exception as e:
+        print(f'[Step 5] ETF 가격 수집 실패, 건너뜀: {e}')
 
     # Step 5b: 경량 모드 crash/surge 실시간 예측 (기존 모델 사용, 학습 없음)
     if light:
