@@ -1861,7 +1861,11 @@ function trackVisit() {
   const safetyTimer = setTimeout(safeDismiss, 6000);
 
   try {
-    // AI차트(idx=0)가 기본 탭이므로 차트 초기화 + 시장 데이터 모두 로드
+    // AI차트(idx=0)가 기본 탭이므로 차트 초기화 + fade-target 활성화
+    const chartTab = document.getElementById('tab-chart');
+    if (chartTab) {
+      chartTab.querySelectorAll('.fade-target').forEach(ft => ft.classList.add('visible'));
+    }
     if (typeof initChartTab === 'function' && !window._chartLoaded) {
       window._chartLoaded = true;
       initChartTab();
