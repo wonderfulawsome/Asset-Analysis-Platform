@@ -1,5 +1,6 @@
 ### 시스템 아키텍처
 
+```mermaid
 graph LR
     frontend["프론트엔드\ntemplates/ + static/"]
     frontend -->|"fetch /api/*"| api-layer["API 레이어\napi/"]
