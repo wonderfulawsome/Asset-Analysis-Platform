@@ -1,0 +1,9 @@
+created: 2026-03-28T18:54:47.196Z
+updated: 2026-03-28T18:54:47.199Z
+update_count: 1
+last_field: description
+kind: nested-class
+title: step8
+children: []
+parentPath:
+  - full-pipeline

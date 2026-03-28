@@ -1,0 +1,1 @@
+FRED API requires FRED_API_KEY environment variable. Yahoo Finance v8 API uses curl_cffi to bypass rate limiting. Supabase requires SUPABASE_URL and SUPABASE_KEY in .env. CBOE scraping is fragile to HTML structure changes. Shiller Excel file URL may change. Railway deployment uses Dockerfile with restart-on-failure policy.

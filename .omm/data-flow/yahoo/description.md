@@ -1,0 +1,1 @@
+Primary market data provider. Supplies daily OHLCV for S&P500, Nasdaq, SOX, VIX, VIX3M, VIX9D, TNX, IRX, CL=F (WTI crude), 31 ETFs, 25 sector stocks, and 5 mega-cap stocks. Accessed via Yahoo Finance API v8 with curl_cffi for rate limit bypass.

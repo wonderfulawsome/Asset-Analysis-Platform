@@ -1,0 +1,1 @@
+4-state Gaussian HMM for business cycle classification (Recovery/Expansion/Slowdown/Recession). Trained on 10 FRED macro features with StandardScaler. States ranked by PMI + momentum composite score. Computes sector and holding performance by phase, identifies top 3 sectors for current cycle.

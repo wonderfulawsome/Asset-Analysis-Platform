@@ -1,0 +1,13 @@
+graph LR
+    noise-hmm["Noise HMM Regime\nprocessor/feature1_regime.py"]
+    sector-cycle["Sector Cycle HMM\nprocessor/feature2_sector_cycle.py"]
+    crash-surge-xgb["Crash Surge XGBoost\nprocessor/feature3_crash_surge.py"]
+    chart-predict["Chart Predict Ensemble\nprocessor/feature4_chart_predict.py"]
+
+    noise-hmm -->|"regime state"| db["Database Layer"]
+    sector-cycle -->|"cycle phase + sector perf"| db
+    crash-surge-xgb -->|"crash/surge scores"| db
+    chart-predict -->|"30-day forecasts"| db
+
+    classDef concern fill:#f38ba8,stroke:#f38ba8,color:#1e1e2e
+    class crash-surge-xgb concern

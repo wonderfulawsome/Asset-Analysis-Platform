@@ -1,0 +1,1 @@
+Serves macro economic indicators via /api/macro. Endpoints: GET /latest (S&P500 close/return/vol, VIX, TNX, yield spread, RSI with 5-min cache), GET /fear-greed (CNN Fear & Greed score with previous comparison).

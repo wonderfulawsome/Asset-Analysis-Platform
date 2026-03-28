@@ -1,0 +1,1 @@
+This is a single-service Python application targeting passive investors. It provides market regime detection, crash/surge early warnings, sector rotation analysis, and 30-day ETF price forecasts. The app serves both a Jinja2 HTML frontend and a REST API consumed by React Native WebView clients.

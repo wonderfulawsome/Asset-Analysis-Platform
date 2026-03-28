@@ -1,0 +1,1 @@
+Collects S&P500, VIX, 10-year Treasury, 3-month Treasury, Nasdaq-100, and SOX daily data from Yahoo Finance API v8. Computes technical features: returns, volume ratios, MA20 displacement, RSI. Outputs DataFrame and Supabase-ready dict records.

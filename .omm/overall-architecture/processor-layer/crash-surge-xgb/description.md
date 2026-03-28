@@ -1,0 +1,1 @@
+XGBoost 3-class classifier (normal/crash/surge) with Optuna 50-trial hyperparameter optimization. Uses Platt scaling for surge probability calibration. 44 input features with time-series cross-validation, balanced class weights, and exponential decay. Outputs percentile-ranked crash/surge scores (0-100) with SHAP explanations and feature importance.

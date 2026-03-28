@@ -1,0 +1,1 @@
+Jinja2 HTML templates and static assets served by FastAPI. Provides index.html (main dashboard) and stats.html (user analytics dashboard). Static files mounted at /static path. The frontend makes API calls to /api/* endpoints for dynamic data.

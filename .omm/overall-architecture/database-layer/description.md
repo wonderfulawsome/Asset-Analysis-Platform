@@ -1,0 +1,1 @@
+Supabase client and repository pattern for data persistence. supabase_client.py provides thread-safe connection management. repositories.py contains upsert/fetch functions for 8 tables: macro_raw, market_regime, fear_greed_raw, index_price_raw, sector_macro_raw, sector_cycle_result, noise_regime, crash_surge_result, chart_predict_result, and user_visit.

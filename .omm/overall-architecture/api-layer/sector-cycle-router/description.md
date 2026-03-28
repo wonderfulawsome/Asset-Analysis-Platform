@@ -1,0 +1,1 @@
+Serves business cycle and sector rotation analysis via /api/sector-cycle. Endpoints: GET /current (latest cycle phase with emoji and probabilities), GET /holdings-perf (user portfolio performance by cycle phase), GET /history (N-day phase history).

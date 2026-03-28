@@ -1,0 +1,1 @@
+FastAPI application layer that exposes REST endpoints for market data, ML predictions, and user analytics. Mounted at api/app.py with CORS enabled for cross-origin access. Serves Jinja2 templates for the web frontend and includes 8 router modules under /api/ prefix.

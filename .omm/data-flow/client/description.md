@@ -1,0 +1,1 @@
+Web browser and React Native WebView clients consuming the /api/* endpoints. The web frontend is served as Jinja2 templates with static assets. Mobile clients access the same REST API via CORS-enabled requests.

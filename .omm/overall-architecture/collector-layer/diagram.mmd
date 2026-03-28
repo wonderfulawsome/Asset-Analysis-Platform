@@ -1,0 +1,29 @@
+graph LR
+    market-data["Market Data\ncollector/market_data.py"]
+    fear-greed["Fear & Greed\ncollector/fear_greed.py"]
+    index-price["Index Price\ncollector/index_price.py"]
+    sector-macro["Sector Macro\ncollector/sector_macro.py"]
+    sector-etf["Sector ETF\ncollector/sector_etf.py"]
+    noise-regime-data["Noise Regime Data\ncollector/noise_regime_data.py"]
+    crash-surge-data["Crash Surge Data\ncollector/crash_surge_data.py"]
+
+    yahoo["Yahoo Finance API"]
+    fred["FRED API"]
+    cnn["CNN Fear & Greed"]
+    cboe["CBOE"]
+    shiller["Shiller CAPE"]
+
+    yahoo -->|"S&P500, VIX, ETFs"| market-data
+    yahoo -->|"31 ETF prices"| index-price
+    yahoo -->|"sector stocks, VIX"| noise-regime-data
+    yahoo -->|"SPY, TNX, IRX, CL=F"| crash-surge-data
+    fred -->|"8 macro series"| sector-macro
+    fred -->|"TIPS, HY OAS"| noise-regime-data
+    fred -->|"8 credit/rate series"| crash-surge-data
+    cnn -->|"sentiment score"| fear-greed
+    cboe -->|"Put/Call ratio"| fear-greed
+    cboe -->|"VIX, SKEW, VVIX"| crash-surge-data
+    shiller -->|"CAPE P/E"| noise-regime-data
+
+    classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
+    class yahoo,fred,cnn,cboe,shiller external

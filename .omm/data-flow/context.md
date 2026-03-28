@@ -1,0 +1,1 @@
+Data freshness varies by source: Yahoo Finance prices update in real-time during market hours, FRED macro data updates monthly/weekly, CNN Fear & Greed updates daily, CBOE data updates daily. The pipeline refreshes light data every 10 minutes and full data every 3 hours.

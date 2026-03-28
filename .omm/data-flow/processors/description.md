@@ -1,0 +1,1 @@
+4 ML processor modules that train models and generate predictions. Feature 1: HMM noise regime (8 features). Feature 2: HMM business cycle (10 features). Feature 3: XGBoost crash/surge (44 features). Feature 4: Ensemble price forecast (18 features × 16 tickers).

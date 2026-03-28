@@ -1,0 +1,1 @@
+Lightweight 10-minute pipeline for real-time data refresh. Steps: (1-2) Fetch recent 60 days macro data and save to DB, (4) Fetch Fear & Greed + Put/Call ratio, (5) Fetch 31 ETF prices, (5b) Predict crash/surge using saved XGBoost model, (5c) Predict noise regime using saved HMM model. No model retraining.

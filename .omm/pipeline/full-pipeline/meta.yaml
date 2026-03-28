@@ -1,0 +1,15 @@
+created: 2026-03-28T18:54:14.081Z
+updated: 2026-03-28T18:54:24.812Z
+update_count: 2
+last_field: diagram
+kind: nested-class
+title: full-pipeline
+children:
+  - step1
+  - step3
+  - step4
+  - step5
+  - step6
+  - step7
+  - step8
+parentPath: []

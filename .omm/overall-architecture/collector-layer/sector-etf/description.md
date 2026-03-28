@@ -1,0 +1,1 @@
+Fetches monthly returns for 10 sector ETFs (XLF, XLE, XLK, XLV, etc.) and 22 holdings (QQQ, SPY, GLD, TLT, etc.) via yfinance. Provides return matrices for sector performance analysis across business cycle phases.

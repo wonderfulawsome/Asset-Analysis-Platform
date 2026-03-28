@@ -1,0 +1,1 @@
+Fetches 8 FRED macro series, computes YoY changes and 3-month deltas, then fetches monthly returns for 10 sector ETFs and 22 holdings. Trains 4-state HMM for business cycle phase classification and computes sector/holding performance by phase. Stores in sector_cycle_result table.

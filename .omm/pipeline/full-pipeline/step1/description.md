@@ -1,0 +1,1 @@
+Collects macro indicators (S&P500, VIX, TNX, yield spread, NDX, SOX) from Yahoo Finance with full history (100 years). Computes technical features (returns, volume ratios, MA displacement, RSI) and upserts records to macro_raw table.

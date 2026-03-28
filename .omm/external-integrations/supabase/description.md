@@ -1,0 +1,1 @@
+Supabase managed PostgreSQL database accessed via supabase-py SDK. Thread-safe client with thread-local storage. 10 tables with upsert-on-conflict for idempotent writes. JSONB columns for complex nested data (probabilities, SHAP values). Pagination helper for tables exceeding 1000-row limit.

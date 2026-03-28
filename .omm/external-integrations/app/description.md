@@ -1,0 +1,1 @@
+Central FastAPI application that initiates all outbound connections. Collectors run inside the scheduler pipeline or on-demand from API endpoints. All external calls originate from the single Railway-deployed container.

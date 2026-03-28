@@ -1,0 +1,9 @@
+created: 2026-03-28T18:52:34.730Z
+updated: 2026-03-28T18:52:34.733Z
+update_count: 1
+last_field: description
+kind: nested-class
+title: index-price
+children: []
+parentPath:
+  - collector-layer

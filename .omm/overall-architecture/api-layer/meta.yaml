@@ -1,0 +1,16 @@
+created: 2026-03-28T18:51:24.009Z
+updated: 2026-03-28T18:51:49.526Z
+update_count: 2
+last_field: diagram
+kind: nested-class
+title: api-layer
+children:
+  - chart-router
+  - crash-surge-router
+  - index-feed-router
+  - macro-router
+  - market-summary-router
+  - regime-router
+  - sector-cycle-router
+  - tracking-router
+parentPath: []

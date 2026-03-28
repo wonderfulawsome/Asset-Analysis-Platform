@@ -1,0 +1,1 @@
+Builds 44-feature dataset from Yahoo, FRED (cached from Step 3), and CBOE. Trains XGBoost 3-class classifier with Optuna 50 trials, applies Platt scaling for surge calibration. Predicts today's crash/surge scores and backfills new dates. Stores in crash_surge_result table with SHAP explanations.

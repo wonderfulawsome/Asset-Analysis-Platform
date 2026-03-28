@@ -1,0 +1,1 @@
+All external services the system connects to. 5 data providers (Yahoo Finance, FRED, CNN, CBOE, Shiller), 1 managed database (Supabase), and 1 deployment platform (Railway). Each integration uses a specific client library or HTTP method.

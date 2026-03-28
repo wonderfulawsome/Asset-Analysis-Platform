@@ -1,0 +1,1 @@
+4-state Gaussian HMM for noise vs signal regime detection. Trained on 8 monthly features with RobustScaler normalization. Maps states to aligned/misaligned regimes via noise_score ranking. Outputs regime ID, probabilities, feature contributions, and emoji indicators. Supports daily real-time prediction and 50-day backfill.

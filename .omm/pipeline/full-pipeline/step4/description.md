@@ -1,0 +1,1 @@
+Fetches CNN Fear & Greed sentiment index (0-100 score) and CBOE Total Put/Call ratio. Stores Fear & Greed in fear_greed_raw table and Put/Call ratio as an additional column in the latest macro_raw record.

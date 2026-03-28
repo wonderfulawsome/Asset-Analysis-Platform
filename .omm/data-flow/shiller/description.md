@@ -1,0 +1,1 @@
+Robert Shiller's CAPE (Cyclically Adjusted Price-to-Earnings) dataset from Yale Economics. Monthly P/E ratio downloaded from ie_data.xls Excel file. Used for fundamental valuation gap analysis in the noise regime model.

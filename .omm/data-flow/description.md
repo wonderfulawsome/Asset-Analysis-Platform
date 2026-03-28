@@ -1,0 +1,1 @@
+End-to-end data flow from 5 external financial data sources through collection, ML processing, persistent storage in Supabase, and serving via REST API. Raw market data flows left-to-right: external APIs → collectors (feature engineering) → processors (model training/inference) → Supabase (persistence) → API (serving) → client (display).

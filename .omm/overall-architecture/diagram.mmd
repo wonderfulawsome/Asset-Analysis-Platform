@@ -1,0 +1,24 @@
+graph LR
+    api-layer["API Layer\napi/"]
+    collector-layer["Collector Layer\ncollector/"]
+    processor-layer["Processor Layer\nprocessor/"]
+    database-layer["Database Layer\ndatabase/"]
+    scheduler-engine["Scheduler\nscheduler/"]
+    supabase-db["Supabase\nPostgreSQL"]
+    frontend["Frontend\ntemplates/ + static/"]
+
+    scheduler-engine -->|"triggers pipeline"| collector-layer
+    collector-layer -->|"raw data"| processor-layer
+    processor-layer -->|"ML results"| database-layer
+    collector-layer -->|"raw records"| database-layer
+    database-layer -->|"upsert/fetch"| supabase-db
+    api-layer -->|"queries"| database-layer
+    frontend -->|"HTTP requests"| api-layer
+
+    classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
+    classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
+    classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
+
+    class supabase-db store
+    class api-layer entry
+    class frontend entry

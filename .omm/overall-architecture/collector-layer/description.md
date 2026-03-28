@@ -1,0 +1,1 @@
+Data collection modules that fetch raw financial data from external APIs and websites. 7 collector modules covering macro indicators (FRED), market prices (Yahoo Finance), sentiment (CNN Fear & Greed, CBOE), and specialized datasets for ML feature engineering (Shiller CAPE, sector stocks, volatility indices).

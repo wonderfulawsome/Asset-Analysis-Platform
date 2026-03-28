@@ -1,0 +1,1 @@
+Collects 8 FRED macroeconomic series (INDPRO, T10Y3M, ANFCI, ICSA, PERMIT, RRSFS, ANDENO, W875RX1) with exponential backoff. Converts industrial production to PMI-like index, computes YoY% changes and 3-month deltas. Input for sector cycle HMM.

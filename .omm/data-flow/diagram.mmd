@@ -1,0 +1,31 @@
+graph LR
+    yahoo["Yahoo Finance\nAPI v8"]
+    fred["FRED\nFederal Reserve"]
+    cnn["CNN\nFear & Greed"]
+    cboe["CBOE\nOptions Data"]
+    shiller["Shiller CAPE\nYale Economics"]
+
+    collectors["Collectors\ncollector/"]
+    processors["ML Processors\nprocessor/"]
+    supabase["Supabase\nPostgreSQL"]
+    api["FastAPI\napi/"]
+    client["Web / Mobile\nClient"]
+
+    yahoo -->|"prices, volumes, VIX"| collectors
+    fred -->|"macro series, credit spreads"| collectors
+    cnn -->|"sentiment score"| collectors
+    cboe -->|"put/call, vol indices"| collectors
+    shiller -->|"CAPE P/E ratio"| collectors
+    collectors -->|"raw DataFrames"| processors
+    collectors -->|"raw records"| supabase
+    processors -->|"ML predictions"| supabase
+    supabase -->|"query results"| api
+    api -->|"JSON responses"| client
+
+    classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
+    classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
+    classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
+
+    class yahoo,fred,cnn,cboe,shiller external
+    class supabase store
+    class api,client entry

@@ -1,0 +1,1 @@
+Most compute-intensive step. Collects 18 years of sector stocks, mega-cap OHLCV, FRED (TIPS, HY spread), VIX term structure, and Shiller CAPE. Computes 8 monthly features, trains 4-state Gaussian HMM, predicts today's regime, and backfills last 50 days. FRED data cached for reuse in Step 7.

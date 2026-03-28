@@ -1,0 +1,1 @@
+Federal Reserve Economic Data accessed via pandas_datareader with exponential backoff retry. Provides 16+ macro/credit/rate time series. Used by sector_macro.py (8 series), noise_regime_data.py (2 series), and crash_surge_data.py (8 series). FRED data cached between pipeline steps to reduce API calls.

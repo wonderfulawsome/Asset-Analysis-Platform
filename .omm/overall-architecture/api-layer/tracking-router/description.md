@@ -1,0 +1,1 @@
+Serves user visit analytics via /api/tracking. Endpoints: POST /visit (records user visit with new/returning flag), GET /stats (DAU, MAU, new/returning counts in KST timezone), DELETE /purge-dummy (removes dummy test users).

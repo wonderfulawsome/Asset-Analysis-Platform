@@ -1,0 +1,1 @@
+Builds 8-feature dataset for HMM noise/signal regime detection. Collects from FRED (TIPS rate, HY spread), Yahoo Finance (VIX term structure, 25 sector stocks, 5 mega-cap stocks for Amihud illiquidity), and Shiller CAPE. Features: fundamental_gap, erp_zscore, residual_corr, dispersion, amihud, vix_term, hy_spread, realized_vol.

@@ -1,0 +1,1 @@
+Serves historical charts and price predictions via /api/chart. Endpoints: GET /ohlc (OHLC candlestick data for 16 ETFs with 10-min cache), GET /predict (30-day price forecast with confidence intervals, auto-regenerates if stale), GET /tickers (list of supported tickers).

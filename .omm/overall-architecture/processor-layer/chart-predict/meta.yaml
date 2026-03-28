@@ -1,0 +1,9 @@
+created: 2026-03-28T18:53:03.720Z
+updated: 2026-03-28T18:53:03.723Z
+update_count: 1
+last_field: description
+kind: nested-class
+title: chart-predict
+children: []
+parentPath:
+  - processor-layer

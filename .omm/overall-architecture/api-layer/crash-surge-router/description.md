@@ -1,0 +1,1 @@
+Serves crash/surge early warning signals via /api/crash-surge. Endpoints: GET /current (latest net_score with crash/surge grades), GET /history (N-day signal history), GET /direction (percentile ranking, future return stats, win ratio, bullish/bearish judgment with 30-min cache).

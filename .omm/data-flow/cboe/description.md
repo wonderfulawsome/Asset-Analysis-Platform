@@ -1,0 +1,1 @@
+Chicago Board Options Exchange data. Provides Total Put/Call ratio via HTML scraping and volatility indices (VIX, VIX3M, VIX9D, VVIX, SKEW) via Yahoo Finance proxy. Used for options market sentiment and volatility surface analysis.

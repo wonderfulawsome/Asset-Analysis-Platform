@@ -1,0 +1,10 @@
+graph TD
+    scheduler["APScheduler\nscheduler/job.py"]
+    light-pipeline["Light Pipeline\nevery 10 min"]
+    full-pipeline["Full Pipeline\nevery 3 hours"]
+
+    scheduler -->|"light=True"| light-pipeline
+    scheduler -->|"light=False"| full-pipeline
+
+    classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
+    class scheduler entry

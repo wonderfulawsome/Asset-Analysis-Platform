@@ -1,0 +1,1 @@
+Two-tier data pipeline architecture with a light pipeline (10-min interval, real-time predictions using existing models) and a full pipeline (3-hour interval, historical data collection + model retraining). Both orchestrated by APScheduler BackgroundScheduler running in the FastAPI process.

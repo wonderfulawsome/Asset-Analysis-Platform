@@ -1,0 +1,1 @@
+The two-tier design balances data freshness (10-min light updates) against compute cost (3-hour full retraining). Light pipeline only uses saved models for inference; full pipeline retrains when the model's train_month differs from the current month. FRED cache sharing between Step 3 and Step 7 prevents redundant API calls.

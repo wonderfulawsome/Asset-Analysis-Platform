@@ -1,0 +1,1 @@
+FastAPI REST API with 8 router modules serving JSON responses. Includes response caching (5-30 min TTL), market hours detection for real-time data, and background prediction regeneration. CORS enabled for cross-origin mobile app access.

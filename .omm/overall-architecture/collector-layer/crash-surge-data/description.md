@@ -1,0 +1,1 @@
+Comprehensive feature engineering for XGBoost crash/surge prediction. 44 features (17 core + 27 auxiliary) from Yahoo Finance (SPY, TNX, IRX, WTI), FRED (8 credit/rate series), and CBOE (VIX, VIX3M, VIX9D, VVIX, SKEW). Includes label generation with 20-day forward window and train/calib/test/dev dataset splitting.

@@ -1,0 +1,1 @@
+Runs 5-model ensemble (XGBoost, CatBoost, RF, Ridge, SVR) with GARCH(1,1) volatility for 30-business-day price forecasts across 16 ETFs. Uses recursive forecasting with per-ticker return clipping and price band constraints. Stores in chart_predict_result table.

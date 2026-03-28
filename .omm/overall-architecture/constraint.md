@@ -1,0 +1,1 @@
+Deployed on Railway as a single Docker container. Supabase free tier limits apply (row limits, API rate limits). FRED API requires an API key. Yahoo Finance data fetched via curl_cffi to bypass rate limits. The scheduler and web server run in the same process (controlled via RUN_SCHEDULER env var).

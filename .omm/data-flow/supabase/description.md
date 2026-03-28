@@ -1,0 +1,1 @@
+Supabase PostgreSQL database with 10 tables: macro_raw, market_regime, fear_greed_raw, index_price_raw, sector_macro_raw, sector_cycle_result, noise_regime, crash_surge_result, chart_predict_result, user_visit. All writes use upsert with conflict resolution. JSONB columns for probabilities, SHAP values, and feature dictionaries.

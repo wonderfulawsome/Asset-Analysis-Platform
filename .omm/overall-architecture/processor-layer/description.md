@@ -1,0 +1,1 @@
+ML model training and inference modules. 4 processors implementing distinct financial analysis features: (1) HMM noise/signal regime detection, (2) HMM business cycle classification with sector performance, (3) XGBoost crash/surge probability prediction with SHAP explanations, (4) 5-model ensemble 30-day ETF price forecasting with GARCH volatility.

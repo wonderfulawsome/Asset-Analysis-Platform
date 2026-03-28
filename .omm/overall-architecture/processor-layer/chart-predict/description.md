@@ -1,0 +1,1 @@
+5-model ensemble (XGBoost, CatBoost, Random Forest, Ridge, SVR) for 30-business-day ETF price forecasting. Uses GARCH(1,1) for conditional volatility and confidence intervals. 18 technical features including log returns, SMA ratios, RSI, and Bollinger Bands. Covers 16 ETFs with per-ticker return clipping and price band constraints.

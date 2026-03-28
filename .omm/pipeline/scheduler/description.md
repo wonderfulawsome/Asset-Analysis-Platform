@@ -1,0 +1,1 @@
+APScheduler BackgroundScheduler configured in api/app.py lifespan. Registers two interval jobs: light_pipeline (10 min) and full_pipeline (3 hours). Controlled by RUN_SCHEDULER env var for web-only vs worker mode.

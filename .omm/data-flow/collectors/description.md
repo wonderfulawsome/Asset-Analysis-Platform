@@ -1,0 +1,1 @@
+7 collector modules that fetch, clean, and transform raw financial data into structured records and feature DataFrames. Each collector handles one or more external data sources and produces output ready for either direct DB storage or ML processing.

@@ -1,0 +1,1 @@
+Robert Shiller's CAPE dataset from Yale Economics website. Downloaded as ie_data.xls Excel file parsed with openpyxl/xlrd. Monthly P/E ratio dating back to 1871. Gaps in recent data filled with Yahoo Finance S&P500 prices.

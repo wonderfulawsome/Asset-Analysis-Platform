@@ -1,0 +1,1 @@
+Yahoo Finance API v8 accessed via curl_cffi (market_data.py, index_price.py, noise_regime_data.py, crash_surge_data.py) and yfinance library (sector_etf.py). Provides daily OHLCV, intraday data, and derived indices. Most heavily used external source — called by 5 of 7 collectors.
