@@ -1,0 +1,11 @@
+graph LR
+    supabase-client["DB 클라이언트\ndatabase/supabase_client.py"]
+    repositories["Repository 함수\ndatabase/repositories.py"]
+
+    repositories -->|"get_client()"| supabase-client
+    supabase-client -->|"Supabase REST API"| supabase["Supabase PostgreSQL\n외부 서비스"]
+
+    classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
+    classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
+    class supabase external
+    class supabase-client,repositories store

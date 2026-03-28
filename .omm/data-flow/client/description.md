@@ -1,1 +1,1 @@
-Web browser and React Native WebView clients consuming the /api/* endpoints. The web frontend is served as Jinja2 templates with static assets. Mobile clients access the same REST API via CORS-enabled requests.
+Jinja2 + 바닐라 JS 프론트엔드. /api/* 엔드포인트에서 fetch()로 데이터를 가져와 캔들스틱 차트, 국면 분석, 폭락/급등 전조, 섹터 분석 등을 시각화. 최종 사용자에게 투자 인사이트를 제공.

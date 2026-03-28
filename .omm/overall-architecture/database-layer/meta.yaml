@@ -1,8 +1,10 @@
 created: 2026-03-28T18:51:32.669Z
-updated: 2026-03-28T18:51:32.673Z
-update_count: 1
-last_field: description
+updated: 2026-03-28T19:13:42.781Z
+update_count: 3
+last_field: diagram
 kind: nested-class
 title: database-layer
-children: []
+children:
+  - repositories
+  - supabase-client
 parentPath: []

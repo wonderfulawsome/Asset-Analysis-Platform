@@ -1,6 +1,6 @@
 created: 2026-03-28T18:51:24.009Z
-updated: 2026-03-28T18:51:49.526Z
-update_count: 2
+updated: 2026-03-28T19:11:58.698Z
+update_count: 4
 last_field: diagram
 kind: nested-class
 title: api-layer
@@ -14,3 +14,25 @@ children:
   - sector-cycle-router
   - tracking-router
 parentPath: []
+prev_diagram: >
+  graph LR
+      regime-router["Regime Router\napi/routers/regime.py"]
+      macro-router["Macro Router\napi/routers/macro.py"]
+      index-feed-router["Index Feed Router\napi/routers/index_feed.py"]
+      sector-cycle-router["Sector Cycle Router\napi/routers/sector_cycle.py"]
+      crash-surge-router["Crash Surge Router\napi/routers/crash_surge.py"]
+      market-summary-router["Market Summary Router\napi/routers/market_summary.py"]
+      chart-router["Chart Router\napi/routers/chart.py"]
+      tracking-router["Tracking Router\napi/routers/tracking.py"]
+
+      regime-router -->|"/api/regime"| db["Database Layer"]
+      macro-router -->|"/api/macro"| db
+      index-feed-router -->|"/api/index"| db
+      sector-cycle-router -->|"/api/sector-cycle"| db
+      crash-surge-router -->|"/api/crash-surge"| db
+      market-summary-router -->|"/api/market-summary"| db
+      chart-router -->|"/api/chart"| db
+      tracking-router -->|"/api/tracking"| db
+
+      classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
+      class regime-router,macro-router,index-feed-router,sector-cycle-router,crash-surge-router,market-summary-router,chart-router,tracking-router entry

@@ -1,1 +1,1 @@
-Supabase PostgreSQL database with 10 tables: macro_raw, market_regime, fear_greed_raw, index_price_raw, sector_macro_raw, sector_cycle_result, noise_regime, crash_surge_result, chart_predict_result, user_visit. All writes use upsert with conflict resolution. JSONB columns for probabilities, SHAP values, and feature dictionaries.
+Supabase PostgreSQL 데이터 저장소. 10개 테이블에 원시 데이터(macro_raw, fear_greed_raw, index_price_raw, sector_macro_raw)와 분석 결과(market_regime, noise_regime, crash_surge_result, sector_cycle_result, chart_predict_result, user_visit)를 저장.

@@ -1,1 +1,1 @@
-Primary market data provider. Supplies daily OHLCV for S&P500, Nasdaq, SOX, VIX, VIX3M, VIX9D, TNX, IRX, CL=F (WTI crude), 31 ETFs, 25 sector stocks, and 5 mega-cap stocks. Accessed via Yahoo Finance API v8 with curl_cffi for rate limit bypass.
+Yahoo Finance v8 API. SP500, VIX, 금리, 나스닥, SOX, 31개 ETF, 섹터 주식, WTI 등의 일별·월별 OHLCV 데이터를 제공. query1.finance.yahoo.com 엔드포인트 사용.

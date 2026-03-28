@@ -1,1 +1,1 @@
-Fetches daily close prices and percentage changes for 31 major ETFs (SPY, QQQ, SOXX, BND, IWM, DIA, etc.) from Yahoo Finance API v8. Provides single-day price snapshots for the index feed dashboard.
+ETF 가격 수집 모듈. Yahoo Finance v8 API에서 31개 ETF의 일별 종가와 등락률을 수집한다. 실시간 시장가가 있으면 우선 사용, 아니면 수정 종가 사용.

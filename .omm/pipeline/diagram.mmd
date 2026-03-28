@@ -1,10 +1,7 @@
 graph TD
-    scheduler["APScheduler\nscheduler/job.py"]
-    light-pipeline["Light Pipeline\nevery 10 min"]
-    full-pipeline["Full Pipeline\nevery 3 hours"]
-
-    scheduler -->|"light=True"| light-pipeline
-    scheduler -->|"light=False"| full-pipeline
+    scheduler["APScheduler\napi/app.py lifespan"]
+    scheduler -->|"10분 주기"| light-pipeline["경량 파이프라인\nlight=True"]
+    scheduler -->|"3시간 주기"| full-pipeline["전체 파이프라인\nlight=False"]
 
     classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
     class scheduler entry

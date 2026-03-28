@@ -1,1 +1,1 @@
-5-model ensemble (XGBoost, CatBoost, Random Forest, Ridge, SVR) for 30-business-day ETF price forecasting. Uses GARCH(1,1) for conditional volatility and confidence intervals. 18 technical features including log returns, SMA ratios, RSI, and Bollinger Bands. Covers 16 ETFs with per-ticker return clipping and price band constraints.
+5모델 앙상블 + GARCH(1,1) ETF 30일 가격 예측기. XGBoost, CatBoost, RandomForest, Ridge, SVR 5개 모델의 앙상블 예측에 GARCH 동적 변동성을 적용하여 80% 신뢰 구간 제공. 16개 ETF 티커 대상, 16개 기술적 피처(수익률, SMA, RSI, 볼린저 밴드 등) 사용.

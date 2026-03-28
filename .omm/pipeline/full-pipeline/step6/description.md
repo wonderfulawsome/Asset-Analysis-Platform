@@ -1,1 +1,1 @@
-Fetches 8 FRED macro series, computes YoY changes and 3-month deltas, then fetches monthly returns for 10 sector ETFs and 22 holdings. Trains 4-state HMM for business cycle phase classification and computes sector/holding performance by phase. Stores in sector_cycle_result table.
+섹터 경기국면 분석. FRED에서 8개 경제지표를 수집하고, 10개 섹터 ETF + 22개 보유종목의 월별 수익률과 함께 GaussianHMM(4상태)으로 회복/확장/둔화/침체 국면을 판별. 국면별 Top 3 섹터 추천.

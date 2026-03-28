@@ -1,1 +1,1 @@
-ML model training and inference modules. 4 processors implementing distinct financial analysis features: (1) HMM noise/signal regime detection, (2) HMM business cycle classification with sector performance, (3) XGBoost crash/surge probability prediction with SHAP explanations, (4) 5-model ensemble 30-day ETF price forecasting with GARCH volatility.
+ML 모델 학습·예측 처리 레이어. 4개 모듈이 HMM(국면 분류), XGBoost(경기국면·폭락/급등), 앙상블+GARCH(가격 예측) 모델을 학습하고 예측 결과를 생성한다. 학습된 모델은 models/ 디렉토리에 pkl 파일로 저장.

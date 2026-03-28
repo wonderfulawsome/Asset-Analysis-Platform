@@ -1,18 +1,18 @@
 graph TD
-    step1["Step 1-2: Macro Collection\nfetch_macro → upsert_macro"]
-    step3["Step 3: Noise HMM\ntrain + predict + backfill"]
-    step4["Step 4: Fear & Greed\nCNN + CBOE Put/Call"]
-    step5["Step 5: ETF Prices\n31 tickers"]
-    step6["Step 6: Sector Cycle\nFRED + ETF + HMM"]
-    step7["Step 7: Crash/Surge\nXGBoost + Optuna + backfill"]
-    step8["Step 8: Chart Predict\n5-model ensemble × 16 ETFs"]
+    step1["Step 1: 거시 지표 수집\ncollector/market_data.py"]
+    step2["Step 2: macro_raw 저장\ndatabase/repositories.py"]
+    step3["Step 3: Noise HMM 학습+예측\nprocessor/feature1_regime.py"]
+    step4["Step 4: Fear & Greed 수집\ncollector/fear_greed.py"]
+    step5["Step 5: ETF 가격 수집\ncollector/index_price.py"]
+    step6["Step 6: 섹터 경기국면 분석\nprocessor/feature2_sector_cycle.py"]
+    step7["Step 7: XGBoost 폭락/급등\nprocessor/feature3_crash_surge.py"]
+    step8["Step 8: ETF 가격 예측\nprocessor/feature4_chart_predict.py"]
 
-    step1 --> step3
-    step3 --> step4
-    step4 --> step5
-    step5 --> step6
-    step6 --> step7
-    step7 --> step8
-
-    classDef concern fill:#f38ba8,stroke:#f38ba8,color:#1e1e2e
-    class step3,step7 concern
+    step1 -->|"DataFrame"| step2
+    step2 -->|"완료"| step3
+    step3 -->|"완료"| step4
+    step4 -->|"완료"| step5
+    step5 -->|"완료"| step6
+    step6 -->|"완료"| step7
+    step7 -->|"FRED 캐시 재사용"| step3
+    step7 -->|"완료"| step8

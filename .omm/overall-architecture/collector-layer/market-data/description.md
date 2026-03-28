@@ -1,1 +1,1 @@
-Collects S&P500, VIX, 10-year Treasury, 3-month Treasury, Nasdaq-100, and SOX daily data from Yahoo Finance API v8. Computes technical features: returns, volume ratios, MA20 displacement, RSI. Outputs DataFrame and Supabase-ready dict records.
+거시 지표 수집 모듈. Yahoo Finance v8 API에서 SP500, VIX, 10년 금리, 3개월 금리, 나스닥100, SOX 지수의 100년치 데이터를 수집한다. RSI, 이동평균 이격도, 거래량 비율, 수익률 등 18개 파생 컬럼을 계산하여 DataFrame으로 반환.

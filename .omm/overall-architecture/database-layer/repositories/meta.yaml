@@ -1,0 +1,9 @@
+created: 2026-03-28T19:13:47.503Z
+updated: 2026-03-28T19:13:47.505Z
+update_count: 1
+last_field: description
+kind: nested-class
+title: repositories
+children: []
+parentPath:
+  - database-layer

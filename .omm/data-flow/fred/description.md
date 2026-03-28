@@ -1,1 +1,1 @@
-Federal Reserve Economic Data API. Provides macroeconomic series: industrial production (INDPRO), yield spreads (T10Y3M), financial conditions (ANFCI, NFCI), jobless claims (ICSA), building permits (PERMIT), retail sales (RRSFS), capital expenditures (ANDENO), real income (W875RX1), credit spreads (HY OAS, BBB OAS, CCC OAS), TIPS real rate (DFII10), SOFR, EFFR, breakeven inflation (T10YIE).
+FRED(연방준비은행 경제 데이터). HY OAS, BBB OAS, TIPS, SOFR, NFCI, 산업생산, 건축허가 등 16개 이상 시리즈를 CSV 다운로드로 수집. exponential backoff 재시도 적용.

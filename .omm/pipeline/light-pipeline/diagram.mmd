@@ -1,0 +1,13 @@
+graph TD
+    step1["Step 1: 거시 지표 60일치 수집\ncollector/market_data.py"]
+    step2["Step 2: macro_raw 저장\ndatabase/repositories.py"]
+    step4["Step 4: Fear & Greed 수집\ncollector/fear_greed.py"]
+    step5["Step 5: ETF 가격 수집\ncollector/index_price.py"]
+    step5b["Step 5b: 폭락/급등 실시간 예측\n기존 XGBoost 모델 사용"]
+    step5c["Step 5c: Noise HMM 실시간 예측\n기존 HMM 모델 사용"]
+
+    step1 -->|"DataFrame"| step2
+    step2 -->|"완료"| step4
+    step4 -->|"완료"| step5
+    step5 -->|"완료"| step5b
+    step5b -->|"완료"| step5c

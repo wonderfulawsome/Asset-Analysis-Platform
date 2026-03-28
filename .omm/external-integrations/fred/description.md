@@ -1,1 +1,1 @@
-Federal Reserve Economic Data accessed via pandas_datareader with exponential backoff retry. Provides 16+ macro/credit/rate time series. Used by sector_macro.py (8 series), noise_regime_data.py (2 series), and crash_surge_data.py (8 series). FRED data cached between pipeline steps to reduce API calls.
+FRED(연방준비은행 경제 데이터). CSV 다운로드 방식으로 16개 이상 경제지표 시리즈를 수집. 무인증이지만 rate limit 존재하여 exponential backoff(최대 5회 재시도) 적용.

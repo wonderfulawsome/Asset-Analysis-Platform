@@ -1,1 +1,1 @@
-This is a single-service Python application targeting passive investors. It provides market regime detection, crash/surge early warnings, sector rotation analysis, and 30-day ETF price forecasts. The app serves both a Jinja2 HTML frontend and a REST API consumed by React Native WebView clients.
+Railway에 Docker로 배포되는 단일 서비스 구조. RUN_SCHEDULER 환경변수로 스케줄러 ON/OFF 제어 가능 (웹 서버 전용 모드 분리 대비). CORS 전면 허용으로 React Native WebView 등 외부 앱에서 API 호출 가능.

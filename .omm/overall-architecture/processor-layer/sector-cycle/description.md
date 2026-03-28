@@ -1,1 +1,1 @@
-4-state Gaussian HMM for business cycle classification (Recovery/Expansion/Slowdown/Recession). Trained on 10 FRED macro features with StandardScaler. States ranked by PMI + momentum composite score. Computes sector and holding performance by phase, identifies top 3 sectors for current cycle.
+섹터 경기국면 분석기. GaussianHMM(4상태)으로 10개 거시 피처를 학습하여 회복/확장/둔화/침체 4개 국면을 판별. 국면별 섹터 ETF·보유종목 평균 월별 수익률, Top 3 섹터 추천 제공.

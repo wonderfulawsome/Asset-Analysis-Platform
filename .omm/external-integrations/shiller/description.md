@@ -1,1 +1,1 @@
-Robert Shiller's CAPE dataset from Yale Economics website. Downloaded as ie_data.xls Excel file parsed with openpyxl/xlrd. Monthly P/E ratio dating back to 1871. Gaps in recent data filled with Yahoo Finance S&P500 prices.
+Yale 경제학과 Shiller 데이터. ie_data.xls 파일을 HTTP 다운로드하여 Shiller PE Ratio 시계열을 추출. 월별 업데이트.

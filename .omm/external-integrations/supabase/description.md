@@ -1,1 +1,1 @@
-Supabase managed PostgreSQL database accessed via supabase-py SDK. Thread-safe client with thread-local storage. 10 tables with upsert-on-conflict for idempotent writes. JSONB columns for complex nested data (probabilities, SHAP values). Pagination helper for tables exceeding 1000-row limit.
+Supabase PostgreSQL BaaS. 환경변수(SUPABASE_URL, SUPABASE_KEY)로 접속하여 REST API를 통해 10개 테이블에 CRUD 수행. 스레드별 싱글톤 클라이언트 관리.

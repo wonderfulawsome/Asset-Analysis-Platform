@@ -1,1 +1,1 @@
-Data freshness varies by source: Yahoo Finance prices update in real-time during market hours, FRED macro data updates monthly/weekly, CNN Fear & Greed updates daily, CBOE data updates daily. The pipeline refreshes light data every 10 minutes and full data every 3 hours.
+데이터는 단방향으로 흐른다: 외부 소스 → 수집기 → (Supabase + 처리기) → API → 프론트엔드. FRED 캐시(fred_cache)를 통해 Step 3에서 수집한 데이터를 Step 7에서 재사용하여 중복 API 호출을 방지한다.

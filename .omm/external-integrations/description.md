@@ -1,1 +1,1 @@
-All external services the system connects to. 5 data providers (Yahoo Finance, FRED, CNN, CBOE, Shiller), 1 managed database (Supabase), and 1 deployment platform (Railway). Each integration uses a specific client library or HTTP method.
+시스템이 연동하는 모든 외부 서비스 맵. 5개 데이터 소스(Yahoo Finance, FRED, CNN, CBOE, Shiller)에서 시장 데이터를 수집하고, Supabase에 저장하며, Railway에 Docker로 배포된다.

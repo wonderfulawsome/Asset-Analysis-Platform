@@ -1,1 +1,1 @@
-Two-tier data pipeline architecture with a light pipeline (10-min interval, real-time predictions using existing models) and a full pipeline (3-hour interval, historical data collection + model retraining). Both orchestrated by APScheduler BackgroundScheduler running in the FastAPI process.
+APScheduler 기반 데이터 파이프라인 구조. 경량 파이프라인(10분 주기)은 최근 데이터만 갱신하고 기존 모델로 실시간 예측을 수행하며, 전체 파이프라인(3시간 주기)은 100년치 데이터를 수집하고 모든 ML 모델을 재학습한다. scheduler/job.py의 run_pipeline() 함수가 두 모드를 모두 처리.

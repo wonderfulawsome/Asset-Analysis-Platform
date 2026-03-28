@@ -1,0 +1,9 @@
+created: 2026-03-28T19:11:44.904Z
+updated: 2026-03-28T19:11:44.907Z
+update_count: 1
+last_field: description
+kind: nested-class
+title: i18n-js
+children: []
+parentPath:
+  - frontend

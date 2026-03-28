@@ -1,1 +1,1 @@
-Serves business cycle and sector rotation analysis via /api/sector-cycle. Endpoints: GET /current (latest cycle phase with emoji and probabilities), GET /holdings-perf (user portfolio performance by cycle phase), GET /history (N-day phase history).
+섹터 경기국면 API (/api/sector-cycle). 현재 경기국면(/current), 보유종목별 국면 수익률(/holdings-perf), 12개월 히스토리(/history) 제공.

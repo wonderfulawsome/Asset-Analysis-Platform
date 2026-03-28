@@ -1,1 +1,1 @@
-Collects 8 FRED macroeconomic series (INDPRO, T10Y3M, ANFCI, ICSA, PERMIT, RRSFS, ANDENO, W875RX1) with exponential backoff. Converts industrial production to PMI-like index, computes YoY% changes and 3-month deltas. Input for sector cycle HMM.
+섹터 매크로 수집 모듈. FRED에서 8개 경제지표(산업생산, 장단기금리차, 금융여건지수, 실업수당, 건축허가, 소매판매, 설비투자, 실질소득)를 수집하고, PMI 변환 및 YoY 변화율 등 10개 피처를 계산.

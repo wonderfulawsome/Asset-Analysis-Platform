@@ -1,1 +1,1 @@
-Lightweight 10-minute pipeline for real-time data refresh. Steps: (1-2) Fetch recent 60 days macro data and save to DB, (4) Fetch Fear & Greed + Put/Call ratio, (5) Fetch 31 ETF prices, (5b) Predict crash/surge using saved XGBoost model, (5c) Predict noise regime using saved HMM model. No model retraining.
+경량 파이프라인 (10분 주기). Step 1: 거시 지표 60일치 수집, Step 2: macro_raw 저장, Step 4: Fear & Greed + PUT/CALL 수집, Step 5: ETF 가격 수집, Step 5b: 기존 XGBoost 모델로 폭락/급등 실시간 예측, Step 5c: 기존 HMM 모델로 Noise 국면 실시간 예측. 모델 학습 없이 빠른 갱신.

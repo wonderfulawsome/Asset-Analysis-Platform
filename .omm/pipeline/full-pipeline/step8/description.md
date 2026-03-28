@@ -1,1 +1,1 @@
-Runs 5-model ensemble (XGBoost, CatBoost, RF, Ridge, SVR) with GARCH(1,1) volatility for 30-business-day price forecasts across 16 ETFs. Uses recursive forecasting with per-ticker return clipping and price band constraints. Stores in chart_predict_result table.
+ETF 30일 가격 예측. 16개 ETF 티커에 대해 5모델 앙상블(XGBoost, CatBoost, RF, Ridge, SVR) + GARCH(1,1) 동적 변동성으로 30일간 일별 포인트 예측과 80% 신뢰 구간을 산출.

@@ -1,1 +1,1 @@
-Fetches monthly returns for 10 sector ETFs (XLF, XLE, XLK, XLV, etc.) and 22 holdings (QQQ, SPY, GLD, TLT, etc.) via yfinance. Provides return matrices for sector performance analysis across business cycle phases.
+섹터 ETF 수익률 수집 모듈. Yahoo Finance에서 10개 섹터 ETF + 22개 보유종목의 월별 수익률을 수집한다.

@@ -1,8 +1,19 @@
 created: 2026-03-28T18:53:54.427Z
-updated: 2026-03-28T18:53:59.067Z
-update_count: 3
-last_field: context
+updated: 2026-03-28T19:15:05.733Z
+update_count: 5
+last_field: description
 children:
   - full-pipeline
   - light-pipeline
   - scheduler
+prev_diagram: |
+  graph TD
+      scheduler["APScheduler\nscheduler/job.py"]
+      light-pipeline["Light Pipeline\nevery 10 min"]
+      full-pipeline["Full Pipeline\nevery 3 hours"]
+
+      scheduler -->|"light=True"| light-pipeline
+      scheduler -->|"light=False"| full-pipeline
+
+      classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
+      class scheduler entry

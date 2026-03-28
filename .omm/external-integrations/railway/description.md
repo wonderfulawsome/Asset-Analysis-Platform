@@ -1,1 +1,1 @@
-Railway PaaS deployment platform. Application built via Dockerfile with restart-on-failure policy (max 10 retries). Single container runs both web server and background scheduler. Environment variables control scheduler activation (RUN_SCHEDULER) and database credentials.
+Railway 클라우드 호스팅. Dockerfile 기반 빌드, 실패 시 자동 재시작(최대 10회). 단일 서비스로 웹 서버 + 스케줄러를 함께 운영.

@@ -1,1 +1,1 @@
-4 ML processor modules that train models and generate predictions. Feature 1: HMM noise regime (8 features). Feature 2: HMM business cycle (10 features). Feature 3: XGBoost crash/surge (44 features). Feature 4: Ensemble price forecast (18 features × 16 tickers).
+4개 처리 모듈이 수집된 피처로 ML 모델을 학습/예측한다. HMM 국면 분류, XGBoost 폭락/급등 탐지, HMM 경기국면 판별, 앙상블 가격 예측. 결과는 Supabase에 저장.

@@ -1,1 +1,1 @@
-Yahoo Finance API v8 accessed via curl_cffi (market_data.py, index_price.py, noise_regime_data.py, crash_surge_data.py) and yfinance library (sector_etf.py). Provides daily OHLCV, intraday data, and derived indices. Most heavily used external source — called by 5 of 7 collectors.
+Yahoo Finance v8 API. 주가, ETF, VIX, 금리, 섹터 주식 등의 OHLCV 데이터를 제공. 무인증 API로 rate limit에 주의 필요. collector/market_data.py에서 100년→50년→30년 fallback 전략 사용.

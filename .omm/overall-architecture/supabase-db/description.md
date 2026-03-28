@@ -1,1 +1,1 @@
-Supabase-hosted PostgreSQL database storing all collected data and ML results. External managed service accessed via Supabase Python SDK. Contains 10 tables for macro indicators, regime predictions, fear/greed scores, ETF prices, sector analysis, crash/surge signals, chart predictions, and user visit tracking.
+외부 Supabase PostgreSQL 데이터베이스. 10개 테이블: macro_raw, market_regime, fear_greed_raw, index_price_raw, sector_macro_raw, sector_cycle_result, noise_regime, crash_surge_result, chart_predict_result, user_visit.

@@ -1,21 +1,12 @@
 graph LR
-    regime-router["Regime Router\napi/routers/regime.py"]
-    macro-router["Macro Router\napi/routers/macro.py"]
-    index-feed-router["Index Feed Router\napi/routers/index_feed.py"]
-    sector-cycle-router["Sector Cycle Router\napi/routers/sector_cycle.py"]
-    crash-surge-router["Crash Surge Router\napi/routers/crash_surge.py"]
-    market-summary-router["Market Summary Router\napi/routers/market_summary.py"]
-    chart-router["Chart Router\napi/routers/chart.py"]
-    tracking-router["Tracking Router\napi/routers/tracking.py"]
-
-    regime-router -->|"/api/regime"| db["Database Layer"]
-    macro-router -->|"/api/macro"| db
-    index-feed-router -->|"/api/index"| db
-    sector-cycle-router -->|"/api/sector-cycle"| db
-    crash-surge-router -->|"/api/crash-surge"| db
-    market-summary-router -->|"/api/market-summary"| db
-    chart-router -->|"/api/chart"| db
-    tracking-router -->|"/api/tracking"| db
+    regime-router["Regime 라우터\napi/routers/regime.py"]
+    macro-router["Macro 라우터\napi/routers/macro.py"]
+    index-feed-router["Index Feed 라우터\napi/routers/index_feed.py"]
+    sector-cycle-router["Sector Cycle 라우터\napi/routers/sector_cycle.py"]
+    crash-surge-router["Crash Surge 라우터\napi/routers/crash_surge.py"]
+    market-summary-router["Market Summary 라우터\napi/routers/market_summary.py"]
+    chart-router["Chart 라우터\napi/routers/chart.py"]
+    tracking-router["Tracking 라우터\napi/routers/tracking.py"]
 
     classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
     class regime-router,macro-router,index-feed-router,sector-cycle-router,crash-surge-router,market-summary-router,chart-router,tracking-router entry

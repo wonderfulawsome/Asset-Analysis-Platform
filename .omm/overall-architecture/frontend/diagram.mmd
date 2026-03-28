@@ -1,0 +1,15 @@
+graph LR
+    index-page["메인 앱 페이지\ntemplates/index.html"]
+    stats-page["통계 대시보드\ntemplates/stats.html"]
+    main-js["핵심 로직\nstatic/main.js"]
+    chart-js["차트 모듈\nstatic/chart.js"]
+    sector-js["섹터 모듈\nstatic/sector.js"]
+    i18n-js["다국어 모듈\nstatic/i18n.js"]
+    main-css["스타일시트\nstatic/main.css"]
+
+    index-page -->|"import"| main-js
+    index-page -->|"import"| chart-js
+    index-page -->|"import"| sector-js
+    index-page -->|"import"| i18n-js
+    index-page -->|"import"| main-css
+    stats-page -->|"import"| main-css

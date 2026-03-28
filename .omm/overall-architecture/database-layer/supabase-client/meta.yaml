@@ -1,0 +1,9 @@
+created: 2026-03-28T19:13:45.118Z
+updated: 2026-03-28T19:13:45.123Z
+update_count: 1
+last_field: description
+kind: nested-class
+title: supabase-client
+children: []
+parentPath:
+  - database-layer

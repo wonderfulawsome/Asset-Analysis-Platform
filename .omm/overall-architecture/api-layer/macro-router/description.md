@@ -1,1 +1,1 @@
-Serves macro economic indicators via /api/macro. Endpoints: GET /latest (S&P500 close/return/vol, VIX, TNX, yield spread, RSI with 5-min cache), GET /fear-greed (CNN Fear & Greed score with previous comparison).
+거시 지표 API (/api/macro). 최신 거시 데이터(/latest: SP500, VIX, 금리, RSI 등), Fear & Greed 지수(/fear-greed) 제공. 실시간 30분 거래량 비율 캐싱 포함.

@@ -1,7 +1,7 @@
 created: 2026-03-28T18:54:59.568Z
-updated: 2026-03-28T18:55:04.261Z
-update_count: 3
-last_field: constraint
+updated: 2026-03-28T19:16:19.357Z
+update_count: 5
+last_field: description
 children:
   - app
   - cboe
@@ -11,3 +11,30 @@ children:
   - shiller
   - supabase
   - yahoo
+prev_diagram: |
+  graph LR
+      app["FastAPI App\napi/app.py"]
+
+      yahoo["Yahoo Finance\nAPI v8 + yfinance"]
+      fred["FRED API\npandas_datareader"]
+      cnn["CNN Fear & Greed\nHTTPS JSON"]
+      cboe["CBOE Website\nHTML Scraping"]
+      shiller["Shiller CAPE\nExcel Download"]
+      supabase["Supabase\nPython SDK"]
+      railway["Railway\nDocker Deploy"]
+
+      app -->|"curl_cffi: prices, volumes"| yahoo
+      app -->|"pandas_datareader: macro series"| fred
+      app -->|"requests: sentiment score"| cnn
+      app -->|"requests: put/call ratio"| cboe
+      app -->|"openpyxl: CAPE P/E"| shiller
+      app -->|"supabase-py: CRUD"| supabase
+      app -->|"Dockerfile: build & deploy"| railway
+
+      classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
+      classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
+      classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
+
+      class yahoo,fred,cnn,cboe,shiller,railway external
+      class supabase store
+      class app entry
