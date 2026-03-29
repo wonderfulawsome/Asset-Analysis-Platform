@@ -163,6 +163,13 @@ def robots_txt():
         f'Sitemap: {SITE_URL}/sitemap.xml\n'
     )
 
+# TikTok 도메인 인증 파일
+@app.get('/tiktokPFHpLA0MzDof0SYGfC4gfqJEhsk65ZrR.txt')
+def tiktok_verify():
+    file_path = os.path.join('static', 'tiktokPFHpLA0MzDof0SYGfC4gfqJEhsk65ZrR.txt')
+    with open(file_path, 'r') as f:
+        return PlainTextResponse(f.read())
+
 # sitemap.xml: 검색엔진에 크롤링 대상 URL 제공
 @app.get('/sitemap.xml', response_class=PlainTextResponse)
 def sitemap_xml():
