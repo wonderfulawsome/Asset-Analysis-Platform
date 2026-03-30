@@ -62,18 +62,36 @@ def run_pipeline(light: bool = False) -> None:
         try:
             start_date = str(datetime.date.today() - datetime.timedelta(days=365 * 18 + 30))
 
-            # 3a: 데이터 수집
+            # 3a: 데이터 수집 (FRED 실패 시 캐시 fallback)
             shiller = fetch_shiller()
-            fred = fetch_fred_regime()
-            # Step 3에서 수집한 FRED 데이터를 캐시에 저장 (Step 7에서 재사용)
-            if 'hy_spread' in fred:
-                hy_df = fred['hy_spread'].copy()
-                hy_df.columns = ['HY_OAS']
-                fred_cache['HY_OAS'] = hy_df
-            if 'tips_rate' in fred:
-                tips_df = fred['tips_rate'].copy()
-                tips_df.columns = ['DFII10']
-                fred_cache['DFII10'] = tips_df
+            try:
+                fred = fetch_fred_regime()
+                # Step 3에서 수집한 FRED 데이터를 캐시에 저장 (Step 7에서 재사용)
+                if 'hy_spread' in fred:
+                    hy_df = fred['hy_spread'].copy()
+                    hy_df.columns = ['HY_OAS']
+                    fred_cache['HY_OAS'] = hy_df
+                if 'tips_rate' in fred:
+                    tips_df = fred['tips_rate'].copy()
+                    tips_df.columns = ['DFII10']
+                    fred_cache['DFII10'] = tips_df
+            except Exception as fred_err:
+                print(f'[Step 3] FRED API 실패, 캐시 fallback 시도: {fred_err}')
+                from collector.crash_surge_data import _load_fred_cache
+                cached = _load_fred_cache()
+                if cached:
+                    fred = {}
+                    if 'HY_OAS' in cached:
+                        hy = cached['HY_OAS']
+                        hy.columns = ['hy_spread']
+                        fred['hy_spread'] = hy
+                    if 'DFII10' in cached:
+                        tips = cached['DFII10']
+                        tips.columns = ['tips_rate']
+                        fred['tips_rate'] = tips
+                    print('[Step 3] FRED 캐시 fallback 성공')
+                else:
+                    raise RuntimeError('FRED API 실패 + 캐시 없음') from fred_err
             stock_prices = fetch_sector_stocks(start_date)
             amihud_data = fetch_amihud_stocks(start_date)
 
