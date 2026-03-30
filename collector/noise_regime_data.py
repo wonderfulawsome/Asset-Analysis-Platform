@@ -215,21 +215,27 @@ def fetch_fred_regime() -> dict:
     """FRED 2개(TIPS, HY) + Yahoo 2개(VIX, VIX3M) 수집 → dict[str, DataFrame] 반환."""
     result = {}                                          # 결과 딕셔너리
 
-    # ── FRED 시리즈 수집 (TIPS 실질금리, HY 스프레드) ──
+    # ── FRED 시리즈 수집 (TIPS 실질금리, HY 스프레드) — 개별 실패 허용 ──
     print('[NoiseHMM] FRED 데이터 수집 중...')
     for series_id, col_name in FRED_SERIES.items():      # DFII10, BAMLH0A0HYM2
-        df = _fetch_fred(series_id, col_name)            # CSV 다운로드
-        result[col_name] = df                            # 결과에 저장
-        monthly = df[col_name].resample('MS').last().dropna()  # 월별 집계
-        print(f'  {series_id} ({col_name}): {len(monthly)}개월')
+        try:
+            df = _fetch_fred(series_id, col_name, retries=2, timeout=(10, 30))
+            result[col_name] = df
+            monthly = df[col_name].resample('MS').last().dropna()
+            print(f'  {series_id} ({col_name}): {len(monthly)}개월')
+        except Exception as e:
+            print(f'  [{series_id}] FRED 수집 실패 (skip): {e}')
 
     # ── Yahoo Finance로 VIX/VIX3M 수집 (FRED 대체) ──
     print('[NoiseHMM] Yahoo Finance VIX/VIX3M 수집 중...')
     for ticker, col_name in YAHOO_VOL_TICKERS.items():   # ^VIX, ^VIX3M
-        df = _fetch_yahoo_daily(ticker)                  # Yahoo v8 API 호출
-        result[col_name] = df                            # 결과에 저장
-        monthly = df[col_name].resample('MS').last().dropna()  # 월별 집계
-        print(f'  {ticker} ({col_name}): {len(monthly)}개월')
+        try:
+            df = _fetch_yahoo_daily(ticker)
+            result[col_name] = df
+            monthly = df[col_name].resample('MS').last().dropna()
+            print(f'  {ticker} ({col_name}): {len(monthly)}개월')
+        except Exception as e:
+            print(f'  [{ticker}] Yahoo 수집 실패 (skip): {e}')
 
     return result
 
@@ -306,15 +312,19 @@ def compute_monthly_features(
     fundamental_gap = (shiller_c['log_P'].diff(12) - shiller_c['log_E'].diff(12)).dropna()
     fundamental_gap.name = 'fundamental_gap'
 
-    # ── ② erp_zscore ──
+    # ── ② erp_zscore ── (FRED tips_rate 없으면 NaN 시리즈)
     cape_series = shiller_c['CAPE'].dropna()
     real_ey = 1.0 / cape_series
-    tips_monthly = fred['tips_rate']['tips_rate'].resample('MS').last().dropna() / 100.0
-    erp_df = pd.DataFrame({'ey': real_ey, 'tips': tips_monthly}).dropna()
-    erp = erp_df['ey'] - erp_df['tips']
-    erp_rm = erp.rolling(120, min_periods=60).mean()
-    erp_rs = erp.rolling(120, min_periods=60).std()
-    erp_zscore = ((erp - erp_rm) / erp_rs).abs().dropna()
+    if 'tips_rate' in fred:
+        tips_monthly = fred['tips_rate']['tips_rate'].resample('MS').last().dropna() / 100.0
+        erp_df = pd.DataFrame({'ey': real_ey, 'tips': tips_monthly}).dropna()
+        erp = erp_df['ey'] - erp_df['tips']
+        erp_rm = erp.rolling(120, min_periods=60).mean()
+        erp_rs = erp.rolling(120, min_periods=60).std()
+        erp_zscore = ((erp - erp_rm) / erp_rs).abs().dropna()
+    else:
+        print('  [warn] tips_rate 없음 → erp_zscore를 0으로 채움')
+        erp_zscore = fundamental_gap * 0  # 같은 인덱스, 값 0
     erp_zscore.name = 'erp_zscore'
 
     # ── ③ residual_corr + dispersion ──
@@ -376,15 +386,23 @@ def compute_monthly_features(
     amihud_monthly = log_amihud_w.resample('MS').mean().dropna()
     amihud_monthly.name = 'amihud'
 
-    # ── ⑤ vix_term ──
-    vix_monthly = fred['vix']['vix'].resample('MS').last().dropna()
-    vix3m_monthly = fred['vix3m']['vix3m'].resample('MS').last().dropna()
-    vix_term_df = pd.DataFrame({'vix': vix_monthly, 'vix3m': vix3m_monthly}).dropna()
-    vix_term = (vix_term_df['vix'] / vix_term_df['vix3m']).dropna()
+    # ── ⑤ vix_term ── (VIX/VIX3M 없으면 1.0으로 채움)
+    if 'vix' in fred and 'vix3m' in fred:
+        vix_monthly = fred['vix']['vix'].resample('MS').last().dropna()
+        vix3m_monthly = fred['vix3m']['vix3m'].resample('MS').last().dropna()
+        vix_term_df = pd.DataFrame({'vix': vix_monthly, 'vix3m': vix3m_monthly}).dropna()
+        vix_term = (vix_term_df['vix'] / vix_term_df['vix3m']).dropna()
+    else:
+        print('  [warn] VIX/VIX3M 없음 → vix_term을 1.0으로 채움')
+        vix_term = amihud_monthly * 0 + 1.0
     vix_term.name = 'vix_term'
 
-    # ── ⑥ hy_spread ──
-    hy_spread = fred['hy_spread']['hy_spread'].resample('MS').last().dropna()
+    # ── ⑥ hy_spread ── (FRED HY 없으면 0으로 채움)
+    if 'hy_spread' in fred:
+        hy_spread = fred['hy_spread']['hy_spread'].resample('MS').last().dropna()
+    else:
+        print('  [warn] hy_spread 없음 → 0으로 채움')
+        hy_spread = amihud_monthly * 0
     hy_spread.name = 'hy_spread'
 
     # ── ⑦ realized_vol ──
@@ -483,13 +501,19 @@ def compute_daily_features(bundle: dict) -> np.ndarray:
     log_ami = np.log(amihud_recent.mean() + 1e-15)
     ami_val = float(np.clip(log_ami, amihud_q01, amihud_q99))
 
-    # ⑤ vix_term: 최신 일별
-    latest_vix = float(fred_raw['vix']['vix'].dropna().iloc[-1])
-    latest_vix3m = float(fred_raw['vix3m']['vix3m'].dropna().iloc[-1])
-    vt_val = latest_vix / latest_vix3m
+    # ⑤ vix_term: 최신 일별 (없으면 월별 마지막 값 사용)
+    if 'vix' in fred_raw and 'vix3m' in fred_raw:
+        latest_vix = float(fred_raw['vix']['vix'].dropna().iloc[-1])
+        latest_vix3m = float(fred_raw['vix3m']['vix3m'].dropna().iloc[-1])
+        vt_val = latest_vix / latest_vix3m
+    else:
+        vt_val = float(features['vix_term'].iloc[-1])
 
-    # ⑥ hy_spread: 최신 일별
-    hy_val = float(fred_raw['hy_spread']['hy_spread'].dropna().iloc[-1])
+    # ⑥ hy_spread: 최신 일별 (없으면 월별 마지막 값 사용)
+    if 'hy_spread' in fred_raw:
+        hy_val = float(fred_raw['hy_spread']['hy_spread'].dropna().iloc[-1])
+    else:
+        hy_val = float(features['hy_spread'].iloc[-1])
 
     # ⑦ realized_vol: 최근 20일 SPY
     spy_ret_recent = spy_ret.iloc[-20:]
