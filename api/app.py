@@ -27,7 +27,14 @@ async def lifespan(_app: FastAPI):
         scheduler.add_job(run_pipeline, 'interval', minutes=10, id='light_pipeline', kwargs={'light': True})
         # 전체 파이프라인: 3시간마다 실행 (100년치 수집 + HMM/XGBoost 모델 학습)
         scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')
-        # init_pipeline 제거 — 배포마다 full pipeline 실행 방지 (비용 절감)
+        # 모델 파일이 없을 때만 시작 60초 후 1회 full pipeline 실행
+        models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+        hmm_exists = os.path.exists(os.path.join(models_dir, 'noise_hmm.pkl'))
+        cs_exists = os.path.exists(os.path.join(models_dir, 'crash_surge_xgb.pkl'))
+        if not hmm_exists or not cs_exists:
+            from datetime import datetime, timedelta
+            scheduler.add_job(run_pipeline, 'date', run_date=datetime.now() + timedelta(seconds=60), id='init_once')
+            print('[App] 모델 없음 — 60초 후 초기 full pipeline 1회 실행')
         scheduler.start()
         print('[App] 스케줄러 활성화 (RUN_SCHEDULER=true)')
     else:
