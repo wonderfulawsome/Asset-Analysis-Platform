@@ -576,7 +576,7 @@ def fetch_user_stats(date: str, year_month: str) -> dict:
     # 전체 고유 사용자 (distinct user_hash)
     all_users_resp = (
         client.table("user_visit")
-        .select("user_hash")
+        .select("user_hash, visit_date")
         .execute()
     )
     all_hashes = set(r["user_hash"] for r in all_users_resp.data)
