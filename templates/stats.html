@@ -197,12 +197,16 @@
     .kpi-panel { margin-bottom: 14px; }
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 1px;
       background: var(--border);
     }
     @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
-    @media (max-width: 640px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) {
+      .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+      .kpi-cell { padding: 18px 14px; }
+      .kpi-val { font-size: 28px !important; }
+    }
 
     .kpi-cell {
       background: var(--surface);
@@ -304,6 +308,13 @@
       transform: rotate(-90deg);
     }
     @media (min-width: 1200px) { .donut-svg { width: 200px; height: 200px; } }
+    @media (max-width: 640px) {
+      .donut-svg { width: 130px; height: 130px; }
+      .donut-center-val { font-size: 22px; }
+      .donut-legend { gap: 14px; }
+      .donut-legend-item { font-size: 12px; }
+      .legend-pct { font-size: 13px; }
+    }
     .donut-track {
       fill: none;
       stroke: rgba(255,255,255,0.04);
@@ -477,6 +488,19 @@
     .fn-key span { color: var(--orange); font-weight: 700; }
     @media (max-width: 640px) { .fn-bar { display: none; } }
 
+    /* ═══ MOBILE CUMUL ═══ */
+    @media (max-width: 640px) {
+      .cumul-kpi { gap: 16px !important; }
+      .cumul-kpi .kpi-val { font-size: 24px !important; }
+      #cumul-chart { height: 120px !important; }
+      .topbar { padding: 0 12px; height: 40px; }
+      .topbar-tag { font-size: 10px; padding: 3px 8px; }
+      .topbar-sub { display: none; }
+      .cmd-bar { margin-bottom: 10px; }
+      .cmd-date { font-size: 12px; }
+      .panel-body { padding: 14px; }
+    }
+
     /* ═══ LOADING ═══ */
     .loading-wrap {
       text-align: center;
@@ -547,7 +571,7 @@
           <span class="panel-label">핵심 지표</span>
           <span class="panel-tag">KEY METRICS</span>
         </div>
-        <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+        <div class="kpi-grid">
           <div class="kpi-cell">
             <div class="kpi-label">전체 사용자</div>
             <div><span class="kpi-val c-orange" id="total-users" style="text-shadow: 0 0 24px rgba(255,140,0,0.35);">0</span><span class="kpi-unit">명</span></div>
@@ -628,7 +652,7 @@
             <span class="panel-tag">CUMULATIVE</span>
           </div>
           <div class="panel-body">
-            <div style="display:flex; gap:24px; margin-bottom:20px; flex-wrap:wrap;">
+            <div class="cumul-kpi" style="display:flex; gap:24px; margin-bottom:20px; flex-wrap:wrap;">
               <div>
                 <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">전체 방문</div>
                 <div style="display:flex; align-items:baseline; gap:4px;">
