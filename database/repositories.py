@@ -573,47 +573,46 @@ def fetch_user_stats(date: str, year_month: str) -> dict:
     mau = len(unique_hashes)
 
     # ── 누적 통계 ──
-    # 전체 고유 사용자 (is_new=True인 레코드 = 최초 방문 기록)
-    total_resp = (
+    # 전체 고유 사용자 (distinct user_hash)
+    all_users_resp = (
         client.table("user_visit")
         .select("user_hash")
-        .eq("is_new", True)
         .execute()
     )
-    total_users = len(total_resp.data)
+    all_hashes = set(r["user_hash"] for r in all_users_resp.data)
+    total_users = len(all_hashes)
+    total_visits = len(all_users_resp.data)
 
-    # 전체 방문 수
-    all_resp = (
-        client.table("user_visit")
-        .select("id", count="exact")
-        .execute()
-    )
-    total_visits = all_resp.count if all_resp.count is not None else len(all_resp.data)
-
-    # 최근 30일 일별 누적 신규 사용자 추이
+    # 전체 기간 일별 신규 사용자 추이 (누적 그래프용)
+    # 각 user_hash의 최초 방문일 계산
     from datetime import datetime, timedelta
-    end_dt = datetime.strptime(date, "%Y-%m-%d")
-    start_30 = (end_dt - timedelta(days=29)).strftime("%Y-%m-%d")
-    cumul_resp = (
-        client.table("user_visit")
-        .select("visit_date, user_hash")
-        .eq("is_new", True)
-        .gte("visit_date", start_30)
-        .lte("visit_date", date)
-        .order("visit_date")
-        .execute()
-    )
-    # 날짜별 신규 사용자 수 집계
+    first_visit = {}
+    for r in all_users_resp.data:
+        h, d = r["user_hash"], r.get("visit_date", "")
+        if d and (h not in first_visit or d < first_visit[h]):
+            first_visit[h] = d
+
+    # 날짜별 신규 유입 수 집계
     daily_new = {}
-    for r in cumul_resp.data:
-        d = r["visit_date"]
+    for d in first_visit.values():
         daily_new[d] = daily_new.get(d, 0) + 1
-    cumulative_chart = []
-    running = total_users - sum(daily_new.values())  # 30일 이전 누적
-    for i in range(30):
-        dt = (end_dt - timedelta(days=29 - i)).strftime("%Y-%m-%d")
-        running += daily_new.get(dt, 0)
-        cumulative_chart.append({"date": dt, "total": running})
+
+    # 전체 기간 누적 차트 생성
+    if daily_new:
+        sorted_dates = sorted(daily_new.keys())
+        first_date = sorted_dates[0]
+        end_dt = datetime.strptime(date, "%Y-%m-%d")
+        start_dt = datetime.strptime(first_date, "%Y-%m-%d")
+        cumulative_chart = []
+        running = 0
+        dt = start_dt
+        while dt <= end_dt:
+            ds = dt.strftime("%Y-%m-%d")
+            running += daily_new.get(ds, 0)
+            cumulative_chart.append({"date": ds, "total": running})
+            dt += timedelta(days=1)
+    else:
+        cumulative_chart = []
 
     return {
         "date": date,
