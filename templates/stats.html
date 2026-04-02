@@ -201,6 +201,7 @@
       gap: 1px;
       background: var(--border);
     }
+    @media (max-width: 900px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
     @media (max-width: 640px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } }
 
     .kpi-cell {
@@ -237,14 +238,17 @@
     .kpi-cell:nth-child(2)::before { background: var(--blue); }
     .kpi-cell:nth-child(3)::before { background: var(--green); }
     .kpi-cell:nth-child(4)::before { background: var(--yellow); }
+    .kpi-cell:nth-child(5)::before { background: #a78bfa; }
     .kpi-cell:nth-child(1):hover::before { box-shadow: 0 0 20px rgba(255,140,0,0.5); }
     .kpi-cell:nth-child(2):hover::before { box-shadow: 0 0 20px rgba(68,138,255,0.5); }
     .kpi-cell:nth-child(3):hover::before { box-shadow: 0 0 20px rgba(0,210,106,0.5); }
     .kpi-cell:nth-child(4):hover::before { box-shadow: 0 0 20px rgba(255,214,0,0.5); }
+    .kpi-cell:nth-child(5):hover::before { box-shadow: 0 0 20px rgba(167,139,250,0.5); }
     .kpi-cell:nth-child(1)::after { background: radial-gradient(ellipse, rgba(255,140,0,0.08), transparent); }
     .kpi-cell:nth-child(2)::after { background: radial-gradient(ellipse, rgba(68,138,255,0.08), transparent); }
     .kpi-cell:nth-child(3)::after { background: radial-gradient(ellipse, rgba(0,210,106,0.08), transparent); }
     .kpi-cell:nth-child(4)::after { background: radial-gradient(ellipse, rgba(255,214,0,0.08), transparent); }
+    .kpi-cell:nth-child(5)::after { background: radial-gradient(ellipse, rgba(167,139,250,0.08), transparent); }
 
     .kpi-label {
       font-size: 11px;
@@ -543,22 +547,26 @@
           <span class="panel-label">핵심 지표</span>
           <span class="panel-tag">KEY METRICS</span>
         </div>
-        <div class="kpi-grid">
+        <div class="kpi-grid" style="grid-template-columns: repeat(5, 1fr);">
+          <div class="kpi-cell">
+            <div class="kpi-label">전체 사용자</div>
+            <div><span class="kpi-val c-orange" id="total-users" style="text-shadow: 0 0 24px rgba(255,140,0,0.35);">0</span><span class="kpi-unit">명</span></div>
+          </div>
           <div class="kpi-cell">
             <div class="kpi-label">DAU (오늘)</div>
-            <div><span class="kpi-val c-orange" id="dau">0</span><span class="kpi-unit">명</span></div>
+            <div><span class="kpi-val c-blue" id="dau">0</span><span class="kpi-unit">명</span></div>
           </div>
           <div class="kpi-cell">
             <div class="kpi-label">MAU (월간)</div>
-            <div><span class="kpi-val c-blue" id="mau">0</span><span class="kpi-unit">명</span></div>
+            <div><span class="kpi-val c-green" id="mau">0</span><span class="kpi-unit">명</span></div>
           </div>
           <div class="kpi-cell">
             <div class="kpi-label">신규 사용자</div>
-            <div><span class="kpi-val c-green" id="new-users">0</span><span class="kpi-unit">명</span></div>
+            <div><span class="kpi-val c-yellow" id="new-users">0</span><span class="kpi-unit">명</span></div>
           </div>
           <div class="kpi-cell">
             <div class="kpi-label">재방문 사용자</div>
-            <div><span class="kpi-val c-yellow" id="returning-users">0</span><span class="kpi-unit">명</span></div>
+            <div><span class="kpi-val" id="returning-users" style="color:#a78bfa; text-shadow: 0 0 24px rgba(167,139,250,0.25);">0</span><span class="kpi-unit">명</span></div>
           </div>
         </div>
       </div>
@@ -621,13 +629,6 @@
           </div>
           <div class="panel-body">
             <div style="display:flex; gap:24px; margin-bottom:20px; flex-wrap:wrap;">
-              <div>
-                <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">전체 사용자</div>
-                <div style="display:flex; align-items:baseline; gap:4px;">
-                  <span class="kpi-val c-orange" id="total-users" style="font-size:32px;">0</span>
-                  <span class="kpi-unit">명</span>
-                </div>
-              </div>
               <div>
                 <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">전체 방문</div>
                 <div style="display:flex; align-items:baseline; gap:4px;">
