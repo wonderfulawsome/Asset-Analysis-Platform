@@ -572,6 +572,49 @@ def fetch_user_stats(date: str, year_month: str) -> dict:
     unique_hashes = set(r["user_hash"] for r in mau_resp.data)
     mau = len(unique_hashes)
 
+    # ── 누적 통계 ──
+    # 전체 고유 사용자 (is_new=True인 레코드 = 최초 방문 기록)
+    total_resp = (
+        client.table("user_visit")
+        .select("user_hash")
+        .eq("is_new", True)
+        .execute()
+    )
+    total_users = len(total_resp.data)
+
+    # 전체 방문 수
+    all_resp = (
+        client.table("user_visit")
+        .select("id", count="exact")
+        .execute()
+    )
+    total_visits = all_resp.count if all_resp.count is not None else len(all_resp.data)
+
+    # 최근 30일 일별 누적 신규 사용자 추이
+    from datetime import datetime, timedelta
+    end_dt = datetime.strptime(date, "%Y-%m-%d")
+    start_30 = (end_dt - timedelta(days=29)).strftime("%Y-%m-%d")
+    cumul_resp = (
+        client.table("user_visit")
+        .select("visit_date, user_hash")
+        .eq("is_new", True)
+        .gte("visit_date", start_30)
+        .lte("visit_date", date)
+        .order("visit_date")
+        .execute()
+    )
+    # 날짜별 신규 사용자 수 집계
+    daily_new = {}
+    for r in cumul_resp.data:
+        d = r["visit_date"]
+        daily_new[d] = daily_new.get(d, 0) + 1
+    cumulative_chart = []
+    running = total_users - sum(daily_new.values())  # 30일 이전 누적
+    for i in range(30):
+        dt = (end_dt - timedelta(days=29 - i)).strftime("%Y-%m-%d")
+        running += daily_new.get(dt, 0)
+        cumulative_chart.append({"date": dt, "total": running})
+
     return {
         "date": date,
         "year_month": year_month,
@@ -579,6 +622,9 @@ def fetch_user_stats(date: str, year_month: str) -> dict:
         "mau": mau,
         "new_users": new_users,
         "returning_users": dau - new_users,
+        "total_users": total_users,
+        "total_visits": total_visits,
+        "cumulative_chart": cumulative_chart,
     }
 
 

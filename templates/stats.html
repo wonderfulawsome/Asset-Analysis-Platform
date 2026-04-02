@@ -612,6 +612,43 @@
 
       </div>
 
+      <!-- 누적 통계 -->
+      <div class="grid-row" style="grid-template-columns: 1fr;">
+        <div class="panel reveal d4">
+          <div class="panel-head">
+            <span class="panel-label">누적 사용자</span>
+            <span class="panel-tag">CUMULATIVE</span>
+          </div>
+          <div class="panel-body">
+            <div style="display:flex; gap:24px; margin-bottom:20px; flex-wrap:wrap;">
+              <div>
+                <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">전체 사용자</div>
+                <div style="display:flex; align-items:baseline; gap:4px;">
+                  <span class="kpi-val c-orange" id="total-users" style="font-size:32px;">0</span>
+                  <span class="kpi-unit">명</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">전체 방문</div>
+                <div style="display:flex; align-items:baseline; gap:4px;">
+                  <span class="kpi-val c-blue" id="total-visits" style="font-size:32px;">0</span>
+                  <span class="kpi-unit">회</span>
+                </div>
+              </div>
+              <div>
+                <div style="font-size:11px; color:var(--dim); margin-bottom:6px;">인당 평균 방문</div>
+                <div style="display:flex; align-items:baseline; gap:4px;">
+                  <span class="kpi-val c-green" id="avg-visits" style="font-size:32px;">0</span>
+                  <span class="kpi-unit">회</span>
+                </div>
+              </div>
+            </div>
+            <div style="font-size:11px; color:var(--dim); margin-bottom:8px; font-family:var(--mono); letter-spacing:0.5px;">최근 30일 누적 사용자 추이</div>
+            <canvas id="cumul-chart" style="width:100%; height:160px;"></canvas>
+          </div>
+        </div>
+      </div>
+
       <!-- Status -->
       <div class="status-bar reveal d4">
         <div class="status-item">
@@ -685,6 +722,16 @@
         animateNum('mau', data.mau ?? 0);
         animateNum('new-users', data.new_users ?? 0);
         animateNum('returning-users', data.returning_users ?? 0);
+
+        /* 누적 통계 */
+        const tu = data.total_users ?? 0, tv = data.total_visits ?? 0;
+        animateNum('total-users', tu);
+        animateNum('total-visits', tv);
+        const avgEl = document.getElementById('avg-visits');
+        avgEl.textContent = tu > 0 ? (tv / tu).toFixed(1) : '0';
+
+        /* 누적 차트 */
+        if (data.cumulative_chart) drawCumulChart(data.cumulative_chart);
 
         /* Donut */
         const nw = data.new_users || 0, rt = data.returning_users || 0;
@@ -781,6 +828,90 @@
           }, 200 + i * 90);
         });
       });
+    }
+
+    /* ── Cumulative Chart (Canvas) ── */
+    function drawCumulChart(chartData) {
+      const canvas = document.getElementById('cumul-chart');
+      if (!canvas) return;
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      const W = rect.width, H = rect.height;
+
+      const vals = chartData.map(d => d.total);
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const range = max - min || 1;
+      const padT = 20, padB = 28, padL = 44, padR = 12;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+
+      const x = i => padL + (i / (vals.length - 1)) * plotW;
+      const y = v => padT + (1 - (v - min) / range) * plotH;
+
+      // 배경 격자
+      ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const yy = padT + (i / 4) * plotH;
+        ctx.beginPath(); ctx.moveTo(padL, yy); ctx.lineTo(W - padR, yy); ctx.stroke();
+      }
+
+      // Y축 라벨
+      ctx.fillStyle = '#4a4a58';
+      ctx.font = '10px SF Mono, Consolas, monospace';
+      ctx.textAlign = 'right';
+      for (let i = 0; i <= 4; i++) {
+        const v = min + ((4 - i) / 4) * range;
+        ctx.fillText(Math.round(v), padL - 6, padT + (i / 4) * plotH + 3);
+      }
+
+      // 그라데이션 영역
+      const grad = ctx.createLinearGradient(0, padT, 0, H - padB);
+      grad.addColorStop(0, 'rgba(255,140,0,0.18)');
+      grad.addColorStop(1, 'rgba(255,140,0,0)');
+      ctx.beginPath();
+      ctx.moveTo(x(0), H - padB);
+      vals.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+      ctx.lineTo(x(vals.length - 1), H - padB);
+      ctx.closePath();
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // 선
+      ctx.beginPath();
+      vals.forEach((v, i) => { i === 0 ? ctx.moveTo(x(0), y(v)) : ctx.lineTo(x(i), y(v)); });
+      ctx.strokeStyle = '#ff8c00';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // 마지막 점
+      const last = vals.length - 1;
+      ctx.beginPath();
+      ctx.arc(x(last), y(vals[last]), 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff8c00';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(x(last), y(vals[last]), 7, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(255,140,0,0.3)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // X축 날짜 (5개만)
+      ctx.fillStyle = '#4a4a58';
+      ctx.font = '10px SF Mono, Consolas, monospace';
+      ctx.textAlign = 'center';
+      const step = Math.floor(vals.length / 5);
+      for (let i = 0; i < vals.length; i += step || 1) {
+        const lbl = chartData[i].date.slice(5); // MM-DD
+        ctx.fillText(lbl, x(i), H - padB + 14);
+      }
+      // 마지막 날짜
+      ctx.fillStyle = '#ff8c00';
+      ctx.fillText(chartData[last].date.slice(5), x(last), H - padB + 14);
     }
 
     /* ── Navigation ── */
