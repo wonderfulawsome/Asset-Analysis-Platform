@@ -294,6 +294,192 @@ function showHoldingsSetup() {
 // 설정 아이콘 클릭
 document.getElementById('btn-edit-holdings').addEventListener('click', showHoldingsSetup);
 
+// ── AI 시장 요약 + 탭 해설 ──
+let _aiSummaryLoaded = false;
+
+const _aiIconSet = [
+  { keys: ['심리','공포','탐욕','fear','greed'], icon: '◈', bg: 'rgba(68,138,255,0.12)', color: '#448aff' },
+  { keys: ['방향','상승','하락','direction'],    icon: '▲', bg: 'rgba(0,210,106,0.12)', color: '#00d26a' },
+  { keys: ['펀더멘털','noise','괴리','반영'],     icon: '◎', bg: 'rgba(255,140,0,0.12)', color: '#ff8c00' },
+  { keys: ['종합','판단','결론','핵심'],          icon: '★', bg: 'rgba(139,92,246,0.12)', color: '#8b5cf6' },
+];
+
+function _cleanEmoji(str) {
+  let s = str
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]/gu, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  // 제목 키워드가 내용과 붙어있으면 강제로 " — " 삽입
+  const titles = ['시장 심리', '방향성', '펀더멘털', '종합판단', '종합 판단'];
+  for (const t of titles) {
+    const idx = s.indexOf(t);
+    if (idx !== -1) {
+      const after = idx + t.length;
+      // 이미 — 가 있으면 skip
+      if (s.slice(after, after + 3).trim().startsWith('—')) continue;
+      const rest = s.slice(after).trim();
+      if (rest) { s = t + ' — ' + rest; break; }
+    }
+  }
+  return s;
+}
+
+function _matchIcon(text, idx) {
+  const lower = text.toLowerCase();
+  for (const item of _aiIconSet) {
+    if (item.keys.some(k => lower.includes(k))) return item;
+  }
+  return _aiIconSet[Math.min(idx, _aiIconSet.length - 1)];
+}
+
+function _buildLineHtml(clean, icon, textContent) {
+  const content = textContent || clean;
+  const badge = `<span class="ai-badge" style="background:${icon.bg};color:${icon.color};">${icon.icon}</span>`;
+  // 1차: "제목 — 내용" 분리
+  let sep = content.match(/^(.+?)\s*[—]\s*(.+)$/);
+  // 2차: 키워드 기반 강제 분리 (LLM이 구분자를 안 넣었을 때)
+  if (!sep) {
+    const titleKeys = ['시장 심리','방향성','펀더멘털','종합판단','종합 판단'];
+    for (const tk of titleKeys) {
+      const idx = content.indexOf(tk);
+      if (idx !== -1) {
+        const afterTitle = idx + tk.length;
+        const rest = content.slice(afterTitle).trim();
+        if (rest) { sep = [null, tk, rest]; break; }
+      }
+    }
+  }
+  if (sep) {
+    return `<div class="ai-line">${badge}<div class="ai-line-content"><strong style="color:var(--text-hi);">${sep[1].trim()}</strong> ${sep[2].trim()}</div></div>`;
+  }
+  return `<div class="ai-line">${badge}<div class="ai-line-content">${content}</div></div>`;
+}
+
+function _formatAiText(raw) {
+  const lines = raw.split('\n').filter(l => l.trim());
+  return lines.map((line, i) => {
+    const clean = _cleanEmoji(line);
+    if (!clean) return '';
+    return _buildLineHtml(clean, _matchIcon(clean, i));
+  }).join('');
+}
+
+async function loadAiSummary() {
+  const el = document.getElementById('ai-summary-text');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/market-summary/ai-summary');
+    const d = await res.json();
+    if (d.error) {
+      el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${d.summary || t('ai.unavailable')}</div>`;
+      return;
+    }
+    const raw = d.summary || '';
+    const formatted = _formatAiText(raw);
+    const timestamp = d.generated_at
+      ? `<div style="font-size:10px;color:var(--sub);margin-top:8px;font-family:var(--mono);">${d.generated_at} KST${d.cached ? ' · cached' : ''}</div>`
+      : '';
+
+    if (!_aiSummaryLoaded) {
+      _aiSummaryLoaded = true;
+      el.innerHTML = '';
+
+      // 줄별 데이터 준비
+      const lines = raw.split('\n').filter(l => l.trim());
+      const lineData = lines.map((line, i) => {
+        const clean = _cleanEmoji(line);
+        const icon = _matchIcon(clean, i);
+        return { clean, icon };
+      }).filter(d => d.clean);
+
+      let lineIdx = 0;
+      function nextLine() {
+        if (lineIdx >= lineData.length) {
+          el.insertAdjacentHTML('beforeend', timestamp);
+          return;
+        }
+        const { clean, icon } = lineData[lineIdx];
+        // 제목/내용 분리 (1차: — 구분자, 2차: 키워드 fallback)
+        let sep = clean.match(/^(.+?)\s*[—]\s*(.+)$/);
+        if (!sep) {
+          const titleKeys = ['시장 심리','방향성','펀더멘털','종합판단','종합 판단'];
+          for (const tk of titleKeys) {
+            const idx = clean.indexOf(tk);
+            if (idx !== -1 && clean.slice(idx + tk.length).trim()) {
+              sep = [null, tk, clean.slice(idx + tk.length).trim()];
+              break;
+            }
+          }
+        }
+        const title = sep ? sep[1].trim() : '';
+        const body = sep ? sep[2].trim() : clean;
+        const badge = `<span class="ai-badge" style="background:${icon.bg};color:${icon.color};">${icon.icon}</span>`;
+
+        // 줄 컨테이너 생성
+        const lineDiv = document.createElement('div');
+        lineDiv.className = 'ai-line';
+        lineDiv.innerHTML = badge + `<div class="ai-line-content">` + (title ? `<strong style="color:var(--text-hi);">${title}</strong> <span class="ai-line-text"></span>` : `<span class="ai-line-text"></span>`) + `</div>`;
+        el.appendChild(lineDiv);
+
+        const textSpan = lineDiv.querySelector('.ai-line-text');
+        const chars = [...body]; // 유니코드 안전 분리
+        let ci = 0;
+        function typeChar() {
+          if (ci < chars.length) {
+            ci += 2;
+            if (ci > chars.length) ci = chars.length;
+            textSpan.textContent = chars.slice(0, ci).join('');
+            setTimeout(typeChar, 10);
+          } else {
+            lineIdx++;
+            setTimeout(nextLine, 150);
+          }
+        }
+        typeChar();
+      }
+      nextLine();
+    } else {
+      el.innerHTML = formatted + timestamp;
+    }
+  } catch (e) {
+    console.error('AI summary error:', e);
+    el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${t('ai.unavailable')}</div>`;
+  }
+}
+
+// ── 각 탭 AI 해설 (타이핑 없음, 일반 문단) ──
+function _formatExplainText(raw) {
+  let text = raw
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  // 기존 줄바꿈 유지
+  text = text.replace(/\n/g, '<br>');
+  // 줄바꿈이 없는 경우: 문장 끝(다. 요. 됩니다. 등) 뒤에 줄바꿈 삽입
+  if (!text.includes('<br>')) {
+    text = text.replace(/(다\.)\s*/g, '$1<br>');
+  }
+  return text;
+}
+
+async function loadAiExplain(tab) {
+  const el = document.getElementById(`ai-explain-${tab}-text`);
+  if (!el) return;
+  try {
+    const res = await fetch(`/api/market-summary/ai-explain?tab=${tab}`);
+    const d = await res.json();
+    if (d.error) {
+      el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${d.explanation || 'AI 해설을 불러올 수 없습니다.'}</div>`;
+      return;
+    }
+    el.innerHTML = _formatExplainText(d.explanation || '');
+  } catch (e) {
+    console.error(`AI explain ${tab} error:`, e);
+    el.innerHTML = '<div style="color:var(--sub);font-size:13px;">AI 해설을 불러올 수 없습니다.</div>';
+  }
+}
+
 // ── Portfolio Summary Card (gradient) ──
 async function loadMarketOverview() {
   // Market Overview 카드 엘리먼트 가져오기
@@ -723,22 +909,31 @@ function switchTab(idx, addHistory) {
     window._chartLoaded = true;
     initChartTab();
   }
-  // 시장 탭 진입 시 noise 차트 재렌더 (숨김→표시 전환 시 너비 0 문제 대비)
+  // 시장 탭 진입 시 AI 요약 로드
   if (idx === 1) {
-    setTimeout(() => { if (typeof loadNoiseChart === 'function') loadNoiseChart(); }, 100);
+    if (typeof loadAiSummary === 'function') loadAiSummary();
   }
-  // 신호 탭 진입 시 차트 로드 (숨김→표시 전환 후 렌더)
+  // 펀더멘털 탭 진입 시 noise 차트 재렌더 + AI 해설
   if (idx === 2) {
+    setTimeout(() => { if (typeof loadNoiseChart === 'function') loadNoiseChart(); }, 100);
+    loadAiExplain('fundamental');
+  }
+  // 신호 탭 진입 시 차트 로드 + AI 해설
+  if (idx === 3) {
     if (!window._signalLoaded) {
       window._signalLoaded = true;
       loadCrashSurge();
     }
     setTimeout(() => loadCrashSurgeChart(), 100);
+    loadAiExplain('signal');
   }
-  // 거시경제 탭 최초 진입 시 데이터 로드 (idx=3)
-  if (idx === 3 && typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
-    window._sectorLoaded = true;
-    loadSectorCycle();
+  // 거시경제 탭 최초 진입 시 데이터 로드 + AI 해설
+  if (idx === 4) {
+    if (typeof loadSectorCycle === 'function' && !window._sectorLoaded) {
+      window._sectorLoaded = true;
+      loadSectorCycle();
+    }
+    loadAiExplain('sector');
   }
   // 히스토리에 상태 추가 (뒤로가기 지원)
   if (addHistory && idx !== _currentTabIdx) {
@@ -748,7 +943,7 @@ function switchTab(idx, addHistory) {
 }
 
 // ── 탭 전환 ──
-const TAB_IDS = ['tab-chart', 'tab-market', 'tab-signal', 'tab-sector'];
+const TAB_IDS = ['tab-chart', 'tab-market', 'tab-fundamental', 'tab-signal', 'tab-sector'];
 const tabs = document.querySelectorAll('.tab');
 tabs.forEach(tab => {
   tab.addEventListener('click', () => {
@@ -1559,19 +1754,29 @@ function renderCrashSurgeDetail(body) {
   if (!_csData) { body.innerHTML = `<p style="color:var(--sub)">${t('detail.noData')}</p>`; return; }
   const d = _csData;
 
-  // 요약
-  const crashS = CS_GRADE_STYLE[d.crash_grade] || CS_GRADE_STYLE['보통'];
-  const surgeS = SURGE_GRADE_STYLE[d.surge_grade] || SURGE_GRADE_STYLE['보통'];
+  // 요약 — 본 페이지와 동일한 점수 기반 라벨 사용
+  const crashLabel = d.crash_score < 40 ? '낮음' : d.crash_score < 60 ? '보통' : '높음';
+  const crashS = d.crash_score < 40
+    ? { cls: 'badge-green', color: '#10B981' }
+    : d.crash_score < 60
+    ? { cls: 'badge-yellow', color: '#F59E0B' }
+    : { cls: 'badge-red', color: '#EF4444' };
+  const surgeLabel = d.surge_score < 40 ? '낮음' : d.surge_score < 60 ? '보통' : '높음';
+  const surgeS = d.surge_score < 40
+    ? { cls: 'badge-red', color: '#EF4444' }
+    : d.surge_score < 60
+    ? { cls: 'badge-yellow', color: '#F59E0B' }
+    : { cls: 'badge-green', color: '#22C55E' };
   body.innerHTML = `<div style="display:flex;gap:16px;margin-bottom:8px">
     <div style="flex:1;text-align:center">
       <div style="font-size:12px;color:var(--sub);font-weight:600">${t('cs.crashRisk')}</div>
       <div style="font-size:28px;font-weight:800;color:${crashS.color}">${d.crash_score.toFixed(1)}</div>
-      <span class="badge ${crashS.cls}">${tGrade(d.crash_grade)}</span>
+      <span class="badge ${crashS.cls}">${crashLabel}</span>
     </div>
     <div style="flex:1;text-align:center">
       <div style="font-size:12px;color:var(--sub);font-weight:600">${t('cs.surgeExpect')}</div>
       <div style="font-size:28px;font-weight:800;color:${surgeS.color}">${d.surge_score.toFixed(1)}</div>
-      <span class="badge ${surgeS.cls}">${tGrade(d.surge_grade)}</span>
+      <span class="badge ${surgeS.cls}">${surgeLabel}</span>
     </div>
   </div>
   <div style="margin:12px 0 16px;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(255,140,0,0.08),rgba(255,140,0,0.02));border:1px solid rgba(255,140,0,0.15)">
@@ -1672,18 +1877,25 @@ async function refreshCurrentTab() {
   } else if (idx === 1) {
     // 시장 탭
     await Promise.allSettled([
-      loadRegime(), loadMacro(), loadFeed(),
-      loadMarketOverview(), loadNoiseChart(),
-      loadHoldingsSummary()
+      loadAiSummary(), loadMacro(), loadFeed(),
+      loadMarketOverview(), loadHoldingsSummary()
     ]);
   } else if (idx === 2) {
-    // 신호 탭
+    // 펀더멘털 탭
     await Promise.allSettled([
-      loadCrashSurge(), loadCrashSurgeChart()
+      loadRegime(), loadNoiseChart(), loadAiExplain('fundamental')
     ]);
   } else if (idx === 3) {
+    // 신호 탭
+    await Promise.allSettled([
+      loadCrashSurge(), loadCrashSurgeChart(), loadAiExplain('signal')
+    ]);
+  } else if (idx === 4) {
     // 거시경제 탭
-    if (typeof loadSectorCycle === 'function') await loadSectorCycle();
+    await Promise.allSettled([
+      typeof loadSectorCycle === 'function' ? loadSectorCycle() : Promise.resolve(),
+      loadAiExplain('sector')
+    ]);
   }
 }
 

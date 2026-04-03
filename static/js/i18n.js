@@ -11,9 +11,12 @@ const I18N = {
   ko: {
     // ── 탭 ──
     'tab.market': '시장',                         // 시장 탭
+    'tab.fundamental': '펀더멘털',               // 펀더멘털 탭
     'tab.signal': '신호',                         // 신호 탭
     'tab.macro': '거시경제',                      // 거시경제 탭
     'tab.chart': 'AI차트',                        // 차트 탭
+    'ai.cardLabel': '오늘의 시장',               // AI 요약 카드 라벨
+    'ai.unavailable': 'AI 요약을 불러올 수 없습니다.',
 
     // ── 헤더 / 날짜 ──
     'lang.btn': 'EN',                             // 언어 전환 버튼 텍스트
@@ -398,8 +401,11 @@ const I18N = {
   en: {
     // ── Tabs ──
     'tab.market': 'Market',
+    'tab.fundamental': 'Fundamentals',
     'tab.signal': 'Signal',
     'tab.macro': 'Macro',
+    'ai.cardLabel': "Today's Market",
+    'ai.unavailable': 'AI summary unavailable.',
     'tab.chart': 'AI Chart',
 
     // ── Header / Date ──

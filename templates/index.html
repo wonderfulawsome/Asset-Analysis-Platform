@@ -131,8 +131,9 @@
   <div class="tab-bar">
     <button class="tab active" data-idx="0" data-i18n="tab.chart">AI차트</button>
     <button class="tab" data-idx="1" data-i18n="tab.market">시장</button>
-    <button class="tab" data-idx="2" data-i18n="tab.signal">신호</button>
-    <button class="tab" data-idx="3" data-i18n="tab.macro">거시경제</button>
+    <button class="tab" data-idx="2" data-i18n="tab.fundamental">펀더멘털</button>
+    <button class="tab" data-idx="3" data-i18n="tab.signal">신호</button>
+    <button class="tab" data-idx="4" data-i18n="tab.macro">거시경제</button>
   </div>
 
   <!-- Ticker Feed -->
@@ -146,23 +147,19 @@
     <!-- ═══ 시장 탭 ═══ -->
     <main class="content" id="tab-market" style="display:none;">
 
+      <!-- AI 오늘의 시장 한줄요약 -->
+      <div id="ai-summary-card" class="card fade-target">
+        <div class="card-head">
+          <span class="card-label" data-i18n="ai.cardLabel">오늘의 시장</span>
+          <span class="badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6;">AI</span>
+        </div>
+        <div id="ai-summary-text" style="padding:14px 16px; font-size:13.5px; line-height:1.75; min-height:32px;">
+          <div class="loading-placeholder"><div class="loading-spinner sm"></div></div>
+        </div>
+      </div>
+
       <!-- Portfolio Summary -->
       <div id="portfolio-summary" class="portfolio-card fade-target"></div>
-
-      <!-- Noise vs Signal -->
-      <div class="card fade-target">
-        <div class="card-head">
-          <span class="card-label">Noise vs Signal</span>
-          <span id="nr-badge" class="badge badge-yellow"></span>
-        </div>
-        <div id="regime-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-      </div>
-
-      <!-- Noise Score 30일 추이 그래프 -->
-      <div class="fade-target">
-        <div class="section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (30일)</div>
-        <div id="nr-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-      </div>
 
       <!-- Indicators -->
       <div class="ind-grid fade-target">
@@ -187,6 +184,40 @@
       <div class="fade-target">
         <div class="section-label">My Holdings</div>
         <div id="holdings-summary" class="holdings-list"></div>
+      </div>
+
+      <!-- 면책 문구 -->
+      <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
+
+    </main>
+
+    <!-- ═══ 펀더멘털 탭 ═══ -->
+    <main class="content" id="tab-fundamental" style="display:none;">
+
+      <!-- Noise vs Signal -->
+      <div class="card fade-target">
+        <div class="card-head">
+          <span class="card-label">Noise vs Signal</span>
+          <span id="nr-badge" class="badge badge-yellow"></span>
+        </div>
+        <div id="regime-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </div>
+
+      <!-- Noise Score 30일 추이 그래프 -->
+      <div class="fade-target">
+        <div class="section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (30일)</div>
+        <div id="nr-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </div>
+
+      <!-- AI 해설 -->
+      <div id="ai-explain-fundamental" class="card fade-target ai-explain-card">
+        <div class="card-head">
+          <span class="card-label">AI 해설</span>
+          <span class="badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6;">AI</span>
+        </div>
+        <div id="ai-explain-fundamental-text" class="ai-explain-body">
+          <div class="loading-placeholder"><div class="loading-spinner sm"></div></div>
+        </div>
       </div>
 
       <!-- 면책 문구 -->
@@ -221,6 +252,17 @@
         <div id="sc-holdings" class="hold-wrap"></div>
       </div>
 
+      <!-- AI 해설 -->
+      <div id="ai-explain-sector" class="card fade-target ai-explain-card">
+        <div class="card-head">
+          <span class="card-label">AI 해설</span>
+          <span class="badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6;">AI</span>
+        </div>
+        <div id="ai-explain-sector-text" class="ai-explain-body">
+          <div class="loading-placeholder"><div class="loading-spinner sm"></div></div>
+        </div>
+      </div>
+
       <!-- 면책 문구 -->
       <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
 
@@ -242,6 +284,17 @@
       <div class="fade-target">
         <div class="section-label" data-i18n="section.csChart">방향성 예측 추이 (30일)</div>
         <div id="cs-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </div>
+
+      <!-- AI 해설 -->
+      <div id="ai-explain-signal" class="card fade-target ai-explain-card">
+        <div class="card-head">
+          <span class="card-label">AI 해설</span>
+          <span class="badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6;">AI</span>
+        </div>
+        <div id="ai-explain-signal-text" class="ai-explain-body">
+          <div class="loading-placeholder"><div class="loading-spinner sm"></div></div>
+        </div>
       </div>
 
       <!-- 면책 문구 -->

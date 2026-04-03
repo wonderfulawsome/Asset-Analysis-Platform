@@ -169,7 +169,7 @@ def save_fred_cache(fred: dict) -> None:
         print(f'  [FRED-Cache] 캐시 저장 실패: {e}')         # 실패해도 파이프라인 계속
 
 
-def _load_fred_cache() -> dict | None:
+def _load_fred_cache():
     """파일 캐시에서 FRED 데이터 로드. 없으면 None 반환."""
     try:
         if os.path.exists(FRED_CACHE_PATH):                  # 캐시 파일이 있으면
