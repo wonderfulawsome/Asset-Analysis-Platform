@@ -64,7 +64,8 @@ def _groq_call(system_prompt: str, user_text: str, max_tokens: int = 300):
     """Groq API 호출 공통 함수."""
     api_key = os.getenv('GROQ_API_KEY')
     if not api_key:
-        print(f'[AI] GROQ_API_KEY not found. Available env keys: {[k for k in os.environ if "GROQ" in k.upper() or "API" in k.upper()]}')
+        all_keys = list(os.environ.keys())
+        print(f'[AI] GROQ_API_KEY not found. Total env vars: {len(all_keys)}. Keys containing GROQ/API/SUPA/FRED: {[k for k in all_keys if any(x in k.upper() for x in ("GROQ","API","SUPA","FRED"))]}')
         return None
     from groq import Groq
     client = Groq(api_key=api_key)
