@@ -369,7 +369,7 @@ async function loadAiSummary() {
   const el = document.getElementById('ai-summary-text');
   if (!el) return;
   try {
-    const res = await fetch('/api/market-summary/ai-summary');
+    const res = await fetch(`/api/market-summary/ai-summary?lang=${getLang()}`);
     const d = await res.json();
     if (d.error) {
       el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${d.summary || t('ai.unavailable')}</div>`;
@@ -467,7 +467,7 @@ async function loadAiExplain(tab) {
   const el = document.getElementById(`ai-explain-${tab}-text`);
   if (!el) return;
   try {
-    const res = await fetch(`/api/market-summary/ai-explain?tab=${tab}`);
+    const res = await fetch(`/api/market-summary/ai-explain?tab=${tab}&lang=${getLang()}`);
     const d = await res.json();
     if (d.error) {
       el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${d.explanation || t('ai.explainError')}</div>`;

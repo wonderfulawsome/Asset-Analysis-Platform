@@ -93,25 +93,36 @@ def _kst_now_str():
 # 시장 탭: AI 종합 요약
 # ═══════════════════════════════════════════════════════════════
 
-_ai_cache = {'summary': None, 'generated_at': None, 'expires': 0}
 _ai_lock = threading.Lock()
 _AI_TTL = 900
 
 
-def _build_indicator_text():
+def _build_indicator_text(lang='ko'):
     lines = []
     fg = fetch_fear_greed_latest()
     if fg:
-        lines.append(f"공포탐욕지수: {fg.get('score', '?')} ({fg.get('rating', '?')})")
+        if lang == 'en':
+            lines.append(f"Fear & Greed Index: {fg.get('score', '?')} ({fg.get('rating', '?')})")
+        else:
+            lines.append(f"공포탐욕지수: {fg.get('score', '?')} ({fg.get('rating', '?')})")
     macro = fetch_macro_latest()
     if macro:
-        lines.append(f"S&P500 일간수익률: {macro.get('sp500_return', '?')}%")
-        lines.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
-        lines.append(f"VIX: {macro.get('vix', '?')}")
-        lines.append(f"20일 변동성: {macro.get('sp500_vol20', '?')}")
-        lines.append(f"10Y금리: {macro.get('tnx', '?')}, 장단기차: {macro.get('yield_spread', '?')}")
-        if macro.get('putcall_ratio'):
-            lines.append(f"풋콜비율: {macro['putcall_ratio']}")
+        if lang == 'en':
+            lines.append(f"S&P500 Daily Return: {macro.get('sp500_return', '?')}%")
+            lines.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
+            lines.append(f"VIX: {macro.get('vix', '?')}")
+            lines.append(f"20D Volatility: {macro.get('sp500_vol20', '?')}")
+            lines.append(f"10Y Rate: {macro.get('tnx', '?')}, Yield Spread: {macro.get('yield_spread', '?')}")
+            if macro.get('putcall_ratio'):
+                lines.append(f"Put/Call Ratio: {macro['putcall_ratio']}")
+        else:
+            lines.append(f"S&P500 일간수익률: {macro.get('sp500_return', '?')}%")
+            lines.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
+            lines.append(f"VIX: {macro.get('vix', '?')}")
+            lines.append(f"20일 변동성: {macro.get('sp500_vol20', '?')}")
+            lines.append(f"10Y금리: {macro.get('tnx', '?')}, 장단기차: {macro.get('yield_spread', '?')}")
+            if macro.get('putcall_ratio'):
+                lines.append(f"풋콜비율: {macro['putcall_ratio']}")
     regime = fetch_noise_regime_current()
     if regime:
         ns = regime.get('noise_score', 0)
@@ -119,19 +130,34 @@ def _build_indicator_text():
             ns_val = float(ns)
         except (TypeError, ValueError):
             ns_val = 0
-        if ns_val < -1:
-            interp = '주가가 펀더멘털을 잘 반영 중'
-        elif ns_val < 0:
-            interp = '약간의 괴리가 있으나 대체로 반영'
-        elif ns_val < 2:
-            interp = '주가와 펀더멘털 사이 괴리 존재'
+        if lang == 'en':
+            if ns_val < -1:
+                interp = 'Price well reflects fundamentals'
+            elif ns_val < 0:
+                interp = 'Minor divergence, mostly reflecting fundamentals'
+            elif ns_val < 2:
+                interp = 'Divergence between price and fundamentals'
+            else:
+                interp = 'Significant divergence from fundamentals'
+            lines.append(f"Noise Score (Fundamental-Price Divergence): {ns} → {interp}")
+            lines.append(f"  (Negative = reflecting fundamentals, higher positive = greater divergence)")
         else:
-            interp = '주가와 펀더멘털이 크게 괴리됨'
-        lines.append(f"Noise Score(펀더멘털-주가 괴리 점수): {ns} → {interp}")
-        lines.append(f"  (음수일수록 펀더멘털 반영, 양수가 클수록 주가가 펀더멘털에서 괴리)")
+            if ns_val < -1:
+                interp = '주가가 펀더멘털을 잘 반영 중'
+            elif ns_val < 0:
+                interp = '약간의 괴리가 있으나 대체로 반영'
+            elif ns_val < 2:
+                interp = '주가와 펀더멘털 사이 괴리 존재'
+            else:
+                interp = '주가와 펀더멘털이 크게 괴리됨'
+            lines.append(f"Noise Score(펀더멘털-주가 괴리 점수): {ns} → {interp}")
+            lines.append(f"  (음수일수록 펀더멘털 반영, 양수가 클수록 주가가 펀더멘털에서 괴리)")
     cs = fetch_crash_surge_current()
     if cs:
-        lines.append(f"하락 위험도: {cs.get('crash_prob', '?')}점, 상승 기대도: {cs.get('surge_prob', '?')}점, 순방향: {cs.get('net_score', '?')}")
+        if lang == 'en':
+            lines.append(f"Crash Risk: {cs.get('crash_prob', '?')}pts, Surge Potential: {cs.get('surge_prob', '?')}pts, Net Direction: {cs.get('net_score', '?')}")
+        else:
+            lines.append(f"하락 위험도: {cs.get('crash_prob', '?')}점, 상승 기대도: {cs.get('surge_prob', '?')}점, 순방향: {cs.get('net_score', '?')}")
     prices = fetch_index_prices_latest()
     if prices:
         major = [p for p in prices if p.get('ticker') in ('SPY', 'QQQ', 'DIA', 'VOO', 'IWM')]
@@ -141,11 +167,15 @@ def _build_indicator_text():
             lines.append(f"{p['ticker']}: ${p.get('close', '?')} ({sign}{chg}%)")
     sector = fetch_sector_cycle_latest()
     if sector:
-        lines.append(f"경기국면: {sector.get('phase_name', '?')}")
+        if lang == 'en':
+            lines.append(f"Business Cycle: {sector.get('phase_name', '?')}")
+        else:
+            lines.append(f"경기국면: {sector.get('phase_name', '?')}")
     return '\n'.join(lines)
 
 
-_SUMMARY_PROMPT = """/no_think
+_SUMMARY_PROMPTS = {
+    'ko': """/no_think
 너는 투자자에게 쉽게 설명해주는 한국어 금융 애널리스트다.
 주어진 지표를 종합해 시장 브리핑을 작성하라.
 
@@ -173,29 +203,75 @@ _SUMMARY_PROMPT = """/no_think
 - 숫자를 넣되 해석 위주
 - 부드러운 어투 (~입니다, ~보입니다)
 - 각 줄 50자 이내
-- 마크다운(**볼드** 등) 절대 사용 금지"""
+- 마크다운(**볼드** 등) 절대 사용 금지""",
 
+    'en': """/no_think
+You are a financial analyst who explains market conditions to investors in plain English.
+Synthesize the given indicators into a market briefing.
+
+Output exactly 4 lines. Each line must follow the format: "Title — Content".
+Use an em dash "—" with spaces on both sides. Never merge the title and content.
+
+[emoji] Market Sentiment — (1 sentence interpreting Fear & Greed, VIX, RSI)
+[emoji] Direction — (1 sentence on short-term outlook from crash risk & surge potential)
+[emoji] Fundamentals — (1 sentence on price-fundamental relationship via Noise Score)
+[emoji] Overall — (1 sentence conclusion combining the above 3, with action suggestion)
+
+Example:
+❄️ Market Sentiment — Fear index at 19, deep in extreme fear territory with severely depressed investor sentiment.
+⚖️ Direction — Crash risk is high but positive net score suggests a rebound is possible.
+🧭 Fundamentals — Noise Score of 2.1 shows a gap between stock prices and fundamentals.
+🎯 Overall — With rebound potential amid fear, a dollar-cost averaging approach seems viable.
+
+Emoji choices:
+- Fear/decline: 🔻❄️🌧️⚠️🥶  Greed/rise: 🔥🚀☀️💪🟢  Neutral: ⚖️🔄🌤️
+- Fundamental divergence: 🧭📉🔍  Aligned: ✅💎📊  Overall: 🎯💡⭐🔑
+- Use a different emoji for each line
+
+Rules:
+- Strictly "Title — Content" format (spaces around — required)
+- Include numbers but focus on interpretation
+- Professional yet approachable tone
+- Each line under 80 characters
+- No markdown (**bold**, etc.) whatsoever""",
+}
+
+
+_ai_cache = {'ko': {'summary': None, 'generated_at': None, 'expires': 0},
+             'en': {'summary': None, 'generated_at': None, 'expires': 0}}
+
+_ERR_MSGS = {
+    'ko': {'no_data': '지표 데이터가 아직 준비되지 않았습니다.',
+           'no_service': 'AI 요약 서비스가 설정되지 않았습니다.',
+           'fail': 'AI 요약을 생성할 수 없습니다.'},
+    'en': {'no_data': 'Indicator data is not yet available.',
+           'no_service': 'AI summary service is not configured.',
+           'fail': 'Unable to generate AI summary.'},
+}
 
 @router.get('/ai-summary')
-def get_ai_summary():
+def get_ai_summary(lang: str = Query('ko')):
+    lang = lang if lang in ('ko', 'en') else 'ko'
+    err = _ERR_MSGS[lang]
     now = time.time()
     with _ai_lock:
-        if _ai_cache['summary'] and now < _ai_cache['expires']:
-            return {'summary': _ai_cache['summary'], 'generated_at': _ai_cache['generated_at'], 'cached': True}
+        c = _ai_cache[lang]
+        if c['summary'] and now < c['expires']:
+            return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
     try:
-        text = _build_indicator_text()
+        text = _build_indicator_text(lang)
         if not text.strip():
-            return {'summary': '지표 데이터가 아직 준비되지 않았습니다.', 'error': True}
-        result = _groq_call(_SUMMARY_PROMPT, text, 400)
+            return {'summary': err['no_data'], 'error': True}
+        result = _groq_call(_SUMMARY_PROMPTS[lang], text, 400)
         if not result:
-            return {'summary': 'AI 요약 서비스가 설정되지 않았습니다.', 'error': True}
+            return {'summary': err['no_service'], 'error': True}
         ts = _kst_now_str()
         with _ai_lock:
-            _ai_cache.update({'summary': result, 'generated_at': ts, 'expires': now + _AI_TTL})
+            _ai_cache[lang].update({'summary': result, 'generated_at': ts, 'expires': now + _AI_TTL})
         return {'summary': result, 'generated_at': ts, 'cached': False}
     except Exception as e:
-        print(f'[AI Summary] 오류: {e}')
-        return {'summary': 'AI 요약을 생성할 수 없습니다.', 'error': True}
+        print(f'[AI Summary] error: {e}')
+        return {'summary': err['fail'], 'error': True}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -207,7 +283,8 @@ _explain_lock = threading.Lock()
 _EXPLAIN_TTL = 900
 
 _EXPLAIN_PROMPTS = {
-    'fundamental': """/no_think
+    'ko': {
+        'fundamental': """/no_think
 너는 한국어 금융 해설가다. 주어진 Noise vs Signal 분석 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
 
 배경 지식:
@@ -229,7 +306,7 @@ _EXPLAIN_PROMPTS = {
 - 마크다운/불릿 금지
 - 부드러운 어투""",
 
-    'signal': """/no_think
+        'signal': """/no_think
 너는 한국어 금융 해설가다. 주어진 하락/상승 예측 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
 
 설명할 내용:
@@ -244,7 +321,7 @@ _EXPLAIN_PROMPTS = {
 - 마크다운/불릿 금지
 - 부드러운 어투""",
 
-    'sector': """/no_think
+        'sector': """/no_think
 너는 한국어 금융 해설가다. 주어진 경기 국면 분석 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
 
 설명할 내용:
@@ -258,15 +335,70 @@ _EXPLAIN_PROMPTS = {
 - 줄바꿈으로 문단 구분
 - 마크다운/불릿 금지
 - 부드러운 어투""",
+    },
+    'en': {
+        'fundamental': """/no_think
+You are a financial commentator. Explain the given Noise vs Signal analysis in plain English for everyday investors.
+
+Background:
+- Noise Score measures "fundamental-price divergence"
+- Negative (-): price reflects fundamentals (company value) well
+- Positive (+): price has deviated from fundamentals, driven by sentiment or liquidity
+- Higher positive = greater divergence (0~2: mild, 2+: significant)
+- Features are individual indicators that compose this score
+
+Explain:
+1. Current state (what the Noise Score value means)
+2. Why this result occurred (top 3 feature contributors in plain language)
+3. What it means for investors
+
+Rules:
+- 3-4 sentences, under 200 characters total
+- Add parenthetical explanations for technical terms
+- Separate paragraphs with line breaks
+- No markdown/bullets
+- Professional yet approachable tone""",
+
+        'signal': """/no_think
+You are a financial commentator. Explain the given crash/surge prediction results in plain English for everyday investors.
+
+Explain:
+1. Current levels of crash risk and surge potential
+2. Which factors are most influential (top 3 SHAP values)
+3. Key points for investors to watch
+
+Rules:
+- 3-4 sentences, under 200 characters total
+- Add parenthetical explanations for technical terms
+- Separate paragraphs with line breaks
+- No markdown/bullets
+- Professional yet approachable tone""",
+
+        'sector': """/no_think
+You are a financial commentator. Explain the given business cycle analysis in plain English for everyday investors.
+
+Explain:
+1. Current business cycle phase and its characteristics
+2. Which sectors benefit in this phase and why
+3. Key takeaways for investors
+
+Rules:
+- 3-4 sentences, under 200 characters total
+- Add parenthetical explanations for technical terms
+- Separate paragraphs with line breaks
+- No markdown/bullets
+- Professional yet approachable tone""",
+    },
 }
 
 
-def _build_explain_text(tab: str) -> str:
+def _build_explain_text(tab: str, lang: str = 'ko') -> str:
+    is_en = (lang == 'en')
     lines = []
     if tab == 'fundamental':
         regime = fetch_noise_regime_current()
         if regime:
-            lines.append(f"레짐: {regime.get('regime_name', '?')}")
+            lines.append(f"{'Regime' if is_en else '레짐'}: {regime.get('regime_name', '?')}")
             lines.append(f"Noise Score: {regime.get('noise_score', '?')}")
             fc = regime.get('feature_contributions', [])
             if isinstance(fc, str):
@@ -275,7 +407,7 @@ def _build_explain_text(tab: str) -> str:
                 except Exception:
                     fc = []
             if fc:
-                lines.append("피처 기여도:")
+                lines.append("Feature Contributions:" if is_en else "피처 기여도:")
                 for f in sorted(fc, key=lambda x: abs(x.get('contribution', 0)), reverse=True)[:5]:
                     lines.append(f"  {f.get('name', '?')}: {f.get('contribution', '?')}")
             fv = regime.get('feature_values', {})
@@ -285,16 +417,21 @@ def _build_explain_text(tab: str) -> str:
                 except Exception:
                     fv = {}
             if fv:
-                lines.append("현재 지표값:")
+                lines.append("Current Values:" if is_en else "현재 지표값:")
                 for k, v in list(fv.items())[:6]:
                     lines.append(f"  {k}: {v}")
 
     elif tab == 'signal':
         cs = fetch_crash_surge_current()
         if cs:
-            lines.append(f"하락 위험도: {cs.get('crash_prob', '?')}점 ({cs.get('crash_grade', '?')})")
-            lines.append(f"상승 기대도: {cs.get('surge_prob', '?')}점 ({cs.get('surge_grade', '?')})")
-            lines.append(f"순방향 점수: {cs.get('net_score', '?')}")
+            if is_en:
+                lines.append(f"Crash Risk: {cs.get('crash_prob', '?')}pts ({cs.get('crash_grade', '?')})")
+                lines.append(f"Surge Potential: {cs.get('surge_prob', '?')}pts ({cs.get('surge_grade', '?')})")
+                lines.append(f"Net Direction Score: {cs.get('net_score', '?')}")
+            else:
+                lines.append(f"하락 위험도: {cs.get('crash_prob', '?')}점 ({cs.get('crash_grade', '?')})")
+                lines.append(f"상승 기대도: {cs.get('surge_prob', '?')}점 ({cs.get('surge_grade', '?')})")
+                lines.append(f"순방향 점수: {cs.get('net_score', '?')}")
             shap = cs.get('shap_values', {})
             if isinstance(shap, str):
                 try:
@@ -304,14 +441,14 @@ def _build_explain_text(tab: str) -> str:
             for label in ['crash', 'surge']:
                 sv = shap.get(label, [])
                 if sv:
-                    lines.append(f"{label} 주요 요인:")
+                    lines.append(f"{label} {'key factors' if is_en else '주요 요인'}:")
                     for s in sv[:3]:
                         lines.append(f"  {s.get('name', '?')}: {s.get('value', '?')}")
 
     elif tab == 'sector':
         sc = fetch_sector_cycle_latest()
         if sc:
-            lines.append(f"경기 국면: {sc.get('phase_name', '?')} {sc.get('phase_emoji', '')}")
+            lines.append(f"{'Business Cycle' if is_en else '경기 국면'}: {sc.get('phase_name', '?')} {sc.get('phase_emoji', '')}")
             ms = sc.get('macro_snapshot', {})
             if isinstance(ms, str):
                 try:
@@ -319,12 +456,12 @@ def _build_explain_text(tab: str) -> str:
                 except Exception:
                     ms = {}
             if ms:
-                lines.append("매크로 스냅샷:")
+                lines.append("Macro Snapshot:" if is_en else "매크로 스냅샷:")
                 for k, v in list(ms.items())[:5]:
                     lines.append(f"  {k}: {v}")
             top3 = sc.get('top3_sectors', [])
             if top3:
-                lines.append("유리한 섹터:")
+                lines.append("Favorable Sectors:" if is_en else "유리한 섹터:")
                 for s in top3[:3]:
                     if isinstance(s, dict):
                         lines.append(f"  {s.get('sector', '?')}: {s.get('return', '?')}%")
@@ -334,28 +471,42 @@ def _build_explain_text(tab: str) -> str:
     return '\n'.join(lines)
 
 
+_EXPLAIN_ERR = {
+    'ko': {'bad_tab': '지원하지 않는 탭입니다.',
+           'no_data': '분석 데이터가 아직 준비되지 않았습니다.',
+           'no_service': 'AI 해설 서비스가 설정되지 않았습니다.',
+           'fail': 'AI 해설을 생성할 수 없습니다.'},
+    'en': {'bad_tab': 'Unsupported tab.',
+           'no_data': 'Analysis data is not yet available.',
+           'no_service': 'AI commentary service is not configured.',
+           'fail': 'Unable to generate AI commentary.'},
+}
+
 @router.get('/ai-explain')
-def get_ai_explain(tab: str = Query(..., description='fundamental, signal, sector')):
-    if tab not in _EXPLAIN_PROMPTS:
-        return {'explanation': '지원하지 않는 탭입니다.', 'error': True}
+def get_ai_explain(tab: str = Query(..., description='fundamental, signal, sector'),
+                   lang: str = Query('ko')):
+    lang = lang if lang in ('ko', 'en') else 'ko'
+    err = _EXPLAIN_ERR[lang]
+    if tab not in _EXPLAIN_PROMPTS['ko']:
+        return {'explanation': err['bad_tab'], 'error': True}
 
     now = time.time()
-    cache_key = f'explain_{tab}'
+    cache_key = f'explain_{tab}_{lang}'
     with _explain_lock:
         cached = _explain_cache.get(cache_key)
         if cached and now < cached.get('expires', 0):
             return {'explanation': cached['text'], 'tab': tab, 'cached': True}
 
     try:
-        text = _build_explain_text(tab)
+        text = _build_explain_text(tab, lang)
         if not text.strip():
-            return {'explanation': '분석 데이터가 아직 준비되지 않았습니다.', 'tab': tab, 'error': True}
-        result = _groq_call(_EXPLAIN_PROMPTS[tab], text, 300)
+            return {'explanation': err['no_data'], 'tab': tab, 'error': True}
+        result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 300)
         if not result:
-            return {'explanation': 'AI 해설 서비스가 설정되지 않았습니다.', 'tab': tab, 'error': True}
+            return {'explanation': err['no_service'], 'tab': tab, 'error': True}
         with _explain_lock:
             _explain_cache[cache_key] = {'text': result, 'expires': now + _EXPLAIN_TTL}
         return {'explanation': result, 'tab': tab, 'cached': False}
     except Exception as e:
-        print(f'[AI Explain {tab}] 오류: {e}')
-        return {'explanation': 'AI 해설을 생성할 수 없습니다.', 'tab': tab, 'error': True}
+        print(f'[AI Explain {tab}] error: {e}')
+        return {'explanation': err['fail'], 'tab': tab, 'error': True}
