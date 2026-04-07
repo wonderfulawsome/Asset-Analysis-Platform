@@ -17,6 +17,7 @@ const I18N = {
     'tab.chart': 'AI차트',                        // 차트 탭
     'ai.cardLabel': '오늘의 시장',               // AI 요약 카드 라벨
     'ai.unavailable': 'AI 요약을 불러올 수 없습니다.',
+    'ai.explainLabel': 'AI 해설',                 // AI 해설 카드 라벨
 
     // ── 헤더 / 날짜 ──
     'lang.btn': 'EN',                             // 언어 전환 버튼 텍스트
@@ -169,6 +170,9 @@ const I18N = {
     'chart.high': '최고가',
     'chart.low': '최저가',
     'chart.range': '변동폭',
+    'chart.periodLabel': '6개월',                 // 기간 라벨
+    'chart.priceRange': '가격 범위',              // 가격 범위
+    'chart.pctChange': '변동',                    // % 변동
     'chart.predictBtn': '30일 예측',
     'chart.predictTitle': '30일 주가 예측 (Prophet)',
     'chart.predictActual': '실제 종가',
@@ -416,6 +420,7 @@ const I18N = {
     'tab.signal': 'Signal',
     'tab.macro': 'Macro',
     'ai.cardLabel': "Today's Market",
+    'ai.explainLabel': 'AI Commentary',
     'ai.unavailable': 'AI summary unavailable.',
     'tab.chart': 'AI Chart',
 
@@ -570,6 +575,9 @@ const I18N = {
     'chart.high': 'High',
     'chart.low': 'Low',
     'chart.range': 'Range',
+    'chart.periodLabel': '6M',
+    'chart.priceRange': 'Price Range',
+    'chart.pctChange': 'Chg',
     'chart.predictBtn': '30-Day Forecast',
     'chart.predictTitle': '30-Day Price Forecast (Prophet)',
     'chart.predictActual': 'Actual Close',
