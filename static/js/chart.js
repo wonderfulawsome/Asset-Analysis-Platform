@@ -757,7 +757,7 @@ function renderChartSummary(el, candles) {
   const range = low > 0 ? ((high - low) / low * 100) : 0;
   const pos = high > low ? ((latest.c - low) / (high - low) * 100) : 50;
 
-  const periodLabel = '6개월';
+  const periodLabel = t('chart.periodLabel');
   const chgColor = dayChg >= 0 ? '#10B981' : '#EF4444';
   const chgSign = dayChg >= 0 ? '+' : '';
   const pChgColor = periodChg >= 0 ? '#10B981' : '#EF4444';
@@ -801,8 +801,8 @@ function renderChartSummary(el, candles) {
     rangeEl.innerHTML = `
       <div class="chart-range-card">
         <div class="chart-range-head">
-          <span class="chart-range-label">${periodLabel} 가격 범위</span>
-          <span class="chart-range-badge" style="color:${pChgColor}">${pChgSign}${periodChg.toFixed(1)}% 변동</span>
+          <span class="chart-range-label">${periodLabel} ${t('chart.priceRange')}</span>
+          <span class="chart-range-badge" style="color:${pChgColor}">${pChgSign}${periodChg.toFixed(1)}% ${t('chart.pctChange')}</span>
         </div>
         <div class="chart-range-track">
           <div class="chart-range-fill" style="width:${Math.min(pos, 100)}%;background:linear-gradient(90deg, ${periodChg >= 0 ? '#10B981' : '#EF4444'}, ${periodChg >= 0 ? '#06B6D4' : '#F97316'})"></div>
