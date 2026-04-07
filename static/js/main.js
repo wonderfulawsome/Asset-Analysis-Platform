@@ -470,13 +470,13 @@ async function loadAiExplain(tab) {
     const res = await fetch(`/api/market-summary/ai-explain?tab=${tab}`);
     const d = await res.json();
     if (d.error) {
-      el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${d.explanation || 'AI 해설을 불러올 수 없습니다.'}</div>`;
+      el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${d.explanation || t('ai.explainError')}</div>`;
       return;
     }
     el.innerHTML = _formatExplainText(d.explanation || '');
   } catch (e) {
     console.error(`AI explain ${tab} error:`, e);
-    el.innerHTML = '<div style="color:var(--sub);font-size:13px;">AI 해설을 불러올 수 없습니다.</div>';
+    el.innerHTML = `<div style="color:var(--sub);font-size:13px;">${t('ai.explainError')}</div>`;
   }
 }
 
@@ -1172,7 +1172,7 @@ async function loadCrashSurge() {
 
     // 변동성 판정: 둘 다 60 미만이면 보통, 하나라도 60 이상이면 높음
     const isHighVol = d.crash_score >= 60 || d.surge_score >= 60;
-    const volLabel = isHighVol ? '향후 변동성 높음' : '향후 변동성 보통';
+    const volLabel = isHighVol ? t('cs.volHigh') : t('cs.volNormal');
     const volCls = isHighVol ? 'badge-red' : 'badge-green';
 
     const badge = document.getElementById('cs-badge');
@@ -1180,7 +1180,7 @@ async function loadCrashSurge() {
     badge.textContent = volLabel;
 
     // 하락 가능성: 점수 기반 라벨 (경고 없음)
-    const crashLabel = d.crash_score < 40 ? '낮음' : d.crash_score < 60 ? '보통' : '높음';
+    const crashLabel = d.crash_score < 40 ? t('grade.low') : d.crash_score < 60 ? t('grade.normal') : t('grade.high');
     const crashS = d.crash_score < 40
       ? { cls: 'badge-green', color: '#10B981' }
       : d.crash_score < 60
@@ -1188,7 +1188,7 @@ async function loadCrashSurge() {
       : { cls: 'badge-red', color: '#EF4444' };
 
     // 상승 기대도: 점수 기반 라벨 (낮음=빨강/보통=노랑/높음=초록)
-    const surgeLabel = d.surge_score < 40 ? '낮음' : d.surge_score < 60 ? '보통' : '높음';
+    const surgeLabel = d.surge_score < 40 ? t('grade.low') : d.surge_score < 60 ? t('grade.normal') : t('grade.high');
     const surgeS = d.surge_score < 40
       ? { cls: 'badge-red', color: '#EF4444' }
       : d.surge_score < 60
@@ -1488,7 +1488,7 @@ function renderDualLineChart(containerId, labels, crashVals, surgeVals) {
   const showTip = (idx) => {
     const lb = labels[idx];
     const cv = crashVals[idx], sv = surgeVals[idx];
-    tip.innerHTML = `<b>${lb.fullLabel || lb.label}</b><br><span style="color:${crashColor}">하락 ${cv.toFixed(1)}</span> · <span style="color:${surgeColor}">상승 ${sv.toFixed(1)}</span>`;
+    tip.innerHTML = `<b>${lb.fullLabel || lb.label}</b><br><span style="color:${crashColor}">${t('hist.crash')} ${cv.toFixed(1)}</span> · <span style="color:${surgeColor}">${t('hist.surge')} ${sv.toFixed(1)}</span>`;
     tip.style.left = `${x(idx)}px`;
     tip.style.top = `${Math.min(y(cv), y(sv)) - 36}px`;
     tip.style.transform = 'translateX(-50%)';
