@@ -112,6 +112,17 @@ const I18N = {
     'grade.caution': '주의',                      // Caution
     'grade.warning': '경고',                      // Warning
     'grade.danger': '위험',                       // Danger
+    'grade.high': '높음',                         // High
+
+    // ── Crash/Surge 변동성 ──
+    'cs.volHigh': '향후 변동성 높음',              // 변동성 높음
+    'cs.volNormal': '향후 변동성 보통',            // 변동성 보통
+
+    // ── 차트 힌트 ──
+    'chart.hint': '차트를 터치하면 상세 정보를 볼 수 있어요',
+
+    // ── AI 해설 에러 ──
+    'ai.explainError': 'AI 해설을 불러올 수 없습니다.',
 
     // ── 방향성 ──
     'dir.cardLabel': '향후 방향성',               // 카드 라벨
@@ -502,6 +513,17 @@ const I18N = {
     'grade.caution': 'Caution',
     'grade.warning': 'Warning',
     'grade.danger': 'Danger',
+    'grade.high': 'High',
+
+    // ── Crash/Surge Volatility ──
+    'cs.volHigh': 'High Future Volatility',
+    'cs.volNormal': 'Normal Future Volatility',
+
+    // ── Chart Hint ──
+    'chart.hint': 'Touch the chart to see details',
+
+    // ── AI Explanation Error ──
+    'ai.explainError': 'Unable to load AI explanation.',
 
     // ── Direction ──
     'dir.cardLabel': 'Future Direction',
