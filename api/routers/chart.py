@@ -181,29 +181,49 @@ def _regenerate_in_background(ticker: str):
 
 @router.get('/predict')
 def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
-    """Prophet 30일 예측 결과를 DB에서 조회 (스케줄러가 3시간마다 갱신)"""
+    """5-모델 앙상블 30일 예측 결과를 DB에서 조회.
+    DB에 없으면 백그라운드 재생성 후 폴링하여 완료를 대기한다."""
     from database.repositories import fetch_chart_predict
 
     ticker = ticker.upper()
     if ticker not in CHART_TICKERS:
         return {'error': 'unsupported ticker'}
 
-    result = fetch_chart_predict(ticker)
+    def _fetch_valid(t):
+        r = fetch_chart_predict(t)
+        if r is not None:
+            sp = _sanitize_floats(r.get('predicted', []))
+            if _is_prediction_valid(sp):
+                return r
+            print(f'[Chart] {t} 예측 데이터 손상 감지')
+        return None
 
-    # DB 데이터 유효성 검증
-    if result is not None:
-        sanitized_pred = _sanitize_floats(result.get('predicted', []))
-        if not _is_prediction_valid(sanitized_pred):
-            print(f'[Chart] {ticker} 예측 데이터 손상 감지')
-            result = None
+    result = _fetch_valid(ticker)
 
     if result is None:
-        # 백그라운드에서 재생성 트리거 (사용자는 기다리지 않음)
+        # 백그라운드에서 재생성 트리거
         if ticker not in _predict_running:
             _predict_running.add(ticker)
             threading.Thread(target=_regenerate_in_background, args=(ticker,),
                              daemon=True).start()
-        return {'error': 'prediction is being prepared, please retry in a moment'}
+
+        # 백그라운드 재생성 완료까지 폴링 대기 (최대 ~120초)
+        _POLL_INTERVAL = 3   # 초
+        _MAX_POLLS = 40      # 40 × 3초 = 120초
+        for i in range(_MAX_POLLS):
+            time.sleep(_POLL_INTERVAL)
+            # 백그라운드 스레드 완료 확인
+            if ticker not in _predict_running:
+                result = _fetch_valid(ticker)
+                break
+            # 스레드 실행 중에도 주기적으로 DB 확인 (15초 간격)
+            if i % 5 == 4:
+                result = _fetch_valid(ticker)
+                if result is not None:
+                    break
+
+        if result is None:
+            return {'error': 'prediction generation failed, please try again later'}
 
     return {
         'ticker': result['ticker'],

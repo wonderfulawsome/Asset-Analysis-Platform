@@ -840,21 +840,40 @@ function setupPredictButton() {
     btn.disabled = true;
     btn.textContent = t('chart.predictLoading');
     showPredictDisclaimer();
+
+    // 로딩 애니메이션: 점 개수가 변하는 텍스트
+    let dotCount = 0;
+    const loadingInterval = setInterval(() => {
+      dotCount = (dotCount + 1) % 4;
+      const dots = '.'.repeat(dotCount || 1);
+      btn.textContent = t('chart.predictLoading') + dots;
+    }, 600);
+
     try {
+      // 서버가 최대 ~120초 대기하므로 타임아웃을 150초로 설정
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 150000);
+
       let data = null;
-      // 최대 3회 재시도 (백그라운드 재생성 대기)
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`);
+      try {
+        const res = await fetch(`/api/chart/predict?ticker=${_chartTicker}`, {
+          signal: controller.signal,
+        });
         data = await res.json();
-        if (!data.error) break;
-        if (attempt < 2) {
-          btn.textContent = t('chart.predictLoading') + '..';
-          await new Promise(r => setTimeout(r, 3000));
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          data = { error: 'timeout' };
+        } else {
+          throw e;
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
+
       if (!data || data.error) {
         _predictVisible = false;
         btn.classList.remove('active');
+        _showPredictError();
         return;
       }
       _predictData = data;
@@ -868,11 +887,32 @@ function setupPredictButton() {
     } catch {
       _predictVisible = false;
       btn.classList.remove('active');
+      _showPredictError();
     } finally {
+      clearInterval(loadingInterval);
       btn.disabled = false;
       btn.textContent = t('chart.predictBtn');
     }
   });
+}
+
+function _showPredictError() {
+  let toast = document.getElementById('predict-disclaimer-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'predict-disclaimer-toast';
+    toast.className = 'predict-disclaimer-toast';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = t('chart.predictError');
+  toast.style.background = 'rgba(220,38,38,0.95)';
+  toast.classList.remove('hide');
+  toast.classList.add('show');
+  setTimeout(() => {
+    toast.classList.remove('show');
+    toast.classList.add('hide');
+    toast.style.background = '';
+  }, 4000);
 }
 
 function hidePredictSection() {

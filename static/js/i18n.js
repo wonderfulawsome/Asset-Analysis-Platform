@@ -178,7 +178,8 @@ const I18N = {
     'chart.predictActual': '실제 종가',
     'chart.predictForecast': '예측',
     'chart.predictConfidence': '80% 신뢰구간',
-    'chart.predictLoading': '예측 모델 실행 중...',
+    'chart.predictLoading': '예측 모델 실행 중',
+    'chart.predictError': '예측 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.',
     'chart.predictDisclaimer': '본 예측은 통계 모델 기반이며 투자 조언이 아닙니다. 투자 판단의 책임은 본인에게 있습니다.',
 
     // ── 상세 페이지 ──
@@ -583,7 +584,8 @@ const I18N = {
     'chart.predictActual': 'Actual Close',
     'chart.predictForecast': 'Forecast',
     'chart.predictConfidence': '80% Confidence',
-    'chart.predictLoading': 'Running forecast model...',
+    'chart.predictLoading': 'Running forecast model',
+    'chart.predictError': 'Failed to load prediction. Please try again later.',
     'chart.predictDisclaimer': 'This forecast is based on statistical models and is not investment advice. You are solely responsible for your investment decisions.',
 
     // ── Detail Page ──
