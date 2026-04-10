@@ -1,8 +1,15 @@
+import threading
 from fastapi import APIRouter
-from database.repositories import fetch_crash_surge_current, fetch_crash_surge_history, fetch_crash_surge_all, fetch_macro_closes
+from database.repositories import (
+    fetch_crash_surge_current, fetch_crash_surge_history,
+    fetch_crash_surge_all, fetch_macro_closes, upsert_crash_surge,
+)
 import time                                              # 캐시 만료 체크용
 
 router = APIRouter()
+
+# ── 수동 새로고침 상태 관리 ──
+_refresh_running = False
 
 # ── 방향성 분석 캐시 (매번 DB 조회 방지) ──
 _dir_cache = {                                           # 캐시 딕셔너리
@@ -119,3 +126,50 @@ def get_direction():
         'horizon_stats': results,                        # 5/10/20일 통계
         'margin': margin,                                # 탐색 범위
     }
+
+
+@router.get('/refresh')
+def refresh_crash_surge():
+    """수동으로 crash/surge 예측을 재실행한다.
+    스케줄러가 실패했을 때 데이터를 복구하기 위한 엔드포인트."""
+    global _refresh_running
+    if _refresh_running:
+        return {'status': 'already_running'}
+
+    _refresh_running = True
+    try:
+        import numpy as np
+        from collector.crash_surge_data import (
+            fetch_crash_surge_light, compute_features,
+            ALL_FEATURES, CORE_FEATURES, AUX_FEATURES,
+        )
+        from processor.feature3_crash_surge import (
+            load_model as load_crash_surge_model, predict_crash_surge,
+        )
+
+        cs_model = load_crash_surge_model()
+        if cs_model is None:
+            return {'status': 'error', 'message': 'no model available'}
+
+        raw = fetch_crash_surge_light()
+        features = compute_features(raw['spy'], raw['fred'], raw['cboe'], raw['yahoo_macro'])
+        feat_row = features[ALL_FEATURES].copy()
+        feat_row = feat_row.ffill()
+        feat_row = feat_row.dropna(subset=CORE_FEATURES)
+        feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)
+        feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)
+
+        if len(feat_row) == 0:
+            return {'status': 'error', 'message': 'no valid feature rows'}
+
+        latest_row = feat_row.iloc[[-1]].values
+        result = predict_crash_surge(latest_row, cs_model)
+        upsert_crash_surge(result)
+
+        return {'status': 'ok', 'date': result.get('date'),
+                'crash_score': result.get('crash_score'),
+                'surge_score': result.get('surge_score')}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+    finally:
+        _refresh_running = False

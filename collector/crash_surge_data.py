@@ -192,10 +192,22 @@ def fetch_crash_surge_raw(start: str = '2000-01-01', fred_cache: dict = None) ->
     Returns:
         {'spy': DataFrame, 'fred': dict, 'cboe': dict, 'yahoo_macro': dict}
     """
-    # 1) SPY OHLCV
+    # 1) SPY OHLCV (재시도 포함)
     print('  [CrashSurge] SPY OHLCV 수집...')
-    spy_raw = yf.Ticker('SPY').history(start=start, auto_adjust=True)
-    spy = _strip_tz(spy_raw)[['Open', 'High', 'Low', 'Close', 'Volume']]
+    spy = None
+    for attempt in range(3):
+        try:
+            spy_raw = yf.Ticker('SPY').history(start=start, auto_adjust=True)
+            spy_raw = _strip_tz(spy_raw)
+            if not spy_raw.empty and len(spy_raw) >= 2:
+                spy = spy_raw[['Open', 'High', 'Low', 'Close', 'Volume']]
+                break
+        except Exception as e:
+            print(f'  [CrashSurge] SPY 수집 시도 {attempt+1}/3 실패: {e}')
+        if attempt < 2:
+            time.sleep(2)
+    if spy is None or spy.empty:
+        raise RuntimeError('SPY OHLCV 수집 실패 (3회 재시도 후)')
     print(f'  [CrashSurge] SPY: {spy.index[0].date()} ~ {spy.index[-1].date()} ({len(spy)}행)')
 
     # 2) FRED 8개 (캐시에 있으면 재사용, 없으면 새로 수집)
@@ -241,10 +253,22 @@ def fetch_crash_surge_light(lookback_days: int = 300) -> dict:
     yfinance 장 중 호출 시 SPY/Cboe/Yahoo매크로는 실시간 데이터 포함.
     FRED는 일별 업데이트이므로 파일 캐시를 우선 사용, 없을 때만 새로 수집.
     """
-    # 1) SPY OHLCV — 장 중이면 실시간 가격 포함
+    # 1) SPY OHLCV — 장 중이면 실시간 가격 포함 (재시도 포함)
     print('  [CrashSurge-Light] SPY OHLCV 수집...')
-    spy_raw = yf.Ticker('SPY').history(period=f'{lookback_days}d', auto_adjust=True)  # 최근 N일
-    spy = _strip_tz(spy_raw)[['Open', 'High', 'Low', 'Close', 'Volume']]  # OHLCV만 추출
+    spy = None
+    for attempt in range(3):
+        try:
+            spy_raw = yf.Ticker('SPY').history(period=f'{lookback_days}d', auto_adjust=True)
+            spy_raw = _strip_tz(spy_raw)
+            if not spy_raw.empty and len(spy_raw) >= 2:
+                spy = spy_raw[['Open', 'High', 'Low', 'Close', 'Volume']]
+                break
+        except Exception as e:
+            print(f'  [CrashSurge-Light] SPY 수집 시도 {attempt+1}/3 실패: {e}')
+        if attempt < 2:
+            time.sleep(2)
+    if spy is None or spy.empty:
+        raise RuntimeError('SPY OHLCV 수집 실패 (3회 재시도 후)')
 
     # 2) FRED 8개 — 파일 캐시 우선, 없으면 새로 수집
     fred = _load_fred_cache()                                # 파일 캐시 로드 시도
@@ -343,15 +367,28 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict,
 
     # ── 신용 (3개) — FRED 전용 ──
     for col in ['HY_OAS', 'BBB_OAS', 'CCC_OAS']:
-        feat[col] = fred[col][col].reindex(spy.index).ffill()
+        s = fred[col][col].reindex(spy.index).ffill()
+        # FRED 데이터가 비어있으면 bfill로 채움 (최신일 NaN 방지)
+        if s.isna().all():
+            print(f'  [compute_features] {col}: FRED 데이터 비어있음, 0으로 대체')
+            s = s.fillna(0)
+        feat[col] = s
 
     # ── 금리 (2개) — Yahoo ^TNX, ^IRX 사용 ──
     dgs10_s = yahoo_macro.get('DGS10', pd.Series(dtype=float))  # ^TNX (10년 금리)
     irx_s = yahoo_macro.get('IRX_3M', pd.Series(dtype=float))   # ^IRX (3개월 금리)
-    feat['DGS10_LEVEL'] = dgs10_s.reindex(spy.index).ffill()    # 10년 국채금리
+    dgs10_ff = dgs10_s.reindex(spy.index).ffill()
+    irx_ff = irx_s.reindex(spy.index).ffill()
+    # Yahoo ^TNX/^IRX 수집 실패 시 bfill → 0 대체 (최신일 NaN 방지)
+    if dgs10_ff.isna().all():
+        print('  [compute_features] DGS10: Yahoo ^TNX 데이터 비어있음, 0으로 대체')
+        dgs10_ff = dgs10_ff.fillna(0)
+    if irx_ff.isna().all():
+        print('  [compute_features] IRX_3M: Yahoo ^IRX 데이터 비어있음, 0으로 대체')
+        irx_ff = irx_ff.fillna(0)
+    feat['DGS10_LEVEL'] = dgs10_ff                              # 10년 국채금리
     # T10Y3M = 10년 금리 - 3개월 금리 (수익률곡선 기울기)
-    feat['T10Y3M_SLOPE'] = (dgs10_s.reindex(spy.index).ffill()
-                            - irx_s.reindex(spy.index).ffill())
+    feat['T10Y3M_SLOPE'] = dgs10_ff - irx_ff
 
     # ── 크로스에셋 (2개) — DX-Y.NYB 제거, CL=F 사용 ──
     dxy_s = yahoo_macro.get('DTWEXBGS', pd.Series(dtype=float))  # 달러인덱스 (DX-Y.NYB 제거됨)

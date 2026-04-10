@@ -175,6 +175,7 @@ def run_pipeline(light: bool = False) -> None:
                 from collector.crash_surge_data import CORE_FEATURES, AUX_FEATURES
                 import numpy as np
                 feat_row = features_light[ALL_FEATURES].copy()  # 피처만 추출
+                feat_row = feat_row.ffill()  # FRED/Yahoo 결측 → 직전 값으로 채움
                 feat_row = feat_row.dropna(subset=CORE_FEATURES)  # Core NaN 제거
                 feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)  # Aux 결측 대체
                 feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)  # inf 제거
@@ -239,23 +240,55 @@ def run_pipeline(light: bool = False) -> None:
             cs_should_retrain = (cs_model is None or
                                  cs_model.get('train_month') != current_month)
             if cs_should_retrain:
-                print('[Step 7] 모델 재학습 (Optuna 50 trials)...')
-                X_tr, y_tr = cs_datasets['train']
-                X_cal, y_cal = cs_datasets['calib']
-                X_te, y_te = cs_datasets['test']
-                X_dev, y_dev = cs_datasets['dev']
-                X_full = cs_datasets['df_full'][ALL_FEATURES].values
-                cs_model = train_crash_surge(X_tr, y_tr, X_cal, y_cal, X_te, y_te,
-                                             X_dev, y_dev, X_full, n_trials=50)
+                try:
+                    print('[Step 7] 모델 재학습 (Optuna 50 trials)...')
+                    X_tr, y_tr = cs_datasets['train']
+                    X_cal, y_cal = cs_datasets['calib']
+                    X_te, y_te = cs_datasets['test']
+                    X_dev, y_dev = cs_datasets['dev']
+                    X_full = cs_datasets['df_full'][ALL_FEATURES].values
+                    cs_model = train_crash_surge(X_tr, y_tr, X_cal, y_cal, X_te, y_te,
+                                                 X_dev, y_dev, X_full, n_trials=50)
+                except Exception as e:
+                    print(f'[Step 7] 모델 재학습 실패, 기존 모델로 예측 계속: {e}')
+                    traceback.print_exc()
+                    cs_model = load_crash_surge_model()  # 기존 모델 다시 로드
             else:
                 print(f'[Step 7] 기존 모델 사용 (학습 월: {cs_model["train_month"]})')
 
-            latest_row = cs_datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
-            cs_result = predict_crash_surge(latest_row, cs_model)
-            upsert_crash_surge(cs_result)
+            # 예측은 재학습 성패와 무관하게 실행
+            if cs_model is not None:
+                latest_row = cs_datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
+                cs_result = predict_crash_surge(latest_row, cs_model)
+                upsert_crash_surge(cs_result)
+            else:
+                print('[Step 7] 사용 가능한 모델 없음, 예측 건너뜀')
         except Exception as e:
-            print(f'[Step 7] 폭락/급등 전조 실패, 건너뜀: {e}')
+            print(f'[Step 7] 폭락/급등 전조 실패, 경량 fallback 시도: {e}')
             traceback.print_exc()
+            # Fallback: 경량 수집으로 예측 시도
+            try:
+                fallback_model = load_crash_surge_model()
+                if fallback_model is not None:
+                    import numpy as np
+                    from collector.crash_surge_data import CORE_FEATURES, AUX_FEATURES
+                    raw_light = fetch_crash_surge_light()
+                    features_light = compute_features(raw_light['spy'], raw_light['fred'],
+                                                      raw_light['cboe'], raw_light['yahoo_macro'])
+                    feat_row = features_light[ALL_FEATURES].copy()
+                    feat_row = feat_row.ffill()
+                    feat_row = feat_row.dropna(subset=CORE_FEATURES)
+                    feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)
+                    feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)
+                    if len(feat_row) > 0:
+                        latest_row = feat_row.iloc[[-1]].values
+                        cs_result = predict_crash_surge(latest_row, fallback_model)
+                        upsert_crash_surge(cs_result)
+                        print('[Step 7-fallback] 경량 수집으로 예측 성공')
+                    else:
+                        print('[Step 7-fallback] 유효한 피처 행 없음')
+            except Exception as e2:
+                print(f'[Step 7-fallback] 경량 fallback도 실패: {e2}')
 
         # Step 7b: 백필 (모델 학습/예측과 분리)
         if cs_should_retrain and cs_datasets is not None and cs_model is not None:
