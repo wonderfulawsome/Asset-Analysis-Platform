@@ -404,3 +404,134 @@ def refresh_crash_surge():
     finally:
         _refresh_running = False
 """
+
+
+# ══════════════════════════════════════════════════════════
+# [3] 2026-04-09 13:10 (UTC)
+#     Noise Score → 펀더멘털 주가 괴리 점수 (0~10 스케일 변환)
+# ══════════════════════════════════════════════════════════
+#
+# [변경 사항]
+#   - "Noise Score" 명칭을 "펀더멘털 주가 괴리 점수"로 변경
+#   - 점수 스케일을 -2~7(원본) → 0~10(표시용)으로 변환
+#   - 0점 = 이성적 만점(펀더멘털 반영), 10점 = 감정적 만점(펀더멘털 괴리)
+#   - 변환 공식: new = (old + 2) * 10 / 9, clamp [0, 10]
+#   - DB 저장값(원본)은 변경 안 함 → 표시/AI 프롬프트에서만 변환
+#
+# [수정 파일]
+#   1. static/js/main.js           - _rescaleNoise() 함수 추가, 게이지/차트/인사이트 적용
+#   2. api/routers/market_summary.py - AI 프롬프트 + _build_indicator_text() + _build_explain_text()
+#   3. static/js/i18n.js           - 라벨 변경 (Noise Score → 괴리 점수)
+#
+# ──────────────────────────────────────────────────────────
+# 파일 1: static/js/main.js  _rescaleNoise() (line 66~69)
+# ──────────────────────────────────────────────────────────
+
+MAINJS_RESCALE_NOISE = """
+// 펀더멘털 주가 괴리 점수: 원본(-2~7) → 0~10 스케일 변환
+function _rescaleNoise(raw) {
+  if (raw == null) return null;
+  return Math.max(0, Math.min(10, (raw + 2) * 10 / 9));
+}
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 1: static/js/main.js  loadRegime() 게이지 위치 (line 637~641)
+# ──────────────────────────────────────────────────────────
+
+MAINJS_GAUGE_POSITION = """
+  const nsRaw = data.noise_score ?? null;
+  const ns = _rescaleNoise(nsRaw);
+  let pos;
+  if (ns != null) {
+    pos = 5 + (ns / 10) * 90;  // 0→5%, 10→95%
+    pos = Math.max(5, Math.min(95, pos));
+  } else { pos = NR_GAP_POS[name] ?? 50; }
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 1: static/js/main.js  loadNoiseChart() (line 1530~1541)
+# ──────────────────────────────────────────────────────────
+
+MAINJS_NOISE_CHART = """
+    const points = sorted.map(r => ({
+      label: r.date.slice(5),
+      fullLabel: r.date,
+      value: _rescaleNoise(r.noise_score != null ? r.noise_score : 0),  // 0~10 스케일 변환
+    }));
+
+    renderLineChart('nr-chart', points, {
+      color: 'var(--accent)',
+      zeroLine: false,                                             // 0~10 스케일이므로 비활성
+      refLineValue: 5,                                             // 중간값 기준선 (5/10)
+      dotColor: v => v >= 3 ? 'var(--red)' : 'var(--green)',       // 3 이상 빨강, 미만 초록
+      yTopLabel: t('chart.yTop'),                                  // 감정적
+      yBottomLabel: t('chart.yBottom'),                            // 이성적
+    });
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 1: static/js/main.js  renderLineChart() refLineValue 지원 (line 1309~1315)
+# ──────────────────────────────────────────────────────────
+
+MAINJS_REFLINE = """
+  let zeroLineStr = '';
+  if (options.refLineValue != null && yMin <= options.refLineValue && yMax >= options.refLineValue) {
+    zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(options.refLineValue).toFixed(1)}"
+                   x2="${W - pad.right}" y2="${y(options.refLineValue).toFixed(1)}"/>`;
+  } else if (hasZero && yMin < 0 && yMax > 0) {
+    zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(0).toFixed(1)}"
+                   x2="${W - pad.right}" y2="${y(0).toFixed(1)}"/>`;
+  }
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 2: api/routers/market_summary.py  _build_indicator_text() (line 128~157)
+#   - noise_score를 0~10 스케일로 변환 후 AI에 전달
+#   - 한국어: "펀더멘털 주가 괴리 점수: X.X/10"
+#   - 영어: "Fundamental-Price Divergence Score: X.X/10"
+# ──────────────────────────────────────────────────────────
+
+MARKET_SUMMARY_INDICATOR = """
+        ns_raw = regime.get('noise_score', 0)
+        try:
+            ns_scaled = round(max(0, min(10, (float(ns_raw) + 2) * 10 / 9)), 1)
+        except (TypeError, ValueError):
+            ns_scaled = 0
+        # 한국어
+        lines.append(f"펀더멘털 주가 괴리 점수: {ns_scaled}/10 → {interp}")
+        lines.append(f"  (0점=이성적/펀더멘털 반영, 10점=감정적/펀더멘털 괴리)")
+        # 영어
+        lines.append(f"Fundamental-Price Divergence Score: {ns_scaled}/10 → {interp}")
+        lines.append(f"  (0 = rational/fundamental-aligned, 10 = emotional/sentiment-driven)")
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 2: api/routers/market_summary.py  _EXPLAIN_PROMPTS 한국어 (line 287~307)
+#   - "Noise Score" → "펀더멘털 주가 괴리 점수"
+#   - 스케일 설명: 0~10 (0=이성적, 10=감정적)
+# ──────────────────────────────────────────────────────────
+
+EXPLAIN_PROMPT_KO = """
+배경 지식:
+- "펀더멘털 주가 괴리 점수"는 0~10점 스케일이다
+- 0점에 가까울수록: 이성적 — 주가가 펀더멘털(기업 가치)을 잘 반영
+- 10점에 가까울수록: 감정적 — 주가가 펀더멘털에서 벗어나 감정/유동성에 의해 움직임
+- 0~2: 이성적, 2~4: 약간 괴리, 4~6: 괴리 존재, 6~10: 큰 괴리(감정적 시장)
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 3: static/js/i18n.js
+#   - 'detail.noiseScore': 'Noise Score:' → '괴리 점수:' (ko) / 'Divergence Score:' (en)
+#   - 'detail.noiseComposition': → '괴리 점수 구성' / 'Divergence Score Breakdown'
+# ──────────────────────────────────────────────────────────
+
+I18N_NOISE_LABELS_KO = """
+    'detail.noiseScore': '괴리 점수:',
+    'detail.noiseComposition': '괴리 점수 구성',
+"""
+
+I18N_NOISE_LABELS_EN = """
+    'detail.noiseScore': 'Divergence Score:',
+    'detail.noiseComposition': 'Divergence Score Breakdown',
+"""

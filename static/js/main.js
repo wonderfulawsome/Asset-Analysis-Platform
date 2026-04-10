@@ -4,8 +4,9 @@ var _nrData = null;
 var _fgData = null;  // 공포탐욕 데이터 캐시 (인사이트 연동용)
 
 // ── 공포탐욕 × Noise 인사이트 ──
-function _buildFgNoiseInsight(noiseScore) {
-  if (!_fgData || noiseScore == null) return '';
+function _buildFgNoiseInsight(noiseScoreRaw) {
+  if (!_fgData || noiseScoreRaw == null) return '';
+  const noiseScore = _rescaleNoise(noiseScoreRaw);
   const rating = _fgData.rating;
   const score = _fgData.score;
   const FEAR_SET = new Set(['공포', '극도 공포']);
@@ -13,7 +14,7 @@ function _buildFgNoiseInsight(noiseScore) {
 
   let msg, color, tag, tagColor;
   if (FEAR_SET.has(rating)) {
-    if (noiseScore >= 0) {
+    if (noiseScore >= 3) {
       tag = 'IRRATIONAL FEAR';
       msg = `공포 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 공포가 감지됩니다`;
       color = '#3B82F6'; tagColor = '#60A5FA';
@@ -23,7 +24,7 @@ function _buildFgNoiseInsight(noiseScore) {
       color = '#EF4444'; tagColor = '#F87171';
     }
   } else if (GREED_SET.has(rating)) {
-    if (noiseScore >= 0) {
+    if (noiseScore >= 3) {
       tag = 'IRRATIONAL GREED';
       msg = `탐욕 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 낙관이 감지됩니다`;
       color = '#EF4444'; tagColor = '#F87171';
@@ -60,6 +61,12 @@ function lucideIcon(name, size, sw) {
 
 // NR 국면 데이터 (API 한글 키 기반, 표시 텍스트는 i18n에서 처리)
 const NR_PHASES = ['펀더멘털 반영', '펀더멘털 약반영', '펀더멘털-주가 불일치', '센티멘트 지배']; // 국면 목록
+
+// 펀더멘털 주가 괴리 점수: 원본(-2~7) → 0~10 스케일 변환
+function _rescaleNoise(raw) {
+  if (raw == null) return null;
+  return Math.max(0, Math.min(10, (raw + 2) * 10 / 9));
+}
 const NR_GAP_POS   = { '펀더멘털 반영': 12, '펀더멘털 약반영': 37, '펀더멘털-주가 불일치': 63, '센티멘트 지배': 88 }; // 갭바 위치
 const NR_GAP_COLOR = { '펀더멘털 반영': '#4CAF50', '펀더멘털 약반영': '#8BC34A', '펀더멘털-주가 불일치': '#FF9800', '센티멘트 지배': '#F44336' }; // 갭바 색상
 const NR_BADGE = {                                // 뱃지 스타일 (텍스트는 i18n)
@@ -629,14 +636,12 @@ async function loadRegime() {
 
   const name  = data.regime_name ?? '';              // API 한글 국면명
   // noise_score 기반 동적 위치 계산 (범위: 5%~95%)
-  // 분포 기반 기준: min=-5(P01), mid=0(P50 중앙값), max=10(~P93)
-  // 중심점(mid=0)을 50%로, 양쪽 대칭 스케일링
-  const ns = data.noise_score ?? null;
+  // 0~10 스케일로 변환 후 게이지 위치 계산
+  const nsRaw = data.noise_score ?? null;
+  const ns = _rescaleNoise(nsRaw);
   let pos;
   if (ns != null) {
-    const mid = 0;
-    if (ns <= mid) { pos = 5 + ((ns - (-5)) / (mid - (-5))) * 45; }   // -5→5%, 0→50%
-    else           { pos = 50 + ((ns - mid) / (10 - mid)) * 45; }     // 0→50%, 10→95%
+    pos = 5 + (ns / 10) * 90;  // 0→5%, 10→95%
     pos = Math.max(5, Math.min(95, pos));
   } else { pos = NR_GAP_POS[name] ?? 50; }
   const color = NR_GAP_COLOR[name] ?? '#999';        // 갭바 색상
@@ -676,7 +681,7 @@ async function loadRegime() {
         <span>${t('nr.gap')}</span>
       </div>
     </div>
-    ${_buildFgNoiseInsight(ns)}`;
+    ${_buildFgNoiseInsight(nsRaw)}`;
 
   // 카드 터치 → 상세페이지
   const card = container.closest('.card');
@@ -1302,9 +1307,11 @@ function renderLineChart(containerId, points, options = {}) {
     gridLines += `<line class="chart-grid-line" x1="${pad.left}" y1="${yPos.toFixed(1)}" x2="${W - pad.right}" y2="${yPos.toFixed(1)}"/>`;
   }
 
-  // 0 기준선
-  let zeroLineStr = '';                                            // 0 기준선 SVG
-  if (hasZero && yMin < 0 && yMax > 0) {
+  // 0 기준선 또는 커스텀 기준선
+  let zeroLineStr = '';                                            // 기준선 SVG
+  if (options.refLineValue != null && yMin <= options.refLineValue && yMax >= options.refLineValue) {
+    zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(options.refLineValue).toFixed(1)}" x2="${W - pad.right}" y2="${y(options.refLineValue).toFixed(1)}"/>`;
+  } else if (hasZero && yMin < 0 && yMax > 0) {
     zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(0).toFixed(1)}" x2="${W - pad.right}" y2="${y(0).toFixed(1)}"/>`;
   }
 
@@ -1526,15 +1533,16 @@ async function loadNoiseChart() {
     const points = sorted.map(r => ({                              // 그래프 포인트 변환
       label: r.date.slice(5),                                      // MM-DD 형식 라벨
       fullLabel: r.date,                                           // 전체 날짜 (툴팁용)
-      value: r.noise_score != null ? r.noise_score : 0,            // noise_score 값
+      value: _rescaleNoise(r.noise_score != null ? r.noise_score : 0),  // 0~10 스케일 변환
     }));
 
     renderLineChart('nr-chart', points, {                          // 그래프 렌더링
       color: 'var(--accent)',                                      // 보라색 선
-      zeroLine: true,                                              // 0 기준선 표시
-      dotColor: v => v >= 0 ? 'var(--red)' : 'var(--green)',       // 양수(노이즈↑) 빨강, 음수(펀더멘털) 초록
-      yTopLabel: t('chart.yTop'),                                     // Y축 상단: 노이즈 높음
-      yBottomLabel: t('chart.yBottom'),                              // Y축 하단: 펀더멘털 반영
+      zeroLine: false,                                             // 0 기준선 비활성 (0~10 스케일)
+      refLineValue: 5,                                             // 중간값 기준선 (5/10)
+      dotColor: v => v >= 3 ? 'var(--red)' : 'var(--green)',       // 3 이상 빨강, 미만 초록
+      yTopLabel: t('chart.yTop'),                                     // Y축 상단: 감정적
+      yBottomLabel: t('chart.yBottom'),                              // Y축 하단: 이성적
     });
   } catch (e) {
     console.error('NR chart error:', e);                           // 에러 로그
@@ -1829,7 +1837,7 @@ function renderNoiseDetail(body) {
   body.innerHTML = `<div style="text-align:center;margin-bottom:16px">
     <div style="font-size:14px;color:var(--sub);font-weight:600">${t('detail.currentPhase')}</div>
     <div style="font-size:24px;font-weight:800;color:${nrIcon.color};display:flex;align-items:center;justify-content:center;gap:8px">${nrIcon.icon ? lucideIcon(nrIcon.icon, 28, 1.8) : ''} ${tNrPhase(d.regime_name)}</div>
-    <div style="font-size:13px;color:var(--sub);margin-top:4px">${t('detail.noiseScore')} ${d.noise_score?.toFixed(4) ?? '--'}</div>
+    <div style="font-size:13px;color:var(--sub);margin-top:4px">${t('detail.noiseScore')} ${d.noise_score != null ? _rescaleNoise(d.noise_score).toFixed(1) : '--'} / 10</div>
   </div>
   <div style="margin:0 0 16px;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(255,140,0,0.08),rgba(255,140,0,0.02));border:1px solid rgba(255,140,0,0.15)">
     <div style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;color:#FF8C00;letter-spacing:1px;margin-bottom:6px">ML MODEL INFO</div>
