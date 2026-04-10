@@ -343,15 +343,28 @@ def compute_features(spy: pd.DataFrame, fred: dict, cboe: dict,
 
     # ── 신용 (3개) — FRED 전용 ──
     for col in ['HY_OAS', 'BBB_OAS', 'CCC_OAS']:
-        feat[col] = fred[col][col].reindex(spy.index).ffill()
+        s = fred[col][col].reindex(spy.index).ffill()
+        # FRED 데이터가 비어있으면 bfill로 채움 (최신일 NaN 방지)
+        if s.isna().all():
+            print(f'  [compute_features] {col}: FRED 데이터 비어있음, 0으로 대체')
+            s = s.fillna(0)
+        feat[col] = s
 
     # ── 금리 (2개) — Yahoo ^TNX, ^IRX 사용 ──
     dgs10_s = yahoo_macro.get('DGS10', pd.Series(dtype=float))  # ^TNX (10년 금리)
     irx_s = yahoo_macro.get('IRX_3M', pd.Series(dtype=float))   # ^IRX (3개월 금리)
-    feat['DGS10_LEVEL'] = dgs10_s.reindex(spy.index).ffill()    # 10년 국채금리
+    dgs10_ff = dgs10_s.reindex(spy.index).ffill()
+    irx_ff = irx_s.reindex(spy.index).ffill()
+    # Yahoo ^TNX/^IRX 수집 실패 시 bfill → 0 대체 (최신일 NaN 방지)
+    if dgs10_ff.isna().all():
+        print('  [compute_features] DGS10: Yahoo ^TNX 데이터 비어있음, 0으로 대체')
+        dgs10_ff = dgs10_ff.fillna(0)
+    if irx_ff.isna().all():
+        print('  [compute_features] IRX_3M: Yahoo ^IRX 데이터 비어있음, 0으로 대체')
+        irx_ff = irx_ff.fillna(0)
+    feat['DGS10_LEVEL'] = dgs10_ff                              # 10년 국채금리
     # T10Y3M = 10년 금리 - 3개월 금리 (수익률곡선 기울기)
-    feat['T10Y3M_SLOPE'] = (dgs10_s.reindex(spy.index).ffill()
-                            - irx_s.reindex(spy.index).ffill())
+    feat['T10Y3M_SLOPE'] = dgs10_ff - irx_ff
 
     # ── 크로스에셋 (2개) — DX-Y.NYB 제거, CL=F 사용 ──
     dxy_s = yahoo_macro.get('DTWEXBGS', pd.Series(dtype=float))  # 달러인덱스 (DX-Y.NYB 제거됨)

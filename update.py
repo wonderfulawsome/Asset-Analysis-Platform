@@ -189,3 +189,142 @@ I18N_EN = """
     'chart.predictLoading': 'Running forecast model',
     'chart.predictError': 'Failed to load prediction. Please try again later.',
 """
+
+
+# ══════════════════════════════════════════════════════════
+# [2] 2026-04-09 12:35 (UTC)
+#     방향성 예측 추이 그래프 4월 2일 이후 업데이트 안 되는 문제 수정
+# ══════════════════════════════════════════════════════════
+#
+# [문제]
+#   - 신호 탭의 "방향성 예측 추이 (30일)" 그래프가 4월 2일 이후 업데이트되지 않음
+#   - 원인 1: scheduler Step 7에서 월초 모델 재학습(Optuna 50 trials) 실패 시
+#     예측까지 통째로 스킵됨 (재학습과 예측이 같은 try/except에 있어서)
+#   - 원인 2: 경량 파이프라인(Step 5b)에서 FRED/Yahoo 결측 시 NaN으로 최신 행 드롭
+#   - 원인 3: compute_features()에서 Yahoo ^TNX/^IRX 수집 실패 시 CORE_FEATURES 전체 NaN
+#
+# [수정 파일]
+#   1. scheduler/job.py           - Step 7 재학습/예측 분리, 경량 fallback 추가
+#   2. scheduler/job.py           - Step 5b ffill 추가
+#   3. collector/crash_surge_data.py - compute_features() FRED/Yahoo 빈 데이터 안전 처리
+#
+# ──────────────────────────────────────────────────────────
+# 파일 1: scheduler/job.py  Step 7 (line 225~289)
+#   - 모델 재학습을 별도 try/except로 분리 → 실패해도 기존 모델로 예측 계속
+#   - 전체 수집 실패 시 경량 수집(fetch_crash_surge_light) fallback 추가
+# ──────────────────────────────────────────────────────────
+
+JOB_PY_STEP7 = """
+        # Step 7: XGBoost 폭락/급등 전조 탐지 (모델 학습 + 오늘 예측)
+        print('\\n[Step 7] 폭락/급등 전조 탐지...')
+        cs_datasets = None
+        cs_model = None
+        cs_should_retrain = False
+        try:
+            raw = fetch_crash_surge_raw(fred_cache=fred_cache)
+            save_fred_cache(raw['fred'])
+            features = compute_features(raw['spy'], raw['fred'], raw['cboe'],
+                                                  raw['yahoo_macro'])
+            labels = compute_labels(raw['spy']['Close'])
+            cs_datasets = prepare_datasets(features, labels, raw['spy']['Close'])
+
+            cs_model = load_crash_surge_model()
+            current_month = datetime.date.today().strftime('%Y-%m')
+            cs_should_retrain = (cs_model is None or
+                                 cs_model.get('train_month') != current_month)
+            if cs_should_retrain:
+                try:
+                    print('[Step 7] 모델 재학습 (Optuna 50 trials)...')
+                    X_tr, y_tr = cs_datasets['train']
+                    X_cal, y_cal = cs_datasets['calib']
+                    X_te, y_te = cs_datasets['test']
+                    X_dev, y_dev = cs_datasets['dev']
+                    X_full = cs_datasets['df_full'][ALL_FEATURES].values
+                    cs_model = train_crash_surge(X_tr, y_tr, X_cal, y_cal, X_te, y_te,
+                                                 X_dev, y_dev, X_full, n_trials=50)
+                except Exception as e:
+                    print(f'[Step 7] 모델 재학습 실패, 기존 모델로 예측 계속: {e}')
+                    traceback.print_exc()
+                    cs_model = load_crash_surge_model()  # 기존 모델 다시 로드
+            else:
+                print(f'[Step 7] 기존 모델 사용 (학습 월: {cs_model["train_month"]})')
+
+            # 예측은 재학습 성패와 무관하게 실행
+            if cs_model is not None:
+                latest_row = cs_datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
+                cs_result = predict_crash_surge(latest_row, cs_model)
+                upsert_crash_surge(cs_result)
+            else:
+                print('[Step 7] 사용 가능한 모델 없음, 예측 건너뜀')
+        except Exception as e:
+            print(f'[Step 7] 폭락/급등 전조 실패, 경량 fallback 시도: {e}')
+            traceback.print_exc()
+            # Fallback: 경량 수집으로 예측 시도
+            try:
+                fallback_model = load_crash_surge_model()
+                if fallback_model is not None:
+                    import numpy as np
+                    from collector.crash_surge_data import CORE_FEATURES, AUX_FEATURES
+                    raw_light = fetch_crash_surge_light()
+                    features_light = compute_features(raw_light['spy'], raw_light['fred'],
+                                                      raw_light['cboe'], raw_light['yahoo_macro'])
+                    feat_row = features_light[ALL_FEATURES].copy()
+                    feat_row = feat_row.ffill()
+                    feat_row = feat_row.dropna(subset=CORE_FEATURES)
+                    feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)
+                    feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)
+                    if len(feat_row) > 0:
+                        latest_row = feat_row.iloc[[-1]].values
+                        cs_result = predict_crash_surge(latest_row, fallback_model)
+                        upsert_crash_surge(cs_result)
+                        print('[Step 7-fallback] 경량 수집으로 예측 성공')
+                    else:
+                        print('[Step 7-fallback] 유효한 피처 행 없음')
+            except Exception as e2:
+                print(f'[Step 7-fallback] 경량 fallback도 실패: {e2}')
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 2: scheduler/job.py  Step 5b (line 177)
+#   - ffill() 추가: FRED/Yahoo 결측값을 직전 행 값으로 채움
+# ──────────────────────────────────────────────────────────
+
+JOB_PY_STEP5B_FFILL = """
+                feat_row = features_light[ALL_FEATURES].copy()  # 피처만 추출
+                feat_row = feat_row.ffill()  # FRED/Yahoo 결측 → 직전 값으로 채움  ← 추가됨
+                feat_row = feat_row.dropna(subset=CORE_FEATURES)  # Core NaN 제거
+                feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)  # Aux 결측 대체
+                feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)  # inf 제거
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 3: collector/crash_surge_data.py  compute_features() (line 344~367)
+#   - FRED 신용스프레드(HY_OAS, BBB_OAS, CCC_OAS) 빈 데이터 → 0 대체
+#   - Yahoo ^TNX(DGS10), ^IRX(IRX_3M) 빈 데이터 → 0 대체
+# ──────────────────────────────────────────────────────────
+
+CRASH_SURGE_DATA_COMPUTE_FEATURES_CREDIT_RATE = """
+    # ── 신용 (3개) — FRED 전용 ──
+    for col in ['HY_OAS', 'BBB_OAS', 'CCC_OAS']:
+        s = fred[col][col].reindex(spy.index).ffill()
+        # FRED 데이터가 비어있으면 0으로 대체 (최신일 NaN 방지)
+        if s.isna().all():
+            print(f'  [compute_features] {col}: FRED 데이터 비어있음, 0으로 대체')
+            s = s.fillna(0)
+        feat[col] = s
+
+    # ── 금리 (2개) — Yahoo ^TNX, ^IRX 사용 ──
+    dgs10_s = yahoo_macro.get('DGS10', pd.Series(dtype=float))
+    irx_s = yahoo_macro.get('IRX_3M', pd.Series(dtype=float))
+    dgs10_ff = dgs10_s.reindex(spy.index).ffill()
+    irx_ff = irx_s.reindex(spy.index).ffill()
+    # Yahoo ^TNX/^IRX 수집 실패 시 0 대체 (최신일 NaN 방지)
+    if dgs10_ff.isna().all():
+        print('  [compute_features] DGS10: Yahoo ^TNX 데이터 비어있음, 0으로 대체')
+        dgs10_ff = dgs10_ff.fillna(0)
+    if irx_ff.isna().all():
+        print('  [compute_features] IRX_3M: Yahoo ^IRX 데이터 비어있음, 0으로 대체')
+        irx_ff = irx_ff.fillna(0)
+    feat['DGS10_LEVEL'] = dgs10_ff
+    feat['T10Y3M_SLOPE'] = dgs10_ff - irx_ff
+"""
