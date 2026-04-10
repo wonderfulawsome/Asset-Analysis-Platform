@@ -125,36 +125,33 @@ def _build_indicator_text(lang='ko'):
                 lines.append(f"풋콜비율: {macro['putcall_ratio']}")
     regime = fetch_noise_regime_current()
     if regime:
-        ns_raw = regime.get('noise_score', 0)
+        ns = regime.get('noise_score', 0)
         try:
-            ns_raw_val = float(ns_raw)
+            ns_val = float(ns)
         except (TypeError, ValueError):
-            ns_raw_val = 0
-        # 0~10 스케일 변환 (원본: -2~7)
-        ns_val = max(0, min(10, (ns_raw_val + 2) * 10 / 9))
-        ns_disp = round(ns_val, 1)
+            ns_val = 0
         if lang == 'en':
-            if ns_val < 2:
+            if ns_val < -1:
                 interp = 'Price well reflects fundamentals'
-            elif ns_val < 4:
+            elif ns_val < 0:
                 interp = 'Minor divergence, mostly reflecting fundamentals'
-            elif ns_val < 6:
+            elif ns_val < 2:
                 interp = 'Divergence between price and fundamentals'
             else:
                 interp = 'Significant divergence from fundamentals'
-            lines.append(f"Fundamental-Price Divergence Score: {ns_disp}/10 → {interp}")
-            lines.append(f"  (0 = rational/fundamental-aligned, 10 = emotional/sentiment-driven)")
+            lines.append(f"Fundamental-Price Divergence Score: {ns} → {interp}")
+            lines.append(f"  (Negative = reflecting fundamentals, higher positive = greater divergence)")
         else:
-            if ns_val < 2:
+            if ns_val < -1:
                 interp = '주가가 펀더멘털을 잘 반영 중'
-            elif ns_val < 4:
+            elif ns_val < 0:
                 interp = '약간의 괴리가 있으나 대체로 반영'
-            elif ns_val < 6:
+            elif ns_val < 2:
                 interp = '주가와 펀더멘털 사이 괴리 존재'
             else:
                 interp = '주가와 펀더멘털이 크게 괴리됨'
-            lines.append(f"펀더멘털 주가 괴리 점수: {ns_disp}/10 → {interp}")
-            lines.append(f"  (0점=이성적/펀더멘털 반영, 10점=감정적/펀더멘털 괴리)")
+            lines.append(f"펀더멘털 주가 괴리 점수: {ns} → {interp}")
+            lines.append(f"  (음수일수록 펀더멘털 반영, 양수가 클수록 주가가 펀더멘털에서 괴리)")
     cs = fetch_crash_surge_current()
     if cs:
         if lang == 'en':
@@ -187,13 +184,13 @@ _SUMMARY_PROMPTS = {
 
 [이모지] 시장 심리 — (공포탐욕·VIX·RSI를 종합한 심리 해석 1문장)
 [이모지] 방향성 — (하락 위험도·상승 기대도를 종합한 단기 전망 1문장)
-[이모지] 펀더멘털 — (펀더멘털 주가 괴리 점수(0~10) 기반 주가-펀더멘털 관계 1문장)
+[이모지] 펀더멘털 — (펀더멘털 주가 괴리 점수 기반 주가-펀더멘털 관계 1문장)
 [이모지] 종합판단 — (위 3가지를 종합한 결론. 투자자 행동 제안 1문장)
 
 예시:
 ❄️ 시장 심리 — 공포 지수 19로 극단적 공포 구간이며, 투자 심리가 크게 위축된 상황입니다.
 ⚖️ 방향성 — 하락 위험은 높지만 순방향 점수가 양수로, 반등 가능성도 열려 있습니다.
-🧭 펀더멘털 — 괴리 점수 4.6/10으로 주가와 펀더멘털 사이 괴리가 존재합니다.
+🧭 펀더멘털 — 괴리 점수 2.1로 주가와 펀더멘털 사이 괴리가 존재합니다.
 🎯 종합판단 — 공포 속 반등 기대가 있어, 분할 매수 관점의 접근이 유효해 보입니다.
 
 이모지 선택:
@@ -223,7 +220,7 @@ Use an em dash "—" with spaces on both sides. Never merge the title and conten
 Example:
 ❄️ Market Sentiment — Fear index at 19, deep in extreme fear territory with severely depressed investor sentiment.
 ⚖️ Direction — Crash risk is high but positive net score suggests a rebound is possible.
-🧭 Fundamentals — Divergence score 4.6/10 shows a gap between stock prices and fundamentals.
+🧭 Fundamentals — Divergence score of 2.1 shows a gap between stock prices and fundamentals.
 🎯 Overall — With rebound potential amid fear, a dollar-cost averaging approach seems viable.
 
 Emoji choices:
@@ -291,10 +288,10 @@ _EXPLAIN_PROMPTS = {
 너는 한국어 금융 해설가다. 주어진 펀더멘털 주가 괴리 분석 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
 
 배경 지식:
-- "펀더멘털 주가 괴리 점수"는 0~10점 스케일이다
-- 0점에 가까울수록: 이성적 — 주가가 펀더멘털(기업 가치)을 잘 반영하고 있다는 뜻
-- 10점에 가까울수록: 감정적 — 주가가 펀더멘털에서 벗어나 감정이나 유동성에 의해 움직이고 있다는 뜻
-- 0~2: 이성적(펀더멘털 반영), 2~4: 약간 괴리, 4~6: 괴리 존재, 6~10: 큰 괴리(감정적 시장)
+- "펀더멘털 주가 괴리 점수"는 주가가 펀더멘털에서 얼마나 벗어났는지를 나타내는 점수다
+- 음수(-): 주가가 펀더멘털(기업 가치)을 잘 반영하고 있다는 뜻 (이성적 시장)
+- 양수(+): 주가가 펀더멘털에서 벗어나 감정이나 유동성에 의해 움직이고 있다는 뜻 (감정적 시장)
+- 양수가 클수록 괴리가 심함 (0~2: 약간 괴리, 2 이상: 큰 괴리)
 - 피처(feature)는 이 점수를 구성하는 개별 지표들이다
 
 설명할 내용:
@@ -344,10 +341,10 @@ _EXPLAIN_PROMPTS = {
 You are a financial commentator. Explain the given Fundamental-Price Divergence analysis in plain English for everyday investors.
 
 Background:
-- "Fundamental-Price Divergence Score" uses a 0-10 scale
-- Closer to 0: Rational — price reflects fundamentals (company value) well
-- Closer to 10: Emotional — price has deviated from fundamentals, driven by sentiment or liquidity
-- 0-2: Rational (aligned), 2-4: Mild divergence, 4-6: Moderate divergence, 6-10: Significant divergence (emotional)
+- "Fundamental-Price Divergence Score" measures how far price has deviated from fundamentals
+- Negative (-): price reflects fundamentals (company value) well (rational market)
+- Positive (+): price has deviated from fundamentals, driven by sentiment or liquidity (emotional market)
+- Higher positive = greater divergence (0~2: mild, 2+: significant)
 - Features are individual indicators that compose this score
 
 Explain:
@@ -402,15 +399,10 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
         regime = fetch_noise_regime_current()
         if regime:
             lines.append(f"{'Regime' if is_en else '레짐'}: {regime.get('regime_name', '?')}")
-            ns_raw = regime.get('noise_score', 0)
-            try:
-                ns_scaled = round(max(0, min(10, (float(ns_raw) + 2) * 10 / 9)), 1)
-            except (TypeError, ValueError):
-                ns_scaled = 0
             if is_en:
-                lines.append(f"Fundamental-Price Divergence Score: {ns_scaled}/10")
+                lines.append(f"Fundamental-Price Divergence Score: {regime.get('noise_score', '?')}")
             else:
-                lines.append(f"펀더멘털 주가 괴리 점수: {ns_scaled}/10")
+                lines.append(f"펀더멘털 주가 괴리 점수: {regime.get('noise_score', '?')}")
             fc = regime.get('feature_contributions', [])
             if isinstance(fc, str):
                 try:

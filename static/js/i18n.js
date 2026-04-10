@@ -187,8 +187,8 @@ const I18N = {
     'detail.mlLabel': '머신러닝 학습 지표',        // 상세페이지 서브타이틀
     'detail.noData': '데이터 없음',               // 데이터 없음
     'detail.currentPhase': '현재 국면',           // 현재 국면
-    'detail.noiseScore': '괴리 점수:',              // 펀더멘털 주가 괴리 점수
-    'detail.noiseComposition': '괴리 점수 구성',    // 괴리 점수 구성
+    'detail.noiseScore': 'Noise Score:',          // 노이즈 점수
+    'detail.noiseComposition': '노이즈 점수 구성', // 노이즈 구성
     'detail.currentIndicators': '현재 지표 수치',  // 현재 지표
     'detail.usedIndicators': '분석에 사용된 지표',  // 사용 지표
     'detail.shapTitle': 'SHAP 기여도',            // SHAP 제목
@@ -593,8 +593,8 @@ const I18N = {
     'detail.mlLabel': 'ML-Based Indicators',
     'detail.noData': 'No Data',
     'detail.currentPhase': 'Current Phase',
-    'detail.noiseScore': 'Divergence Score:',
-    'detail.noiseComposition': 'Divergence Score Breakdown',
+    'detail.noiseScore': 'Noise Score:',
+    'detail.noiseComposition': 'Noise Score Breakdown',
     'detail.currentIndicators': 'Current Indicators',
     'detail.usedIndicators': 'Indicators Used',
     'detail.shapTitle': 'SHAP Contributions',
