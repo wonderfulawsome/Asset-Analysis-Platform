@@ -328,3 +328,79 @@ CRASH_SURGE_DATA_COMPUTE_FEATURES_CREDIT_RATE = """
     feat['DGS10_LEVEL'] = dgs10_ff
     feat['T10Y3M_SLOPE'] = dgs10_ff - irx_ff
 """
+
+# ──────────────────────────────────────────────────────────
+# 파일 4: collector/crash_surge_data.py  fetch_crash_surge_light() (line 244~258)
+#   - SPY OHLCV 다운로드에 3회 재시도 로직 추가
+# ──────────────────────────────────────────────────────────
+
+CRASH_SURGE_DATA_SPY_RETRY = """
+    # 1) SPY OHLCV — 장 중이면 실시간 가격 포함 (재시도 포함)
+    print('  [CrashSurge-Light] SPY OHLCV 수집...')
+    spy = None
+    for attempt in range(3):
+        try:
+            spy_raw = yf.Ticker('SPY').history(period=f'{lookback_days}d', auto_adjust=True)
+            spy_raw = _strip_tz(spy_raw)
+            if not spy_raw.empty and len(spy_raw) >= 2:
+                spy = spy_raw[['Open', 'High', 'Low', 'Close', 'Volume']]
+                break
+        except Exception as e:
+            print(f'  [CrashSurge-Light] SPY 수집 시도 {attempt+1}/3 실패: {e}')
+        if attempt < 2:
+            time.sleep(2)
+    if spy is None or spy.empty:
+        raise RuntimeError('SPY OHLCV 수집 실패 (3회 재시도 후)')
+"""
+
+# ──────────────────────────────────────────────────────────
+# 파일 5: api/routers/crash_surge.py  /refresh 엔드포인트 (line 125~170)
+#   - 수동 데이터 새로고침 API 추가
+#   - 스케줄러 없이도 crash_surge 예측을 즉시 재실행 가능
+# ──────────────────────────────────────────────────────────
+
+CRASH_SURGE_REFRESH_API = """
+@router.get('/refresh')
+def refresh_crash_surge():
+    global _refresh_running
+    if _refresh_running:
+        return {'status': 'already_running'}
+
+    _refresh_running = True
+    try:
+        import numpy as np
+        from collector.crash_surge_data import (
+            fetch_crash_surge_light, compute_features,
+            ALL_FEATURES, CORE_FEATURES, AUX_FEATURES,
+        )
+        from processor.feature3_crash_surge import (
+            load_model as load_crash_surge_model, predict_crash_surge,
+        )
+
+        cs_model = load_crash_surge_model()
+        if cs_model is None:
+            return {'status': 'error', 'message': 'no model available'}
+
+        raw = fetch_crash_surge_light()
+        features = compute_features(raw['spy'], raw['fred'], raw['cboe'], raw['yahoo_macro'])
+        feat_row = features[ALL_FEATURES].copy()
+        feat_row = feat_row.ffill()
+        feat_row = feat_row.dropna(subset=CORE_FEATURES)
+        feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)
+        feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)
+
+        if len(feat_row) == 0:
+            return {'status': 'error', 'message': 'no valid feature rows'}
+
+        latest_row = feat_row.iloc[[-1]].values
+        result = predict_crash_surge(latest_row, cs_model)
+        upsert_crash_surge(result)
+
+        return {'status': 'ok', 'date': result.get('date'),
+                'crash_score': result.get('crash_score'),
+                'surge_score': result.get('surge_score')}
+    except Exception as e:
+        return {'status': 'error', 'message': str(e)}
+    finally:
+        _refresh_running = False
+"""
