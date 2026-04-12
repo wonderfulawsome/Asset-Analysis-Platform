@@ -11,6 +11,7 @@ from database.repositories import (
     fetch_macro_latest,
     fetch_noise_regime_current,
     fetch_crash_surge_current,
+    fetch_crash_surge_history,
     fetch_sector_cycle_latest,
 )
 
@@ -154,10 +155,13 @@ def _build_indicator_text(lang='ko'):
             lines.append(f"  (음수일수록 펀더멘털 반영, 양수가 클수록 주가가 펀더멘털에서 괴리)")
     cs = fetch_crash_surge_current()
     if cs:
+        c_s = cs.get('crash_prob', 0) or 0
+        s_s = cs.get('surge_prob', 0) or 0
+        gap = round(c_s - s_s, 1)
         if lang == 'en':
-            lines.append(f"Crash Risk: {cs.get('crash_prob', '?')}pts, Surge Potential: {cs.get('surge_prob', '?')}pts, Net Direction: {cs.get('net_score', '?')}")
+            lines.append(f"Crash Risk: {c_s}pts, Surge Potential: {s_s}pts, Gap: {gap:+.1f}pts")
         else:
-            lines.append(f"하락 위험도: {cs.get('crash_prob', '?')}점, 상승 기대도: {cs.get('surge_prob', '?')}점, 순방향: {cs.get('net_score', '?')}")
+            lines.append(f"하락 위험도: {c_s}점, 상승 기대도: {s_s}점, 간극: {gap:+.1f}점")
     prices = fetch_index_prices_latest()
     if prices:
         major = [p for p in prices if p.get('ticker') in ('SPY', 'QQQ', 'DIA', 'VOO', 'IWM')]
@@ -309,10 +313,16 @@ _EXPLAIN_PROMPTS = {
         'signal': """/no_think
 너는 한국어 금융 해설가다. 주어진 하락/상승 예측 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
 
+배경 지식:
+- "간극(Gap)"은 하락 위험도에서 상승 기대도를 뺀 값이다
+- 간극이 양수(+)이면 하락 위험이 더 높고, 음수(-)이면 상승 기대가 더 높다
+- 간극의 절대값이 클수록 한쪽으로 강하게 기울어진 것이다
+- 30일 추세에서 간극이 확대되면 위험 증가, 축소되면 기회 증가를 의미한다
+
 설명할 내용:
-1. 현재 하락 위험도와 상승 기대도가 각각 어느 수준인지
-2. 어떤 요인이 가장 크게 작용하고 있는지 (SHAP 상위 3개 중심)
-3. 투자자가 주의할 점
+1. 현재 간극이 얼마이고, 어느 쪽으로 기울어져 있는지 (점수 자체보다 간극의 크기와 방향에 집중)
+2. 30일간 이 간극이 어떻게 변해왔는지 (확대/축소/안정 추세)
+3. 이 간극 추세가 투자자에게 의미하는 바 (SHAP 상위 요인 1~2개 언급)
 
 규칙:
 - 3~4문장, 총 150자 이내
@@ -362,10 +372,16 @@ Rules:
         'signal': """/no_think
 You are a financial commentator. Explain the given crash/surge prediction results in plain English for everyday investors.
 
+Background:
+- "Gap" is crash risk minus surge potential
+- Positive gap = tilted toward downside risk; Negative gap = tilted toward upside potential
+- Larger absolute gap = stronger tilt in one direction
+- A widening 30-day gap trend signals increasing risk; narrowing signals increasing opportunity
+
 Explain:
-1. Current levels of crash risk and surge potential
-2. Which factors are most influential (top 3 SHAP values)
-3. Key points for investors to watch
+1. Current gap size and direction (focus on the gap rather than individual scores)
+2. How this gap has evolved over the past 30 days (widening/narrowing/stable trend)
+3. What this gap trend means for investors (mention 1-2 top SHAP factors)
 
 Rules:
 - 3-4 sentences, under 200 characters total
@@ -427,14 +443,60 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
     elif tab == 'signal':
         cs = fetch_crash_surge_current()
         if cs:
+            crash_s = cs.get('crash_prob', 0) or 0
+            surge_s = cs.get('surge_prob', 0) or 0
+            gap = round(crash_s - surge_s, 1)
             if is_en:
-                lines.append(f"Crash Risk: {cs.get('crash_prob', '?')}pts ({cs.get('crash_grade', '?')})")
-                lines.append(f"Surge Potential: {cs.get('surge_prob', '?')}pts ({cs.get('surge_grade', '?')})")
-                lines.append(f"Net Direction Score: {cs.get('net_score', '?')}")
+                lines.append(f"Crash Risk: {crash_s}pts ({cs.get('crash_grade', '?')})")
+                lines.append(f"Surge Potential: {surge_s}pts ({cs.get('surge_grade', '?')})")
+                lines.append(f"Gap (Crash - Surge): {gap:+.1f}pts")
             else:
-                lines.append(f"하락 위험도: {cs.get('crash_prob', '?')}점 ({cs.get('crash_grade', '?')})")
-                lines.append(f"상승 기대도: {cs.get('surge_prob', '?')}점 ({cs.get('surge_grade', '?')})")
-                lines.append(f"순방향 점수: {cs.get('net_score', '?')}")
+                lines.append(f"하락 위험도: {crash_s}점 ({cs.get('crash_grade', '?')})")
+                lines.append(f"상승 기대도: {surge_s}점 ({cs.get('surge_grade', '?')})")
+                lines.append(f"간극 (하락-상승): {gap:+.1f}점")
+
+            # 30일 간극 추세 분석
+            history = fetch_crash_surge_history(30)
+            if history and len(history) >= 2:
+                gaps = []
+                for h in reversed(history):  # 오래된 순으로 정렬
+                    c_s = (h.get('crash_prob') or h.get('crash_score') or 0)
+                    s_s = (h.get('surge_prob') or h.get('surge_score') or 0)
+                    gaps.append({'date': h.get('date', '?'), 'gap': round(c_s - s_s, 1)})
+
+                if len(gaps) >= 5:
+                    recent_5 = [g['gap'] for g in gaps[-5:]]
+                    old_5 = [g['gap'] for g in gaps[:5]]
+                    recent_avg = round(sum(recent_5) / len(recent_5), 1)
+                    old_avg = round(sum(old_5) / len(old_5), 1)
+                    trend_delta = round(recent_avg - old_avg, 1)
+
+                    max_gap = max(gaps, key=lambda g: g['gap'])
+                    min_gap = min(gaps, key=lambda g: g['gap'])
+
+                    if is_en:
+                        lines.append(f"\n30-Day Gap Trend:")
+                        lines.append(f"  Early avg: {old_avg:+.1f} → Recent avg: {recent_avg:+.1f} (change: {trend_delta:+.1f})")
+                        lines.append(f"  Max gap: {max_gap['gap']:+.1f} ({max_gap['date']})")
+                        lines.append(f"  Min gap: {min_gap['gap']:+.1f} ({min_gap['date']})")
+                        if trend_delta > 5:
+                            lines.append(f"  Trend: Gap widening toward crash risk")
+                        elif trend_delta < -5:
+                            lines.append(f"  Trend: Gap narrowing, surge potential increasing")
+                        else:
+                            lines.append(f"  Trend: Gap stable")
+                    else:
+                        lines.append(f"\n30일 간극 추세:")
+                        lines.append(f"  초기 평균: {old_avg:+.1f} → 최근 평균: {recent_avg:+.1f} (변화: {trend_delta:+.1f})")
+                        lines.append(f"  최대 간극: {max_gap['gap']:+.1f} ({max_gap['date']})")
+                        lines.append(f"  최소 간극: {min_gap['gap']:+.1f} ({min_gap['date']})")
+                        if trend_delta > 5:
+                            lines.append(f"  추세: 간극 확대 중 — 하락 위험 쪽으로 기울어지는 중")
+                        elif trend_delta < -5:
+                            lines.append(f"  추세: 간극 축소 중 — 상승 기대가 높아지는 중")
+                        else:
+                            lines.append(f"  추세: 간극 안정적 유지")
+
             shap = cs.get('shap_values', {})
             if isinstance(shap, str):
                 try:
