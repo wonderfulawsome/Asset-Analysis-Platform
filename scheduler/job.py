@@ -306,15 +306,15 @@ def run_pipeline(light: bool = False) -> None:
                 print(f'[Step 7b] 폭락/급등 백필 실패, 건너뜀: {e}')
                 traceback.print_exc()
 
-        # Step 8: Prophet ETF 30일 가격 예측 (16 tickers)
-        print('\n[Step 8] ETF Prophet 예측...')
+        # Step 8: 앙상블 ETF 30일 가격 예측 (16 tickers)
+        print('\n[Step 8] ETF 앙상블 예측...')
         try:
             predict_results = run_chart_predict_all()
             for rec in predict_results:
                 upsert_chart_predict(rec)
             print(f'[Step 8] {len(predict_results)}건 예측 완료')
         except Exception as e:
-            print(f'[Step 8] Prophet 예측 실패, 건너뜀: {e}')
+            print(f'[Step 8] 앙상블 예측 실패, 건너뜀: {e}')
             traceback.print_exc()
 
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산

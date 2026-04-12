@@ -1,1 +1,1 @@
-패시브 투자 비서 시스템의 전체 아키텍처. FastAPI 기반 웹 서버가 프론트엔드 HTML/JS를 서빙하고, APScheduler가 10분/3시간 주기로 데이터 수집·ML 모델 학습·예측을 수행한다. 수집된 데이터와 예측 결과는 Supabase PostgreSQL에 저장되며, REST API를 통해 프론트엔드에 제공된다.
+6-레이어 아키텍처. 프론트엔드(Vanilla JS) → API(FastAPI) → DB(Supabase) 경로로 사용자 요청을 처리하고, 스케줄러(APScheduler)가 수집(collector) → 처리(processor) → DB 경로로 데이터 파이프라인을 주기적으로 실행한다. 모델은 pkl 파일로 models/에 저장.

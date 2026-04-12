@@ -228,11 +228,9 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         preds = [m.predict(last_feat)[0] for m in models]
         raw_ret = np.mean(preds)
 
-        # 방향 부호 유지, GARCH 조건부 σ로 크기 조절
-        direction = np.sign(raw_ret) if abs(raw_ret) > 1e-8 else 0.0
+        # 앙상블 예측 수익률을 3배 증폭 (방향+크기 보존, 매끄러운 곡선)
         g_sigma = garch_sigma_daily[k - 1]
-        # 앙상블 방향 × GARCH σ × 스케일 팩터
-        pred_ret = direction * g_sigma * 1.5
+        pred_ret = raw_ret * 3.0
 
         # 일일 수익률 클램핑
         pred_ret = np.clip(pred_ret, -daily_clip, daily_clip)

@@ -1,1 +1,1 @@
-Yahoo Finance v8 API. 주가, ETF, VIX, 금리, 섹터 주식 등의 OHLCV 데이터를 제공. 무인증 API로 rate limit에 주의 필요. collector/market_data.py에서 100년→50년→30년 fallback 전략 사용.
+Yahoo Finance v8 API. yfinance 라이브러리 + curl_cffi로 주가, VIX, 금리, 31개 ETF, 11개 섹터 ETF 수집. rate limiting 우회. 장중 실시간 가격 지원.

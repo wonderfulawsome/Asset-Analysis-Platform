@@ -174,7 +174,7 @@ const I18N = {
     'chart.priceRange': '가격 범위',              // 가격 범위
     'chart.pctChange': '변동',                    // % 변동
     'chart.predictBtn': '30일 예측',
-    'chart.predictTitle': '30일 주가 예측 (Prophet)',
+    'chart.predictTitle': '30일 주가 예측 (Ensemble)',
     'chart.predictActual': '실제 종가',
     'chart.predictForecast': '예측',
     'chart.predictConfidence': '80% 신뢰구간',
@@ -580,7 +580,7 @@ const I18N = {
     'chart.priceRange': 'Price Range',
     'chart.pctChange': 'Chg',
     'chart.predictBtn': '30-Day Forecast',
-    'chart.predictTitle': '30-Day Price Forecast (Prophet)',
+    'chart.predictTitle': '30-Day Price Forecast (Ensemble)',
     'chart.predictActual': 'Actual Close',
     'chart.predictForecast': 'Forecast',
     'chart.predictConfidence': '80% Confidence',

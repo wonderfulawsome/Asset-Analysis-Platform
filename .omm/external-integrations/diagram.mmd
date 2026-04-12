@@ -1,16 +1,19 @@
 graph LR
-    app["패시브 투자 비서\nFastAPI + APScheduler"]
+    app["FastAPI 앱\napi/app.py"]
 
-    app -->|"시장가·ETF·VIX·금리 수집"| yahoo["Yahoo Finance v8\nquery1.finance.yahoo.com"]
-    app -->|"경제지표 CSV 다운로드"| fred["FRED\nfred.stlouisfed.org"]
-    app -->|"Fear & Greed 지수"| cnn["CNN DataViz API\nproduction.dataviz.cnn.io"]
-    app -->|"PUT/CALL Ratio 스크래핑"| cboe["CBOE 시장 통계\nww2.cboe.com"]
-    app -->|"Shiller PE 데이터"| shiller["Yale Shiller Data\necon.yale.edu"]
-    app -->|"DB CRUD (REST API)"| supabase["Supabase\nPostgreSQL BaaS"]
+    app -->|"yfinance + curl_cffi"| yahoo["Yahoo Finance\n주가·VIX·금리·ETF"]
+    app -->|"FRED API / CSV"| fred["FRED\n신용스프레드·SOFR·NFCI"]
+    app -->|"XLS 다운로드"| shiller["Shiller\nCAPE 비율"]
+    app -->|"REST API"| cnn["CNN\nFear & Greed"]
+    app -->|"웹 스크래핑 + yfinance"| cboe["CBOE\nPut/Call·VIX·SKEW"]
+    app -->|"Supabase REST"| supabase["Supabase\nPostgreSQL"]
     app -->|"Docker 배포"| railway["Railway\n클라우드 호스팅"]
+    app -->|"LLM API"| groq["Groq\nAI 시장 해설"]
 
     classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
     classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
+    classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
 
-    class yahoo,fred,cnn,cboe,shiller,supabase,railway external
+    class yahoo,fred,cnn,cboe,shiller,railway,groq external
     class app entry
+    class supabase store

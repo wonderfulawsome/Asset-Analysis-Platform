@@ -1,1 +1,1 @@
-섹터 ETF 수익률 수집 모듈. Yahoo Finance에서 10개 섹터 ETF + 22개 보유종목의 월별 수익률을 수집한다.
+yfinance로 11개 섹터 ETF(XLK, XLF, XLE, XLV, XLB, XLP, XLU, XLI, XLRE 등) 수익률 수집. 사용자 보유 ETF 수익률도 함께 계산하여 경기국면별 성과 분석에 사용.

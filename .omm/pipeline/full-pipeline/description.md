@@ -1,1 +1,1 @@
-전체 파이프라인 (3시간 주기). 8단계 순차 실행: Step 1~2 거시 지표 100년치 수집·저장, Step 3 Noise HMM 학습+예측+백필, Step 4 Fear & Greed, Step 5 ETF 가격, Step 6 섹터 경기국면 HMM, Step 7 XGBoost 폭락/급등 학습+예측+백필(Optuna 50회), Step 8 Prophet ETF 30일 가격 예측.
+전체 파이프라인 (3시간 주기). 8단계 순차 실행: Step 1~2 거시 지표 100년치 수집·저장, Step 3 Noise HMM 학습+예측+백필, Step 4 Fear & Greed, Step 5 ETF 가격, Step 6 섹터 경기국면 HMM, Step 7 XGBoost 폭락/급등 학습+예측+백필(Optuna 50회), Step 8 앙상블 ETF 30일 가격 예측.

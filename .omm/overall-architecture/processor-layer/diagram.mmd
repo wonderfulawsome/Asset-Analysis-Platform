@@ -1,13 +1,15 @@
 graph LR
-    noise-hmm["Noise HMM 국면 분류\nprocessor/feature1_regime.py"]
-    sector-cycle["섹터 경기국면 분석\nprocessor/feature2_sector_cycle.py"]
-    crash-surge-xgb["폭락/급등 전조 탐지\nprocessor/feature3_crash_surge.py"]
-    chart-predict["ETF 가격 예측\nprocessor/feature4_chart_predict.py"]
+    noise-hmm["feature1_regime.py\nprocessor/feature1_regime.py"]
+    sector-hmm["feature2_sector_cycle.py\nprocessor/feature2_sector_cycle.py"]
+    crash-surge-xgb["feature3_crash_surge.py\nprocessor/feature3_crash_surge.py"]
+    chart-predict["feature4_chart_predict.py\nprocessor/feature4_chart_predict.py"]
 
-    noise-hmm -->|"GaussianHMM 4상태"| models["모델 저장소\nmodels/*.pkl"]
-    sector-cycle -->|"GaussianHMM 4상태"| models
+    noise-hmm -->|"GaussianHMM 4-state"| models["models/\npkl 파일 저장소"]
+    sector-hmm -->|"GaussianHMM 4-state"| models
     crash-surge-xgb -->|"XGBoost 3-class + Optuna"| models
-    chart-predict -->|"5모델 앙상블 + GARCH"| models
+    chart-predict -->|"5모델 앙상블 + GARCH"| db["Supabase\nchart_predict_result"]
 
     classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
+    classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
     class models store
+    class db external

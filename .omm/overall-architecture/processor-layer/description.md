@@ -1,1 +1,1 @@
-ML 모델 학습·예측 처리 레이어. 4개 모듈이 HMM(국면 분류), XGBoost(경기국면·폭락/급등), 앙상블+GARCH(가격 예측) 모델을 학습하고 예측 결과를 생성한다. 학습된 모델은 models/ 디렉토리에 pkl 파일로 저장.
+4개 ML 모델의 학습·예측·백필·모델 저장 레이어. feature1_regime(GaussianHMM 4-state Noise 국면), feature2_sector_cycle(GaussianHMM 4-state 경기국면), feature3_crash_surge(XGBoost 3-class + Optuna 50회 + Platt Scaling + SHAP), feature4_chart_predict(XGBoost+CatBoost+RF+Ridge+SVR 앙상블 + GARCH 30일 예측). 학습된 모델은 models/ 디렉토리에 pkl 파일로 저장.

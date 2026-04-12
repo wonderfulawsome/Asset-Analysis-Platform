@@ -1,1 +1,1 @@
-FastAPI REST API. 8개 라우터가 Supabase에서 데이터를 조회하고 JSON으로 변환하여 프론트엔드에 제공. 일부 라우터는 실시간 Yahoo Finance 호출도 수행(OHLC, 볼륨 비율).
+FastAPI REST API가 Supabase에서 조회한 데이터를 JSON으로 프론트엔드에 제공. 8개 라우터가 국면·매크로·ETF·섹터·폭락/급등·차트·AI해설·방문추적 엔드포인트 담당.

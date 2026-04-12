@@ -1,1 +1,1 @@
-Railway에 Docker로 배포되는 단일 서비스 구조. RUN_SCHEDULER 환경변수로 스케줄러 ON/OFF 제어 가능 (웹 서버 전용 모드 분리 대비). CORS 전면 허용으로 React Native WebView 등 외부 앱에서 API 호출 가능.
+미국 ETF 패시브 투자자를 위한 AI 금융 분석 플랫폼. HMM 시장 국면, XGBoost 폭락/급등 전조, 5모델 앙상블 가격 예측을 제공한다. Railway Docker 배포, Supabase PostgreSQL 사용.

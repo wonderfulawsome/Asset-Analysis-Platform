@@ -1,1 +1,1 @@
-거시 지표 수집 모듈. Yahoo Finance v8 API에서 SP500, VIX, 10년 금리, 3개월 금리, 나스닥100, SOX 지수의 100년치 데이터를 수집한다. RSI, 이동평균 이격도, 거래량 비율, 수익률 등 18개 파생 컬럼을 계산하여 DataFrame으로 반환.
+Yahoo Finance에서 S&P500, VIX, 10Y 금리, 3M 금리, Nasdaq 100, 반도체 지수를 수집. RSI(14), SMA(50/200), 5일 모멘텀 등 파생 피처 계산. 타임아웃 시 lookback을 100y→50y→30y로 축소하는 fallback 포함. 결과는 macro_raw 테이블에 저장.

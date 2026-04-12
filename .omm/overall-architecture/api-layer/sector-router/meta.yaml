@@ -1,0 +1,9 @@
+created: 2026-04-11T18:16:41.240Z
+updated: 2026-04-11T18:16:41.243Z
+update_count: 1
+last_field: description
+kind: nested-class
+title: sector-router
+children: []
+parentPath:
+  - api-layer

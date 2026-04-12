@@ -1,6 +1,6 @@
 created: 2026-03-28T18:51:29.262Z
-updated: 2026-03-28T19:13:14.885Z
-update_count: 4
+updated: 2026-04-11T18:17:51.082Z
+update_count: 6
 last_field: diagram
 kind: nested-class
 title: processor-layer
@@ -9,18 +9,19 @@ children:
   - crash-surge-xgb
   - noise-hmm
   - sector-cycle
+  - sector-hmm
 parentPath: []
-prev_diagram: >
+prev_diagram: |
   graph LR
-      noise-hmm["Noise HMM Regime\nprocessor/feature1_regime.py"]
-      sector-cycle["Sector Cycle HMM\nprocessor/feature2_sector_cycle.py"]
-      crash-surge-xgb["Crash Surge XGBoost\nprocessor/feature3_crash_surge.py"]
-      chart-predict["Chart Predict Ensemble\nprocessor/feature4_chart_predict.py"]
+      noise-hmm["Noise HMM 국면 분류\nprocessor/feature1_regime.py"]
+      sector-cycle["섹터 경기국면 분석\nprocessor/feature2_sector_cycle.py"]
+      crash-surge-xgb["폭락/급등 전조 탐지\nprocessor/feature3_crash_surge.py"]
+      chart-predict["ETF 가격 예측\nprocessor/feature4_chart_predict.py"]
 
-      noise-hmm -->|"regime state"| db["Database Layer"]
-      sector-cycle -->|"cycle phase + sector perf"| db
-      crash-surge-xgb -->|"crash/surge scores"| db
-      chart-predict -->|"30-day forecasts"| db
+      noise-hmm -->|"GaussianHMM 4상태"| models["모델 저장소\nmodels/*.pkl"]
+      sector-cycle -->|"GaussianHMM 4상태"| models
+      crash-surge-xgb -->|"XGBoost 3-class + Optuna"| models
+      chart-predict -->|"5모델 앙상블 + GARCH"| models
 
-      classDef concern fill:#f38ba8,stroke:#f38ba8,color:#1e1e2e
-      class crash-surge-xgb concern
+      classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
+      class models store

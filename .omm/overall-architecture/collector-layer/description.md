@@ -1,1 +1,1 @@
-외부 데이터 수집 레이어. 7개 모듈이 Yahoo Finance, FRED, CNN, CBOE, Shiller 등에서 시장 데이터를 수집한다. 각 모듈은 exponential backoff 재시도, 경량/전체 모드 분기, FRED 캐시 재사용 등을 지원한다.
+7개 수집 모듈이 5개 외부 소스(Yahoo Finance, FRED, Shiller, CNN, CBOE)에서 원시 데이터를 가져와 파생 피처를 계산. market_data(매크로 18개), noise_regime_data(월간 8개 HMM 피처), crash_surge_data(일간 44개 XGBoost 피처), index_price(31 ETF 가격), fear_greed(공포탐욕+Put/Call), sector_macro(섹터 매크로 10개), sector_etf(섹터 ETF 수익률).

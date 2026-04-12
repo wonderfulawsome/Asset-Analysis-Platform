@@ -1,1 +1,1 @@
-Noise vs Signal HMM 국면 분류기. GaussianHMM(4상태)으로 8개 피처를 학습하여 '펀더멘털-주가 일치/불일치' 2개 국면을 판별. RobustScaler 정규화, 피처 기여도 계산, 백필(과거 N일 재예측) 기능 지원.
+GaussianHMM 4-state Noise vs Signal 국면 분류기. RobustScaler 전처리 후 8개 월간 피처로 학습(n_iter=200). Noise Score = 가중합(fundamental_gap, erp_zscore, residual_corr, amihud, vix_term, hy_spread, realized_vol). score < 0이면 펀더멘털 정합, ≥ 0이면 괴리 국면. 일일 예측은 실시간 4개 + 캐시 4개 피처 조합. 백필 50일. models/noise_hmm.pkl 저장.

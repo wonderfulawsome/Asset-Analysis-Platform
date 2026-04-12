@@ -1,1 +1,1 @@
-Supabase 데이터베이스 접근 레이어. supabase_client.py가 스레드별 싱글톤 DB 클라이언트를 관리하고, repositories.py가 9개 테이블(macro_raw, market_regime, fear_greed_raw, index_price_raw, sector_macro_raw, sector_cycle_result, noise_regime, crash_surge_result, chart_predict_result, user_visit)에 대한 upsert/fetch 함수를 제공.
+Supabase PostgreSQL 접근 레이어. supabase_client.py에서 스레드 로컬 싱글톤 연결 관리. repositories.py에서 10개 테이블의 CRUD 함수(upsert_*, fetch_*_current, fetch_*_history, fetch_*_all) 제공. date 기반 충돌 시 갱신(ON CONFLICT UPDATE). JSONB 필드 파싱 헬퍼 포함.

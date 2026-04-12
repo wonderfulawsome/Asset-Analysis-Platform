@@ -1,0 +1,1 @@
+APScheduler 기반 파이프라인 오케스트레이터. 경량(10분): 매크로+ETF+Fear&Greed 수집 + 기존 모델로 실시간 예측. 전체(3시간): 100년 데이터 수집 + HMM/XGBoost 모델 학습 + 백필. 월 1회 재학습(train_month 비교). Step별 독립 try/except로 fail-safe. 전체 수집 실패 시 경량 fallback. 모델 재학습 실패 시 기존 모델로 예측 계속. RUN_SCHEDULER 환경변수로 on/off.

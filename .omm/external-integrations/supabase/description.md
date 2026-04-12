@@ -1,1 +1,1 @@
-Supabase PostgreSQL BaaS. 환경변수(SUPABASE_URL, SUPABASE_KEY)로 접속하여 REST API를 통해 10개 테이블에 CRUD 수행. 스레드별 싱글톤 클라이언트 관리.
+Supabase 호스팅 PostgreSQL. 10개 테이블에 거시지표·국면·예측·가격 데이터 저장. SUPABASE_URL + SUPABASE_KEY로 인증. JSONB 컬럼으로 복합 데이터 저장.

@@ -1,1 +1,1 @@
-FRED(연방준비은행 경제 데이터). HY OAS, BBB OAS, TIPS, SOFR, NFCI, 산업생산, 건축허가 등 16개 이상 시리즈를 CSV 다운로드로 수집. exponential backoff 재시도 적용.
+FRED(Federal Reserve Economic Data) 데이터 소스. HY/BBB/CCC 신용 스프레드, DFII10 실질금리, T10YIE 기대인플레, SOFR, EFFR, NFCI 등 8개 시리즈. API키 있으면 JSON API, 없으면 CSV fallback. fred_cache.pkl로 경량 파이프라인 최적화.

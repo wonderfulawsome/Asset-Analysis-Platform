@@ -1,7 +1,9 @@
 graph TD
-    scheduler["APScheduler\napi/app.py lifespan"]
-    scheduler -->|"10분 주기"| light-pipeline["경량 파이프라인\nlight=True"]
-    scheduler -->|"3시간 주기"| full-pipeline["전체 파이프라인\nlight=False"]
+    light-pipeline["경량 파이프라인\n10분 주기"]
+    full-pipeline["전체 파이프라인\n3시간 주기"]
+
+    light-pipeline -->|"모델 학습 없음"| light-steps["Step 1-2: 매크로 60일\nStep 4: Fear & Greed\nStep 5: ETF 가격\nStep 5b: XGBoost 실시간 예측\nStep 5c: HMM 실시간 예측"]
+    full-pipeline -->|"모델 학습 포함"| full-steps["Step 1-2: 매크로 100년\nStep 3: Noise HMM 학습+백필\nStep 4: Fear & Greed\nStep 5: ETF 가격\nStep 6: 섹터 HMM 학습\nStep 7: XGBoost 학습+백필\nStep 8: 앙상블 30일 예측"]
 
     classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
-    class scheduler entry
+    class light-pipeline,full-pipeline entry
