@@ -155,8 +155,8 @@ def _build_indicator_text(lang='ko'):
             lines.append(f"  (음수일수록 펀더멘털 반영, 양수가 클수록 주가가 펀더멘털에서 괴리)")
     cs = fetch_crash_surge_current()
     if cs:
-        c_s = cs.get('crash_prob', 0) or 0
-        s_s = cs.get('surge_prob', 0) or 0
+        c_s = cs.get('crash_score') or cs.get('crash_prob') or 0
+        s_s = cs.get('surge_score') or cs.get('surge_prob') or 0
         gap = round(s_s - c_s, 1)
         if lang == 'en':
             lines.append(f"Crash Risk: {c_s}pts, Surge Potential: {s_s}pts, Gap: {gap:+.1f}pts")
@@ -443,9 +443,9 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
     elif tab == 'signal':
         cs = fetch_crash_surge_current()
         if cs:
-            crash_s = cs.get('crash_prob', 0) or 0
-            surge_s = cs.get('surge_prob', 0) or 0
-            gap = round(crash_s - surge_s, 1)
+            crash_s = cs.get('crash_score') or cs.get('crash_prob') or 0
+            surge_s = cs.get('surge_score') or cs.get('surge_prob') or 0
+            gap = round(surge_s - crash_s, 1)
             if is_en:
                 lines.append(f"Crash Risk: {crash_s}pts ({cs.get('crash_grade', '?')})")
                 lines.append(f"Surge Potential: {surge_s}pts ({cs.get('surge_grade', '?')})")
