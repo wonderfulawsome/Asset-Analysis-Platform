@@ -127,47 +127,58 @@ def _safe_float(v):
 
 
 def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
-    """5-모델 평균 앙상블 재귀 예측 (기본: 3배 증폭)."""
+    """5-모델 평균 앙상블 재귀 예측 (EMA 스무딩으로 지그재그 방지)."""
     hist = close_history.copy()
-    predictions = []
+    raw_predictions = []
     last_date = hist.index[-1]
     start_price = float(close_history.iloc[-1])
+    ema_ret = 0.0  # EMA 스무딩용 상태
+    alpha = 0.3    # EMA 계수 (낮을수록 매끄러움)
 
     for k in range(1, n_days + 1):
         feat = build_features_v2(hist)
         last_feat = feat.iloc[[-1]][feature_cols].values
-
-        # NaN 피처를 0으로 대체하여 예측 안정성 확보
         last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
 
         preds = [m.predict(last_feat)[0] for m in models]
-        pred_ret = np.mean(preds) * 3.0  # 변동성 3배 증폭
+        raw_ret = np.mean(preds) * 3.0
 
-        # 일일 수익률 클램핑 (±3%)
-        pred_ret = np.clip(pred_ret, -0.03, 0.03)
+        # EMA 스무딩: 이전 예측과 혼합하여 급격한 방향 전환 방지
+        ema_ret = alpha * raw_ret + (1 - alpha) * ema_ret
+        pred_ret = np.clip(ema_ret, -0.03, 0.03)
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
-
-        # 누적 가격 범위 제한: 시작가 대비 ±30%
         next_price = np.clip(next_price, start_price * 0.7, start_price * 1.3)
 
         margin = 1.28 * sigma * np.sqrt(k)
         lower = current_price * np.exp(pred_ret - margin)
         upper = current_price * np.exp(pred_ret + margin)
-        # 신뢰구간도 범위 제한
         lower = max(lower, start_price * 0.5)
         upper = min(upper, start_price * 1.5)
 
         next_date = last_date + pd.tseries.offsets.BDay(k)
-        predictions.append({
+        raw_predictions.append({
             'date': str(next_date.date()),
-            'yhat': _safe_float(round(next_price, 2)),
-            'lower': _safe_float(round(lower, 2)),
-            'upper': _safe_float(round(upper, 2)),
+            'yhat': next_price,
+            'lower': lower,
+            'upper': upper,
         })
         hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
 
+    # 최종 스무딩: 3일 이동평균으로 잔여 진동 제거
+    yhats = [p['yhat'] for p in raw_predictions]
+    for i in range(1, len(yhats) - 1):
+        yhats[i] = (yhats[i - 1] + yhats[i] + yhats[i + 1]) / 3.0
+
+    predictions = []
+    for i, p in enumerate(raw_predictions):
+        predictions.append({
+            'date': p['date'],
+            'yhat': _safe_float(round(yhats[i], 2)),
+            'lower': _safe_float(round(p['lower'], 2)),
+            'upper': _safe_float(round(p['upper'], 2)),
+        })
     return predictions
 
 
@@ -220,6 +231,10 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         fallback_sigma = float(raw_ret.tail(20).std())
         garch_sigma_daily = [fallback_sigma] * n_days
 
+    ema_ret = 0.0
+    alpha = 0.3
+    raw_predictions = []
+
     for k in range(1, n_days + 1):
         feat = build_features_v2(hist)
         last_feat = feat.iloc[[-1]][feature_cols].values
@@ -228,22 +243,19 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         preds = [m.predict(last_feat)[0] for m in models]
         raw_ret = np.mean(preds)
 
-        # 앙상블 예측 수익률을 3배 증폭 (방향+크기 보존, 매끄러운 곡선)
         g_sigma = garch_sigma_daily[k - 1]
-        pred_ret = raw_ret * 3.0
+        scaled_ret = raw_ret * 3.0
 
-        # 일일 수익률 클램핑
-        pred_ret = np.clip(pred_ret, -daily_clip, daily_clip)
+        # EMA 스무딩: 재귀 피드백에 의한 지그재그 방지
+        ema_ret = alpha * scaled_ret + (1 - alpha) * ema_ret
+        pred_ret = np.clip(ema_ret, -daily_clip, daily_clip)
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
-
-        # 누적 가격 범위 제한
         next_price = np.clip(next_price,
                              start_price * (1 - price_band),
                              start_price * (1 + price_band))
 
-        # 신뢰구간: GARCH σ 기반 80% CI
         margin = 1.28 * g_sigma * np.sqrt(k)
         lower = current_price * np.exp(pred_ret - margin)
         upper = current_price * np.exp(pred_ret + margin)
@@ -251,13 +263,27 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         upper = min(upper, start_price * (1 + ci_band))
 
         next_date = last_date + pd.tseries.offsets.BDay(k)
-        predictions.append({
+        raw_predictions.append({
             'date': str(next_date.date()),
-            'yhat': _safe_float(round(next_price, 2)),
-            'lower': _safe_float(round(lower, 2)),
-            'upper': _safe_float(round(upper, 2)),
+            'yhat': next_price,
+            'lower': lower,
+            'upper': upper,
         })
         hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
+
+    # 최종 스무딩: 3일 이동평균으로 잔여 진동 제거
+    yhats = [p['yhat'] for p in raw_predictions]
+    for i in range(1, len(yhats) - 1):
+        yhats[i] = (yhats[i - 1] + yhats[i] + yhats[i + 1]) / 3.0
+
+    predictions = []
+    for i, p in enumerate(raw_predictions):
+        predictions.append({
+            'date': p['date'],
+            'yhat': _safe_float(round(yhats[i], 2)),
+            'lower': _safe_float(round(p['lower'], 2)),
+            'upper': _safe_float(round(p['upper'], 2)),
+        })
 
     return predictions
 
