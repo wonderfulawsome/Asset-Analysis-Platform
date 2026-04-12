@@ -157,7 +157,7 @@ def _build_indicator_text(lang='ko'):
     if cs:
         c_s = cs.get('crash_prob', 0) or 0
         s_s = cs.get('surge_prob', 0) or 0
-        gap = round(c_s - s_s, 1)
+        gap = round(s_s - c_s, 1)
         if lang == 'en':
             lines.append(f"Crash Risk: {c_s}pts, Surge Potential: {s_s}pts, Gap: {gap:+.1f}pts")
         else:
@@ -314,10 +314,10 @@ _EXPLAIN_PROMPTS = {
 너는 한국어 금융 해설가다. 주어진 하락/상승 예측 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
 
 배경 지식:
-- "간극(Gap)"은 하락 위험도에서 상승 기대도를 뺀 값이다
-- 간극이 양수(+)이면 하락 위험이 더 높고, 음수(-)이면 상승 기대가 더 높다
+- "간극(Gap)"은 상승 기대도에서 하락 위험도를 뺀 값이다
+- 간극이 양수(+)이면 상승 기대가 더 높고, 음수(-)이면 하락 위험이 더 높다
 - 간극의 절대값이 클수록 한쪽으로 강하게 기울어진 것이다
-- 30일 추세에서 간극이 확대되면 위험 증가, 축소되면 기회 증가를 의미한다
+- 30일 추세에서 간극이 상승하면 상승 기대 증가, 하락하면 하락 위험 증가를 의미한다
 
 설명할 내용:
 1. 현재 간극이 얼마이고, 어느 쪽으로 기울어져 있는지 (점수 자체보다 간극의 크기와 방향에 집중)
@@ -373,10 +373,10 @@ Rules:
 You are a financial commentator. Explain the given crash/surge prediction results in plain English for everyday investors.
 
 Background:
-- "Gap" is crash risk minus surge potential
-- Positive gap = tilted toward downside risk; Negative gap = tilted toward upside potential
+- "Gap" is surge potential minus crash risk
+- Positive gap = tilted toward upside; Negative gap = tilted toward downside risk
 - Larger absolute gap = stronger tilt in one direction
-- A widening 30-day gap trend signals increasing risk; narrowing signals increasing opportunity
+- A rising 30-day gap trend signals increasing upside; falling signals increasing downside risk
 
 Explain:
 1. Current gap size and direction (focus on the gap rather than individual scores)
@@ -449,11 +449,11 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
             if is_en:
                 lines.append(f"Crash Risk: {crash_s}pts ({cs.get('crash_grade', '?')})")
                 lines.append(f"Surge Potential: {surge_s}pts ({cs.get('surge_grade', '?')})")
-                lines.append(f"Gap (Crash - Surge): {gap:+.1f}pts")
+                lines.append(f"Gap (Surge - Crash): {gap:+.1f}pts")
             else:
                 lines.append(f"하락 위험도: {crash_s}점 ({cs.get('crash_grade', '?')})")
                 lines.append(f"상승 기대도: {surge_s}점 ({cs.get('surge_grade', '?')})")
-                lines.append(f"간극 (하락-상승): {gap:+.1f}점")
+                lines.append(f"간극 (상승-하락): {gap:+.1f}점")
 
             # 30일 간극 추세 분석
             history = fetch_crash_surge_history(30)
@@ -462,7 +462,7 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
                 for h in reversed(history):  # 오래된 순으로 정렬
                     c_s = (h.get('crash_prob') or h.get('crash_score') or 0)
                     s_s = (h.get('surge_prob') or h.get('surge_score') or 0)
-                    gaps.append({'date': h.get('date', '?'), 'gap': round(c_s - s_s, 1)})
+                    gaps.append({'date': h.get('date', '?'), 'gap': round(s_s - c_s, 1)})
 
                 if len(gaps) >= 5:
                     recent_5 = [g['gap'] for g in gaps[-5:]]
@@ -477,23 +477,23 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
                     if is_en:
                         lines.append(f"\n30-Day Gap Trend:")
                         lines.append(f"  Early avg: {old_avg:+.1f} → Recent avg: {recent_avg:+.1f} (change: {trend_delta:+.1f})")
-                        lines.append(f"  Max gap: {max_gap['gap']:+.1f} ({max_gap['date']})")
-                        lines.append(f"  Min gap: {min_gap['gap']:+.1f} ({min_gap['date']})")
+                        lines.append(f"  Most bullish: {max_gap['gap']:+.1f} ({max_gap['date']})")
+                        lines.append(f"  Most bearish: {min_gap['gap']:+.1f} ({min_gap['date']})")
                         if trend_delta > 5:
-                            lines.append(f"  Trend: Gap widening toward crash risk")
+                            lines.append(f"  Trend: Gap rising — tilting toward upside")
                         elif trend_delta < -5:
-                            lines.append(f"  Trend: Gap narrowing, surge potential increasing")
+                            lines.append(f"  Trend: Gap falling — tilting toward downside risk")
                         else:
                             lines.append(f"  Trend: Gap stable")
                     else:
                         lines.append(f"\n30일 간극 추세:")
                         lines.append(f"  초기 평균: {old_avg:+.1f} → 최근 평균: {recent_avg:+.1f} (변화: {trend_delta:+.1f})")
-                        lines.append(f"  최대 간극: {max_gap['gap']:+.1f} ({max_gap['date']})")
-                        lines.append(f"  최소 간극: {min_gap['gap']:+.1f} ({min_gap['date']})")
+                        lines.append(f"  최대 상승 우위: {max_gap['gap']:+.1f} ({max_gap['date']})")
+                        lines.append(f"  최대 하락 우위: {min_gap['gap']:+.1f} ({min_gap['date']})")
                         if trend_delta > 5:
-                            lines.append(f"  추세: 간극 확대 중 — 하락 위험 쪽으로 기울어지는 중")
+                            lines.append(f"  추세: 간극 상승 중 — 상승 쪽으로 기울어지는 중")
                         elif trend_delta < -5:
-                            lines.append(f"  추세: 간극 축소 중 — 상승 기대가 높아지는 중")
+                            lines.append(f"  추세: 간극 하락 중 — 하락 위험 쪽으로 기울어지는 중")
                         else:
                             lines.append(f"  추세: 간극 안정적 유지")
 
