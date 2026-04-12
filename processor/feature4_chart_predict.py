@@ -178,9 +178,9 @@ _HIGH_VOL_TICKERS = {'ARKK', 'SOXX', 'SMH', 'XLE', 'IWM'}
 def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
     """GARCH(1,1) 기반 재귀 예측 — 전체 ETF 공용.
 
-    앙상블 모델의 평균 수익률 예측을 방향(direction)으로 사용하고,
-    GARCH(1,1)로 추정한 조건부 변동성으로 스케일링한다.
-    고정 3배 증폭 대신 시장 상태에 맞는 동적 변동성을 적용.
+    앙상블 모델의 평균 수익률 예측을 GARCH(1,1) σ로 스케일링하되,
+    EMA 스무딩으로 방향 연속성을 확보하여 지그재그 예측을 방지한다.
+    (기존 sign-only 방식은 raw_ret이 작을 때 부호가 쉽게 뒤집혀 톱니 패턴 발생)
     """
     hist = close_history.copy()
     predictions = []
@@ -191,15 +191,15 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
     if ticker.upper() in _HIGH_VOL_TICKERS:
         price_band = 0.25   # ±25%
         ci_band = 0.40       # 신뢰구간 ±40%
-        daily_clip = 0.05    # 일일 ±5%
+        daily_clip = 0.04    # 일일 ±4% (기존 5% → 4%, 스무딩으로 보정)
     elif ticker.upper() in {'SPY', 'VOO', 'VTI', 'DIA', 'SCHD'}:
         price_band = 0.15   # ±15% (대형 안정)
         ci_band = 0.30
-        daily_clip = 0.03
+        daily_clip = 0.025   # 일일 ±2.5% (기존 3% → 2.5%)
     else:
         price_band = 0.20   # ±20% (기본)
         ci_band = 0.35
-        daily_clip = 0.04
+        daily_clip = 0.03    # 일일 ±3% (기존 4% → 3%)
 
     # --- GARCH(1,1) 적합 ---
     log_ret = (np.log(close_history / close_history.shift(1)).dropna()) * 100  # % 스케일
@@ -220,6 +220,10 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         fallback_sigma = float(raw_ret.tail(20).std())
         garch_sigma_daily = [fallback_sigma] * n_days
 
+    # EMA 스무딩 상태: 이전 예측값과 혼합하여 방향 연속성 확보 (지그재그 방지)
+    ema_ret = None
+    ema_alpha = 0.35  # 낮을수록 더 부드러움 (0.3~0.4 권장)
+
     for k in range(1, n_days + 1):
         feat = build_features_v2(hist)
         last_feat = feat.iloc[[-1]][feature_cols].values
@@ -228,14 +232,22 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         preds = [m.predict(last_feat)[0] for m in models]
         raw_ret = np.mean(preds)
 
-        # 방향 부호 유지, GARCH 조건부 σ로 크기 조절
-        direction = np.sign(raw_ret) if abs(raw_ret) > 1e-8 else 0.0
+        # EMA 스무딩: 방향 플리핑 억제 (톱니 패턴 방지)
+        if ema_ret is None:
+            ema_ret = raw_ret
+        else:
+            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
+
         g_sigma = garch_sigma_daily[k - 1]
-        # 앙상블 방향 × GARCH σ × 스케일 팩터
-        pred_ret = direction * g_sigma * 1.5
+
+        # 스무딩된 raw_ret을 증폭 → GARCH σ로 상한 설정
+        # (기존: sign(raw_ret) * g_sigma * 1.5 → 방향 플리핑 / 개선: 크기 유지)
+        amplified = ema_ret * 4.0  # 앙상블 raw 값이 작아 증폭 필요
+        max_magnitude = g_sigma * 1.2  # GARCH σ 기반 상한
+        pred_ret = float(np.clip(amplified, -max_magnitude, max_magnitude))
 
         # 일일 수익률 클램핑
-        pred_ret = np.clip(pred_ret, -daily_clip, daily_clip)
+        pred_ret = float(np.clip(pred_ret, -daily_clip, daily_clip))
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)

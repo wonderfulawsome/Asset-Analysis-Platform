@@ -443,3 +443,59 @@ Background:
 - Positive (+): price deviated, driven by sentiment/liquidity (emotional market)
 - Higher positive = greater divergence (0~2: mild, 2+: significant)
 """
+
+
+# ══════════════════════════════════════════════════════════
+# [4] 2026-04-12 10:30 (UTC)
+#     30일 예측 톱니 패턴(지그재그) 수정
+# ══════════════════════════════════════════════════════════
+#
+# [문제]
+#   - 30일 예측 차트가 뾰족한 톱니 모양으로 나옴 (특히 QQQ 등)
+#   - 원인: _garch_forecast()에서 앙상블 raw_ret의 부호(sign)만 사용
+#     → raw_ret이 작을 때 부호가 쉽게 뒤집혀 매일 ±g_sigma × 1.5 씩 진동
+#     → 방향 플리핑으로 톱니 패턴 발생
+#
+# [수정 파일]
+#   1. processor/feature4_chart_predict.py  _garch_forecast()
+#      - np.sign() 제거 → 앙상블 raw_ret 크기 유지
+#      - EMA 스무딩 추가 (alpha=0.35): 이전 예측과 혼합하여 방향 연속성 확보
+#      - amplified = ema_ret × 4.0, cap = g_sigma × 1.2
+#      - daily_clip 축소: 5%→4%, 4%→3%, 3%→2.5% (스무딩 보정)
+#
+# [효과]
+#   - 기존: 매일 ±3~5% 지그재그 → 차트가 톱니 모양
+#   - 개선: 스무딩된 방향으로 연속적 트렌드 → 자연스러운 곡선
+#   - 기존 DB 예측은 스케줄러 다음 실행(3시간 주기) 시 자동 갱신
+
+GARCH_FORECAST_FIX = """
+    # EMA 스무딩 상태: 이전 예측값과 혼합하여 방향 연속성 확보 (지그재그 방지)
+    ema_ret = None
+    ema_alpha = 0.35  # 낮을수록 더 부드러움 (0.3~0.4 권장)
+
+    for k in range(1, n_days + 1):
+        feat = build_features_v2(hist)
+        last_feat = feat.iloc[[-1]][feature_cols].values
+        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
+
+        preds = [m.predict(last_feat)[0] for m in models]
+        raw_ret = np.mean(preds)
+
+        # EMA 스무딩: 방향 플리핑 억제 (톱니 패턴 방지)
+        if ema_ret is None:
+            ema_ret = raw_ret
+        else:
+            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
+
+        g_sigma = garch_sigma_daily[k - 1]
+
+        # 스무딩된 raw_ret을 증폭 → GARCH σ로 상한 설정
+        # (기존: sign(raw_ret) * g_sigma * 1.5 → 방향 플리핑 / 개선: 크기 유지)
+        amplified = ema_ret * 4.0
+        max_magnitude = g_sigma * 1.2
+        pred_ret = float(np.clip(amplified, -max_magnitude, max_magnitude))
+
+        # 일일 수익률 클램핑
+        pred_ret = float(np.clip(pred_ret, -daily_clip, daily_clip))
+        ...
+"""
