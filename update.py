@@ -499,3 +499,60 @@ GARCH_FORECAST_FIX = """
         pred_ret = float(np.clip(pred_ret, -daily_clip, daily_clip))
         ...
 """
+
+
+# ══════════════════════════════════════════════════════════
+# [5] 2026-04-12 10:50 (UTC)
+#     30일 예측: GARCH 제거 → 변동성 3배 증폭 방식 전환
+# ══════════════════════════════════════════════════════════
+#
+# [변경 사항]
+#   - 30일 예측에서 GARCH(1,1) 기반 _garch_forecast() 사용 중단
+#   - _recursive_forecast() (변동성 3배 증폭 방식)으로 통일
+#   - _recursive_forecast()에 EMA 스무딩(α=0.35) 추가하여 톱니 패턴 방지
+#
+# [수정 파일]
+#   1. processor/feature4_chart_predict.py
+#      - run_chart_predict_single(): HAS_ARCH 분기 제거,
+#        무조건 _recursive_forecast() 사용
+#      - _recursive_forecast(): EMA 스무딩 추가
+#        (이전 예측과 0.35:0.65로 혼합 → 방향 연속성 확보)
+
+RUN_CHART_PREDICT_SINGLE_FORECAST = """
+    # 재귀 예측: 3배 증폭 방식 (GARCH 미사용)
+    predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
+"""
+
+RECURSIVE_FORECAST_WITH_EMA = """
+def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
+    \"\"\"5-모델 평균 앙상블 재귀 예측 (변동성 3배 증폭).
+
+    EMA 스무딩으로 방향 연속성을 확보하여 톱니 패턴을 방지한다.
+    \"\"\"
+    hist = close_history.copy()
+    predictions = []
+    last_date = hist.index[-1]
+    start_price = float(close_history.iloc[-1])
+
+    # EMA 스무딩 상태 (방향 플리핑 억제)
+    ema_ret = None
+    ema_alpha = 0.35  # 낮을수록 더 부드러움
+
+    for k in range(1, n_days + 1):
+        feat = build_features_v2(hist)
+        last_feat = feat.iloc[[-1]][feature_cols].values
+        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
+
+        preds = [m.predict(last_feat)[0] for m in models]
+        raw_ret = np.mean(preds)
+
+        # EMA 스무딩
+        if ema_ret is None:
+            ema_ret = raw_ret
+        else:
+            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
+
+        pred_ret = ema_ret * 3.0  # 변동성 3배 증폭
+        pred_ret = float(np.clip(pred_ret, -0.03, 0.03))
+        # ... (이하 기존과 동일)
+"""

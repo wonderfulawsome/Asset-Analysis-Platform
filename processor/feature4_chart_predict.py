@@ -127,11 +127,18 @@ def _safe_float(v):
 
 
 def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
-    """5-모델 평균 앙상블 재귀 예측 (기본: 3배 증폭)."""
+    """5-모델 평균 앙상블 재귀 예측 (변동성 3배 증폭).
+
+    EMA 스무딩으로 방향 연속성을 확보하여 톱니 패턴을 방지한다.
+    """
     hist = close_history.copy()
     predictions = []
     last_date = hist.index[-1]
     start_price = float(close_history.iloc[-1])
+
+    # EMA 스무딩 상태 (방향 플리핑 억제)
+    ema_ret = None
+    ema_alpha = 0.35  # 낮을수록 더 부드러움
 
     for k in range(1, n_days + 1):
         feat = build_features_v2(hist)
@@ -141,10 +148,18 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
         last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
 
         preds = [m.predict(last_feat)[0] for m in models]
-        pred_ret = np.mean(preds) * 3.0  # 변동성 3배 증폭
+        raw_ret = np.mean(preds)
+
+        # EMA 스무딩: 이전 예측과 혼합하여 방향 연속성 확보
+        if ema_ret is None:
+            ema_ret = raw_ret
+        else:
+            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
+
+        pred_ret = ema_ret * 3.0  # 변동성 3배 증폭
 
         # 일일 수익률 클램핑 (±3%)
-        pred_ret = np.clip(pred_ret, -0.03, 0.03)
+        pred_ret = float(np.clip(pred_ret, -0.03, 0.03))
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
@@ -311,11 +326,8 @@ def run_chart_predict_single(ticker):
     oos_preds = np.mean([m.predict(X_val) for m in models_oos], axis=0)
     sigma = np.std(y_val - oos_preds)
 
-    # 재귀 예측: GARCH 기반 (전체 ETF), fallback → 기존 3배 증폭
-    if HAS_ARCH:
-        predicted = _garch_forecast(models_final, close, 30, feat_cols, ticker)
-    else:
-        predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
+    # 재귀 예측: 3배 증폭 방식 (GARCH 미사용)
+    predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
 
     # 최근 30일 실제 종가
     recent = close.tail(30)
