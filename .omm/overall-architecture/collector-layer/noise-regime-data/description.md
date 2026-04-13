@@ -1,1 +1,1 @@
-Noise 국면 데이터 수집 모듈. Shiller PE(Yale), FRED(TIPS·HY OAS), Yahoo(섹터 주식·VIX) 데이터를 수집하고, 8개 월별 피처(fundamental_gap, erp_zscore, residual_corr, dispersion, amihud, vix_term, hy_spread, realized_vol)를 계산. 경량 모드(fetch_noise_regime_light)에서는 실시간 4피처 + 캐시 4피처로 빠른 예측 지원.
+HMM Noise 국면 모델 학습용 8개 월간 피처 수집. Shiller CAPE(fundamental_gap, erp_zscore), FRED HY 스프레드(hy_spread), 섹터주 25종(residual_corr, dispersion, realized_vol), Amihud 5종(amihud), Yahoo VIX(vix_term). 18.25년 히스토리(~219개월) 사용. 일일 예측용 실시간 피처 4개도 별도 제공.

@@ -1,30 +1,19 @@
 graph LR
-    market-data["거시 지표 수집\ncollector/market_data.py"]
-    fear-greed["공포·탐욕 수집\ncollector/fear_greed.py"]
-    index-price["ETF 가격 수집\ncollector/index_price.py"]
-    sector-macro["섹터 매크로 수집\ncollector/sector_macro.py"]
-    sector-etf["섹터 ETF 수집\ncollector/sector_etf.py"]
-    noise-regime-data["Noise 국면 데이터\ncollector/noise_regime_data.py"]
-    crash-surge-data["폭락/급등 데이터\ncollector/crash_surge_data.py"]
+    market-data["market_data.py\ncollector/market_data.py"]
+    noise-regime-data["noise_regime_data.py\ncollector/noise_regime_data.py"]
+    crash-surge-data["crash_surge_data.py\ncollector/crash_surge_data.py"]
+    index-price["index_price.py\ncollector/index_price.py"]
+    fear-greed["fear_greed.py\ncollector/fear_greed.py"]
+    sector-macro["sector_macro.py\ncollector/sector_macro.py"]
+    sector-etf["sector_etf.py\ncollector/sector_etf.py"]
 
-    yahoo["Yahoo Finance\n외부 API"]
-    fred["FRED\n외부 API"]
-    cnn["CNN API\n외부 API"]
-    cboe["CBOE\n외부 API"]
-    shiller["Shiller Data\nYale Economics"]
-
-    market-data -->|"SP500·VIX·금리·나스닥·SOX"| yahoo
-    fear-greed -->|"Fear & Greed Index"| cnn
-    fear-greed -->|"PUT/CALL Ratio"| cboe
-    index-price -->|"31개 ETF 종가/등락률"| yahoo
-    sector-macro -->|"8개 경제지표"| fred
-    sector-etf -->|"32개 ETF 월별 수익률"| yahoo
-    noise-regime-data -->|"Shiller PE"| shiller
-    noise-regime-data -->|"TIPS·HY OAS"| fred
-    noise-regime-data -->|"섹터 주식·VIX"| yahoo
-    crash-surge-data -->|"SPY·VIX·SKEW 등"| yahoo
-    crash-surge-data -->|"8개 FRED 시리즈"| fred
-    crash-surge-data -->|"Cboe 변동성 지수"| cboe
+    market-data -->|"yfinance"| yahoo["Yahoo Finance"]
+    noise-regime-data -->|"FRED API + Shiller XLS"| fred-shiller["FRED + Shiller"]
+    crash-surge-data -->|"FRED + Yahoo + CBOE"| multi["FRED·Yahoo·CBOE"]
+    index-price -->|"yfinance 31 ETF"| yahoo
+    fear-greed -->|"CNN API + CBOE 스크래핑"| cnn-cboe["CNN + CBOE"]
+    sector-macro -->|"FRED API"| fred-shiller
+    sector-etf -->|"yfinance 11 섹터"| yahoo
 
     classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
-    class yahoo,fred,cnn,cboe,shiller external
+    class yahoo,fred-shiller,multi,cnn-cboe external

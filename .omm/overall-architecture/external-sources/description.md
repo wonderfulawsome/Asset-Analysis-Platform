@@ -1,0 +1,1 @@
+5개 외부 데이터 소스. Yahoo Finance(주가·VIX·금리·ETF, curl_cffi 사용), FRED API(신용 스프레드·금리·NFCI 등 8개, API키 선택/CSV fallback), Shiller(CAPE 비율 XLS), CNN(Fear & Greed API), CBOE(VIX/VVIX/SKEW 웹 스크래핑). Groq API는 AI 해설용 LLM.

@@ -1,28 +1,28 @@
 graph LR
-    yahoo["Yahoo Finance\n주가·ETF·VIX"]
-    fred["FRED\n경제지표"]
-    cnn["CNN API\nFear & Greed"]
-    cboe["CBOE\nPUT/CALL·변동성"]
-    shiller["Shiller Data\nPE Ratio"]
+    yahoo["Yahoo Finance\nyfinance"]
+    fred["FRED API\nstlouisfed.org"]
+    shiller["Shiller CAPE\nyale.edu"]
+    cnn["CNN\nFear & Greed"]
+    cboe["CBOE\nVIX·SKEW"]
 
-    yahoo -->|"시장 데이터 수집"| collectors["수집기 레이어\ncollector/"]
-    fred -->|"경제지표 수집"| collectors
-    cnn -->|"심리 지표 수집"| collectors
-    cboe -->|"옵션 데이터 수집"| collectors
-    shiller -->|"밸류에이션 수집"| collectors
+    yahoo -->|"주가·VIX·금리"| collectors["수집 레이어\ncollector/"]
+    fred -->|"신용스프레드·SOFR·NFCI"| collectors
+    shiller -->|"CAPE 비율"| collectors
+    cnn -->|"공포탐욕지수"| collectors
+    cboe -->|"VIX·VVIX·SKEW"| collectors
 
-    collectors -->|"원시 데이터 전달"| processors["처리기 레이어\nprocessor/"]
-    collectors -->|"원시 데이터 저장"| supabase["Supabase DB\n10개 테이블"]
+    collectors -->|"피처 계산"| processors["처리 레이어\nprocessor/"]
+    collectors -->|"원시 데이터 저장"| supabase["Supabase\n10개 테이블"]
     processors -->|"예측 결과 저장"| supabase
-    processors -->|"모델 파일 저장"| models["models/*.pkl"]
+    processors -->|"모델 파일"| models["models/\npkl 저장소"]
 
-    supabase -->|"DB 조회 (repositories)"| api["API 레이어\napi/"]
-    api -->|"JSON 응답"| client["프론트엔드\ntemplates/ + static/"]
+    supabase -->|"DB 조회"| api["API 레이어\napi/"]
+    api -->|"JSON 응답"| client["프론트엔드\nstatic/js/"]
 
     classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
     classDef store fill:#a6e3a1,stroke:#a6e3a1,color:#1e1e2e
     classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
 
-    class yahoo,fred,cnn,cboe,shiller external
+    class yahoo,fred,shiller,cnn,cboe external
     class supabase,models store
     class client entry

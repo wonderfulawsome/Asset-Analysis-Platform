@@ -1,1 +1,1 @@
-Jinja2 템플릿 + 바닐라 JS로 구성된 SPA 스타일 프론트엔드. index.html이 메인 앱 페이지(4개 탭: AI차트, 시장, 신호, 거시경제), stats.html이 사용자 통계 대시보드. 다크/라이트 테마, 한/영 다국어 지원, 모바일 pull-to-refresh 등 제공.
+Vanilla JS + TradingView Lightweight Charts 기반 SPA 스타일 대시보드. main.js(2095줄)가 게이지·국면·가격표 UI를, chart.js(960줄)가 캔들차트+30일 예측을, i18n.js(1013줄)가 한/영 다국어를, sector.js(374줄)가 섹터 분석을 담당. Jinja2 템플릿으로 index.html 서버 렌더링 후 클라이언트에서 fetch로 API 호출. localStorage로 보유 ETF·테마·언어 상태 관리.

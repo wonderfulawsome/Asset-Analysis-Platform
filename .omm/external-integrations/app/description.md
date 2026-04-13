@@ -1,1 +1,1 @@
-패시브 투자 비서 앱. FastAPI 웹 서버 + APScheduler 스케줄러가 단일 프로세스에서 실행되며, 모든 외부 서비스와 연동하는 중심 노드.
+FastAPI 앱 (api/app.py). 모든 외부 서비스 연동의 중심. 스케줄러가 데이터 소스를 호출하고, API가 Supabase를 조회하며, market_summary가 Groq LLM을 호출한다.

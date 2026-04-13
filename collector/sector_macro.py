@@ -116,7 +116,9 @@ def fetch_sector_macro() -> pd.DataFrame:
              .join(df_rrsfs,  how='outer')
              .join(df_capex,  how='outer')
              .join(df_income, how='outer'))
-    macro = macro.resample('MS').last().dropna()          # 월초 기준 리샘플링 → 마지막 값 사용, NaN 행 제거
+    macro = macro.resample('MS').last()                    # 월초 기준 리샘플링 → 마지막 값 사용
+    macro = macro.ffill(limit=3)                          # 지연 지표를 최대 3개월까지 앞값으로 채움
+    macro = macro.dropna()                                # ffill 후에도 NaN인 행 제거 (초기 히스토리)
 
     # ── 파생 피처: 3개월 변화량 ──
     macro['pmi_chg3m']       = macro['pmi'].diff(3)       # PMI의 3개월 전 대비 변화량

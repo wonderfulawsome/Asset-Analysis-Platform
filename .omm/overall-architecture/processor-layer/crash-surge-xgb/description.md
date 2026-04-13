@@ -1,1 +1,1 @@
-XGBoost 3-class 폭락/급등 분류기. Optuna 50회 하이퍼파라미터 튜닝, Platt Scaling 확률 보정, 백분위 랭크(0-100) 점수 산출. SHAP TreeExplainer로 피처 중요도 분석, 백필 기능 지원. 44개 입력 피처 → crash_score, surge_score, net_score 출력.
+XGBoost 3-class(폭락/정상/급등) 분류기. 44개 일간 피처 입력, Optuna 50회 하이퍼파라미터 튜닝. 지수 감쇄 가중치(0.9995)로 최근 데이터 중요도 증가. Platt Scaling 확률 보정 후 히스토리 대비 백분위(0-100) 점수 산출. 등급: 낮음(<50)→보통→주의→경고→위험(95+). SHAP TreeExplainer 피처 중요도 제공. 전체 데이터 백필. models/crash_surge_xgb.pkl 저장.

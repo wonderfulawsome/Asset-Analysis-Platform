@@ -1,1 +1,1 @@
-7개 수집 모듈이 외부 소스에서 원시 데이터를 가져와 파생 피처를 계산한다. market_data(18개 매크로), noise_regime_data(8개 HMM 피처), crash_surge_data(44개 XGBoost 피처) 등.
+7개 수집 모듈이 외부 소스에서 원시 데이터를 가져와 파생 피처를 계산한다. market_data(18개 매크로), noise_regime_data(8개 HMM 피처), crash_surge_data(44개 XGBoost 피처), index_price(31 ETF), fear_greed(공포탐욕+Put/Call), sector_macro(10개 섹터 매크로), sector_etf(11개 섹터 수익률).

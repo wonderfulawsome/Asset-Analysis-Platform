@@ -1,0 +1,1 @@
+GaussianHMM 4-state 경기국면 분류기. PMI·금리 스프레드·ANFCI 등 10개 매크로 지표로 학습. 4국면: 회복기(Recovery)→확장기(Expansion)→둔화기(Slowdown)→수축기(Contraction). 국면별 11개 섹터 ETF 평균 수익률 및 보유 ETF 성과를 산출. sector_cycle_result 테이블에 JSON 필드로 저장.

@@ -1,0 +1,1 @@
+Supabase 호스팅 PostgreSQL 외부 데이터베이스. 10개 테이블: macro_raw, noise_regime, fear_greed_raw, index_price_raw, sector_macro_raw, sector_cycle_result, crash_surge_result, chart_predict_result, market_regime(레거시), user_visit. JSONB 컬럼으로 확률·SHAP·피처값 등 복합 데이터 저장. updated_at 자동 갱신 트리거 설정.

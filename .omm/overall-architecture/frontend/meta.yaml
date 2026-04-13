@@ -1,6 +1,6 @@
 created: 2026-03-28T18:51:39.757Z
-updated: 2026-03-28T19:11:26.909Z
-update_count: 3
+updated: 2026-04-11T18:15:53.218Z
+update_count: 5
 last_field: diagram
 kind: nested-class
 title: frontend
@@ -13,3 +13,19 @@ children:
   - sector-js
   - stats-page
 parentPath: []
+prev_diagram: |
+  graph LR
+      index-page["메인 앱 페이지\ntemplates/index.html"]
+      stats-page["통계 대시보드\ntemplates/stats.html"]
+      main-js["핵심 로직\nstatic/main.js"]
+      chart-js["차트 모듈\nstatic/chart.js"]
+      sector-js["섹터 모듈\nstatic/sector.js"]
+      i18n-js["다국어 모듈\nstatic/i18n.js"]
+      main-css["스타일시트\nstatic/main.css"]
+
+      index-page -->|"import"| main-js
+      index-page -->|"import"| chart-js
+      index-page -->|"import"| sector-js
+      index-page -->|"import"| i18n-js
+      index-page -->|"import"| main-css
+      stats-page -->|"import"| main-css

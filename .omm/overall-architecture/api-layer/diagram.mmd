@@ -1,12 +1,26 @@
 graph LR
-    regime-router["Regime 라우터\napi/routers/regime.py"]
-    macro-router["Macro 라우터\napi/routers/macro.py"]
-    index-feed-router["Index Feed 라우터\napi/routers/index_feed.py"]
-    sector-cycle-router["Sector Cycle 라우터\napi/routers/sector_cycle.py"]
-    crash-surge-router["Crash Surge 라우터\napi/routers/crash_surge.py"]
-    market-summary-router["Market Summary 라우터\napi/routers/market_summary.py"]
-    chart-router["Chart 라우터\napi/routers/chart.py"]
-    tracking-router["Tracking 라우터\napi/routers/tracking.py"]
+    app["app.py\napi/app.py"]
+    regime-router["regime.py\napi/routers/regime.py"]
+    macro-router["macro.py\napi/routers/macro.py"]
+    index-router["index_feed.py\napi/routers/index_feed.py"]
+    sector-router["sector_cycle.py\napi/routers/sector_cycle.py"]
+    crash-router["crash_surge.py\napi/routers/crash_surge.py"]
+    summary-router["market_summary.py\napi/routers/market_summary.py"]
+    chart-router["chart.py\napi/routers/chart.py"]
+    tracking-router["tracking.py\napi/routers/tracking.py"]
 
+    app -->|"/api/regime"| regime-router
+    app -->|"/api/macro"| macro-router
+    app -->|"/api/index"| index-router
+    app -->|"/api/sector-cycle"| sector-router
+    app -->|"/api/crash-surge"| crash-router
+    app -->|"/api/market-summary"| summary-router
+    app -->|"/api/chart"| chart-router
+    app -->|"/api/tracking"| tracking-router
+    summary-router -->|"Groq LLM 호출"| groq["Groq API"]
+    chart-router -->|"DB 조회 + 백그라운드 재생성"| db["Supabase"]
+
+    classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
     classDef entry fill:#89b4fa,stroke:#89b4fa,color:#1e1e2e
-    class regime-router,macro-router,index-feed-router,sector-cycle-router,crash-surge-router,market-summary-router,chart-router,tracking-router entry
+    class app entry
+    class groq,db external

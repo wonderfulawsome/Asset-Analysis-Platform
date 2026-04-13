@@ -1,1 +1,1 @@
-Yale 경제학과 Shiller 데이터. ie_data.xls 파일을 HTTP 다운로드하여 Shiller PE Ratio 시계열을 추출. 월별 업데이트.
+Robert Shiller Yale 웹사이트. CAPE(Cyclically Adjusted P/E) 비율 Excel 파일 다운로드. 100년+ 월간 히스토리. HMM Noise 국면 분석의 핵심 데이터 소스.

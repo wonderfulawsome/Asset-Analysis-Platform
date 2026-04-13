@@ -25,11 +25,7 @@ try:
 except ImportError:
     HAS_CATBOOST = False
 
-try:
-    from arch import arch_model
-    HAS_ARCH = True
-except ImportError:
-    HAS_ARCH = False
+from arch import arch_model
 
 CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
                  'XLK', 'XLF', 'XLE', 'XLV', 'ARKK', 'GLD', 'TLT', 'SCHD']
@@ -129,16 +125,17 @@ def _safe_float(v):
 def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
     """5-모델 평균 앙상블 재귀 예측 (변동성 3배 증폭).
 
-    EMA 스무딩으로 방향 연속성을 확보하여 톱니 패턴을 방지한다.
+    EMA 스무딩(α=0.3) + 3일 이동평균 후처리로 톱니 패턴 방지.
+    GARCH 미사용 — 단순 3배 증폭만 사용.
     """
     hist = close_history.copy()
-    predictions = []
+    raw_predictions = []
     last_date = hist.index[-1]
     start_price = float(close_history.iloc[-1])
 
     # EMA 스무딩 상태 (방향 플리핑 억제)
-    ema_ret = None
-    ema_alpha = 0.35  # 낮을수록 더 부드러움
+    ema_ret = 0.0
+    alpha = 0.3  # 낮을수록 더 부드러움
 
     for k in range(1, n_days + 1):
         feat = build_features_v2(hist)
@@ -150,16 +147,12 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
         preds = [m.predict(last_feat)[0] for m in models]
         raw_ret = np.mean(preds)
 
-        # EMA 스무딩: 이전 예측과 혼합하여 방향 연속성 확보
-        if ema_ret is None:
-            ema_ret = raw_ret
-        else:
-            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
+        # 변동성 3배 증폭
+        scaled_ret = raw_ret * 3.0
 
-        pred_ret = ema_ret * 3.0  # 변동성 3배 증폭
-
-        # 일일 수익률 클램핑 (±3%)
-        pred_ret = float(np.clip(pred_ret, -0.03, 0.03))
+        # EMA 스무딩: 재귀 피드백에 의한 지그재그 방지
+        ema_ret = alpha * scaled_ret + (1 - alpha) * ema_ret
+        pred_ret = float(np.clip(ema_ret, -0.03, 0.03))  # 일일 ±3%
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
@@ -175,13 +168,27 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
         upper = min(upper, start_price * 1.5)
 
         next_date = last_date + pd.tseries.offsets.BDay(k)
-        predictions.append({
+        raw_predictions.append({
             'date': str(next_date.date()),
-            'yhat': _safe_float(round(next_price, 2)),
-            'lower': _safe_float(round(lower, 2)),
-            'upper': _safe_float(round(upper, 2)),
+            'yhat': next_price,
+            'lower': lower,
+            'upper': upper,
         })
         hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
+
+    # 최종 스무딩: 3일 이동평균으로 잔여 진동 제거
+    yhats = [p['yhat'] for p in raw_predictions]
+    for i in range(1, len(yhats) - 1):
+        yhats[i] = (yhats[i - 1] + yhats[i] + yhats[i + 1]) / 3.0
+
+    predictions = []
+    for i, p in enumerate(raw_predictions):
+        predictions.append({
+            'date': p['date'],
+            'yhat': _safe_float(round(yhats[i], 2)),
+            'lower': _safe_float(round(p['lower'], 2)),
+            'upper': _safe_float(round(p['upper'], 2)),
+        })
 
     return predictions
 
@@ -235,9 +242,9 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         fallback_sigma = float(raw_ret.tail(20).std())
         garch_sigma_daily = [fallback_sigma] * n_days
 
-    # EMA 스무딩 상태: 이전 예측값과 혼합하여 방향 연속성 확보 (지그재그 방지)
-    ema_ret = None
-    ema_alpha = 0.35  # 낮을수록 더 부드러움 (0.3~0.4 권장)
+    ema_ret = 0.0
+    alpha = 0.3
+    raw_predictions = []
 
     for k in range(1, n_days + 1):
         feat = build_features_v2(hist)
@@ -247,32 +254,19 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         preds = [m.predict(last_feat)[0] for m in models]
         raw_ret = np.mean(preds)
 
-        # EMA 스무딩: 방향 플리핑 억제 (톱니 패턴 방지)
-        if ema_ret is None:
-            ema_ret = raw_ret
-        else:
-            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
-
         g_sigma = garch_sigma_daily[k - 1]
+        scaled_ret = raw_ret * 3.0
 
-        # 스무딩된 raw_ret을 증폭 → GARCH σ로 상한 설정
-        # (기존: sign(raw_ret) * g_sigma * 1.5 → 방향 플리핑 / 개선: 크기 유지)
-        amplified = ema_ret * 4.0  # 앙상블 raw 값이 작아 증폭 필요
-        max_magnitude = g_sigma * 1.2  # GARCH σ 기반 상한
-        pred_ret = float(np.clip(amplified, -max_magnitude, max_magnitude))
-
-        # 일일 수익률 클램핑
-        pred_ret = float(np.clip(pred_ret, -daily_clip, daily_clip))
+        # EMA 스무딩: 재귀 피드백에 의한 지그재그 방지
+        ema_ret = alpha * scaled_ret + (1 - alpha) * ema_ret
+        pred_ret = np.clip(ema_ret, -daily_clip, daily_clip)
 
         current_price = float(hist.iloc[-1])
         next_price = current_price * np.exp(pred_ret)
-
-        # 누적 가격 범위 제한
         next_price = np.clip(next_price,
                              start_price * (1 - price_band),
                              start_price * (1 + price_band))
 
-        # 신뢰구간: GARCH σ 기반 80% CI
         margin = 1.28 * g_sigma * np.sqrt(k)
         lower = current_price * np.exp(pred_ret - margin)
         upper = current_price * np.exp(pred_ret + margin)
@@ -280,13 +274,27 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
         upper = min(upper, start_price * (1 + ci_band))
 
         next_date = last_date + pd.tseries.offsets.BDay(k)
-        predictions.append({
+        raw_predictions.append({
             'date': str(next_date.date()),
-            'yhat': _safe_float(round(next_price, 2)),
-            'lower': _safe_float(round(lower, 2)),
-            'upper': _safe_float(round(upper, 2)),
+            'yhat': next_price,
+            'lower': lower,
+            'upper': upper,
         })
         hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
+
+    # 최종 스무딩: 3일 이동평균으로 잔여 진동 제거
+    yhats = [p['yhat'] for p in raw_predictions]
+    for i in range(1, len(yhats) - 1):
+        yhats[i] = (yhats[i - 1] + yhats[i] + yhats[i + 1]) / 3.0
+
+    predictions = []
+    for i, p in enumerate(raw_predictions):
+        predictions.append({
+            'date': p['date'],
+            'yhat': _safe_float(round(yhats[i], 2)),
+            'lower': _safe_float(round(p['lower'], 2)),
+            'upper': _safe_float(round(p['upper'], 2)),
+        })
 
     return predictions
 
@@ -321,12 +329,12 @@ def run_chart_predict_single(ticker):
     # 전체 데이터로 최종 모델 학습
     models_final = _train_models(data[feat_cols].values, data['target'].values)
 
-    # OOS sigma: train만으로 학습한 모델의 val 잔차
+    # OOS sigma: train만으로 학습한 모델의 val 잔차 (신뢰구간 계산용)
     models_oos = _train_models(X_tr, y_tr)
     oos_preds = np.mean([m.predict(X_val) for m in models_oos], axis=0)
     sigma = np.std(y_val - oos_preds)
 
-    # 재귀 예측: 3배 증폭 방식 (GARCH 미사용)
+    # 재귀 예측: 변동성 3배 증폭 방식 (GARCH 미사용)
     predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
 
     # 최근 30일 실제 종가
@@ -348,7 +356,7 @@ def run_chart_predict_single(ticker):
 def run_chart_predict_all():
     """16개 ETF 티커 전체에 대해 앙상블 예측을 실행한다."""
     n = 5 if HAS_CATBOOST else 4
-    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"}, GARCH: {"O" if HAS_ARCH else "X"})')
+    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"}, GARCH: O)')
     results = []
     for i, ticker in enumerate(CHART_TICKERS):
         try:

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from database.repositories import fetch_sector_cycle_latest, fetch_sector_cycle_history
+from database.repositories import fetch_sector_cycle_latest, fetch_sector_cycle_history, fetch_sector_macro_history
 
 router = APIRouter()
 
@@ -32,3 +32,9 @@ def get_holdings_perf(tickers: str = 'QQQ,SPY'):
 def get_history(days: int = 12):
     """최근 N건 경기국면 히스토리 조회"""
     return fetch_sector_cycle_history(days)
+
+
+@router.get('/macro-history')
+def get_macro_history(limit: int = 120):
+    """최근 N개월 매크로 지표 히스토리 (10년 = 120개월)"""
+    return fetch_sector_macro_history(limit)

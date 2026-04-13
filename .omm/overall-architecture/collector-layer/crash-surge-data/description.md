@@ -1,1 +1,1 @@
-폭락/급등 데이터 수집 모듈. SPY OHLCV, 8개 FRED 시리즈(HY_OAS, BBB_OAS 등), 4개 Yahoo 매크로(금리, 유가), 5개 CBOE 변동성 지수(VIX, VIX3M, SKEW 등)를 수집하고, 44개 피처(Core+Aux)와 3-class 라벨(정상/폭락/급등)을 생성. FRED 파일 캐시로 경량 모드 재사용 지원.
+XGBoost 폭락/급등 모델용 44개 일간 피처 수집·계산. SPY OHLCV + FRED 8개(HY/BBB/CCC OAS, DFII10, T10YIE, SOFR, EFFR, NFCI) + Yahoo 매크로 4개(^TNX, ^IRX, CL=F) + CBOE 5개(VIX, VIX3M, VIX9D, VVIX, SKEW). CORE 15개 + AUX 29개 피처 분류. compute_labels()로 20일 수익률 기반 3클래스 라벨 생성. prepare_datasets()로 train/calib/test/dev 분할. FRED 캐시(pkl) 저장/로드 지원.

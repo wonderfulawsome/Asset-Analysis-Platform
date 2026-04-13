@@ -174,7 +174,7 @@ const I18N = {
     'chart.priceRange': '가격 범위',              // 가격 범위
     'chart.pctChange': '변동',                    // % 변동
     'chart.predictBtn': '30일 예측',
-    'chart.predictTitle': '30일 주가 예측 (Prophet)',
+    'chart.predictTitle': '30일 주가 예측 (Ensemble)',
     'chart.predictActual': '실제 종가',
     'chart.predictForecast': '예측',
     'chart.predictConfidence': '80% 신뢰구간',
@@ -268,6 +268,7 @@ const I18N = {
     // ── 섹터 상세 ──
     'sector.detailTitle': '거시경제 상세',         // 상세 제목
     'sector.macroSnapshot': '매크로 스냅샷',       // 매크로 섹션
+    'sector.macroTrend': '매크로 10년 추세',       // 매크로 추세 차트
     'sector.macroDesc': '매크로 지표 설명',        // 매크로 설명 섹션
     'sector.phasePerf': '국면별 섹터 수익률',      // 국면별 수익률
     'sector.topSectors': '현재 국면 추천 섹터',    // 추천 섹터
@@ -580,7 +581,7 @@ const I18N = {
     'chart.priceRange': 'Price Range',
     'chart.pctChange': 'Chg',
     'chart.predictBtn': '30-Day Forecast',
-    'chart.predictTitle': '30-Day Price Forecast (Prophet)',
+    'chart.predictTitle': '30-Day Price Forecast (Ensemble)',
     'chart.predictActual': 'Actual Close',
     'chart.predictForecast': 'Forecast',
     'chart.predictConfidence': '80% Confidence',
@@ -674,6 +675,7 @@ const I18N = {
     // ── Sector Detail ──
     'sector.detailTitle': 'Macro Detail',
     'sector.macroSnapshot': 'Macro Snapshot',
+    'sector.macroTrend': 'Macro 10-Year Trends',
     'sector.macroDesc': 'Macro Indicator Guide',
     'sector.phasePerf': 'Sector Performance by Phase',
     'sector.topSectors': 'Top Sectors for Current Phase',

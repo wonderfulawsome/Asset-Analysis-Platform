@@ -19,3 +19,4 @@ scipy
 shap
 catboost
 groq
+arch

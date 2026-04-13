@@ -1,1 +1,1 @@
-CNN Fear & Greed API. production.dataviz.cnn.io 엔드포인트에서 공포·탐욕 지수(0-100)와 감정 등급을 JSON으로 수집.
+CNN Money Fear & Greed Index API. 0-100 점수 + 등급(Extreme Fear~Extreme Greed) 제공. Chrome User-Agent로 세션 생성하여 API 호출. 영문 등급을 한국어로 변환.

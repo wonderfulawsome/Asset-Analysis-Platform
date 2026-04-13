@@ -1,15 +1,21 @@
 graph LR
-    index-page["메인 앱 페이지\ntemplates/index.html"]
-    stats-page["통계 대시보드\ntemplates/stats.html"]
-    main-js["핵심 로직\nstatic/main.js"]
-    chart-js["차트 모듈\nstatic/chart.js"]
-    sector-js["섹터 모듈\nstatic/sector.js"]
-    i18n-js["다국어 모듈\nstatic/i18n.js"]
-    main-css["스타일시트\nstatic/main.css"]
+    main-js["main.js\nstatic/js/main.js"]
+    chart-js["chart.js\nstatic/js/chart.js"]
+    i18n-js["i18n.js\nstatic/js/i18n.js"]
+    sector-js["sector.js\nstatic/js/sector.js"]
+    main-css["main.css\nstatic/css/main.css"]
+    index-html["index.html\ntemplates/index.html"]
 
-    index-page -->|"import"| main-js
-    index-page -->|"import"| chart-js
-    index-page -->|"import"| sector-js
-    index-page -->|"import"| i18n-js
-    index-page -->|"import"| main-css
-    stats-page -->|"import"| main-css
+    index-html -->|"로드"| main-js
+    index-html -->|"로드"| chart-js
+    index-html -->|"로드"| i18n-js
+    index-html -->|"로드"| sector-js
+    index-html -->|"스타일"| main-css
+    main-js -->|"fetch /api/*"| api["API 엔드포인트"]
+    chart-js -->|"fetch /api/chart/*"| api
+    sector-js -->|"fetch /api/sector-cycle/*"| api
+    i18n-js -->|"번역 적용"| main-js
+    i18n-js -->|"번역 적용"| chart-js
+
+    classDef external fill:#585b70,stroke:#585b70,color:#cdd6f4
+    class api external

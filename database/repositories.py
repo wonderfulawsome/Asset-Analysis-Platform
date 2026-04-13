@@ -225,6 +225,19 @@ def upsert_sector_macro(records: list[dict]) -> None:
     print(f"[DB] sector_macro_raw {len(records)}건 upsert 완료")
 
 
+def fetch_sector_macro_history(limit: int = 120) -> list[dict]:
+    """sector_macro_raw에서 최근 N건 매크로 지표를 날짜 오름차순으로 조회합니다."""
+    client = get_client()
+    response = (
+        client.table("sector_macro_raw")
+        .select("date,pmi,yield_spread,anfci,icsa_yoy,permit_yoy,real_retail_yoy,capex_yoy,real_income_yoy")
+        .order("date", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return list(reversed(response.data))
+
+
 # ── sector_cycle_result ───────────────────────────────────────
 
 def upsert_sector_cycle(record: dict) -> None:
@@ -442,7 +455,7 @@ def fetch_macro_closes() -> list[dict]:
 # ── chart_predict_result ──────────────────────────────────
 
 def upsert_chart_predict(record: dict) -> None:
-    """Prophet 예측 결과를 chart_predict_result 테이블에 upsert합니다. (date+ticker 기준)"""
+    """앙상블 예측 결과를 chart_predict_result 테이블에 upsert합니다. (date+ticker 기준)"""
     record = dict(record)
     for key in ('actual', 'predicted'):
         if isinstance(record.get(key), list):
@@ -453,7 +466,7 @@ def upsert_chart_predict(record: dict) -> None:
 
 
 def fetch_chart_predict(ticker: str) -> Optional[dict]:
-    """특정 티커의 최신 Prophet 예측 결과를 조회합니다."""
+    """특정 티커의 최신 앙상블 예측 결과를 조회합니다."""
     client = get_client()
     response = (
         client.table("chart_predict_result")

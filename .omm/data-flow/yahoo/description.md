@@ -1,1 +1,1 @@
-Yahoo Finance v8 API. SP500, VIX, 금리, 나스닥, SOX, 31개 ETF, 섹터 주식, WTI 등의 일별·월별 OHLCV 데이터를 제공. query1.finance.yahoo.com 엔드포인트 사용.
+Yahoo Finance 데이터 소스. yfinance + curl_cffi로 S&P500·VIX·금리·31개 ETF·섹터 ETF 가격 수집. 장중 실시간 가격 포함. 타임아웃 시 lookback 축소 fallback.
