@@ -25,11 +25,7 @@ try:
 except ImportError:
     HAS_CATBOOST = False
 
-try:
-    from arch import arch_model
-    HAS_ARCH = True
-except ImportError:
-    HAS_ARCH = False
+from arch import arch_model
 
 CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
                  'XLK', 'XLF', 'XLE', 'XLV', 'ARKK', 'GLD', 'TLT', 'SCHD']
@@ -124,62 +120,6 @@ def _safe_float(v):
     if np.isnan(f) or np.isinf(f):
         return None
     return f
-
-
-def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
-    """5-모델 평균 앙상블 재귀 예측 (EMA 스무딩으로 지그재그 방지)."""
-    hist = close_history.copy()
-    raw_predictions = []
-    last_date = hist.index[-1]
-    start_price = float(close_history.iloc[-1])
-    ema_ret = 0.0  # EMA 스무딩용 상태
-    alpha = 0.3    # EMA 계수 (낮을수록 매끄러움)
-
-    for k in range(1, n_days + 1):
-        feat = build_features_v2(hist)
-        last_feat = feat.iloc[[-1]][feature_cols].values
-        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
-
-        preds = [m.predict(last_feat)[0] for m in models]
-        raw_ret = np.mean(preds) * 3.0
-
-        # EMA 스무딩: 이전 예측과 혼합하여 급격한 방향 전환 방지
-        ema_ret = alpha * raw_ret + (1 - alpha) * ema_ret
-        pred_ret = np.clip(ema_ret, -0.03, 0.03)
-
-        current_price = float(hist.iloc[-1])
-        next_price = current_price * np.exp(pred_ret)
-        next_price = np.clip(next_price, start_price * 0.7, start_price * 1.3)
-
-        margin = 1.28 * sigma * np.sqrt(k)
-        lower = current_price * np.exp(pred_ret - margin)
-        upper = current_price * np.exp(pred_ret + margin)
-        lower = max(lower, start_price * 0.5)
-        upper = min(upper, start_price * 1.5)
-
-        next_date = last_date + pd.tseries.offsets.BDay(k)
-        raw_predictions.append({
-            'date': str(next_date.date()),
-            'yhat': next_price,
-            'lower': lower,
-            'upper': upper,
-        })
-        hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
-
-    # 최종 스무딩: 3일 이동평균으로 잔여 진동 제거
-    yhats = [p['yhat'] for p in raw_predictions]
-    for i in range(1, len(yhats) - 1):
-        yhats[i] = (yhats[i - 1] + yhats[i] + yhats[i + 1]) / 3.0
-
-    predictions = []
-    for i, p in enumerate(raw_predictions):
-        predictions.append({
-            'date': p['date'],
-            'yhat': _safe_float(round(yhats[i], 2)),
-            'lower': _safe_float(round(p['lower'], 2)),
-            'upper': _safe_float(round(p['upper'], 2)),
-        })
-    return predictions
 
 
 # 변동성이 큰 ETF는 범위 제한을 넉넉하게
@@ -318,16 +258,8 @@ def run_chart_predict_single(ticker):
     # 전체 데이터로 최종 모델 학습
     models_final = _train_models(data[feat_cols].values, data['target'].values)
 
-    # OOS sigma: train만으로 학습한 모델의 val 잔차
-    models_oos = _train_models(X_tr, y_tr)
-    oos_preds = np.mean([m.predict(X_val) for m in models_oos], axis=0)
-    sigma = np.std(y_val - oos_preds)
-
-    # 재귀 예측: GARCH 기반 (전체 ETF), fallback → 기존 3배 증폭
-    if HAS_ARCH:
-        predicted = _garch_forecast(models_final, close, 30, feat_cols, ticker)
-    else:
-        predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
+    # GARCH(1,1) 기반 재귀 예측
+    predicted = _garch_forecast(models_final, close, 30, feat_cols, ticker)
 
     # 최근 30일 실제 종가
     recent = close.tail(30)
@@ -348,7 +280,7 @@ def run_chart_predict_single(ticker):
 def run_chart_predict_all():
     """16개 ETF 티커 전체에 대해 앙상블 예측을 실행한다."""
     n = 5 if HAS_CATBOOST else 4
-    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"}, GARCH: {"O" if HAS_ARCH else "X"})')
+    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"}, GARCH: O)')
     results = []
     for i, ticker in enumerate(CHART_TICKERS):
         try:
