@@ -412,16 +412,129 @@ def refresh_crash_surge():                                       # 수동 새로
 # - 양수(+): 주가가 펀더멘털에서 벗어나 감정/유동성에 의해 움직임 (감정적 시장)
 # - 양수가 클수록 괴리가 심함 (0~2: 약간 괴리, 2+: 큰 괴리)
 
-# 영어 배경 지식:
-# - "Fundamental-Price Divergence Score" measures how far price has deviated from fundamentals
-# - Negative (-): price reflects fundamentals well (rational market)
-# - Positive (+): price deviated, driven by sentiment/liquidity (emotional market)
-# - Higher positive = greater divergence (0~2: mild, 2+: significant)
+EXPLAIN_PROMPT_EN = """
+Background:
+- "Fundamental-Price Divergence Score" measures how far price has deviated from fundamentals
+- Negative (-): price reflects fundamentals well (rational market)
+- Positive (+): price deviated, driven by sentiment/liquidity (emotional market)
+- Higher positive = greater divergence (0~2: mild, 2+: significant)
+"""
 
 
 # ══════════════════════════════════════════════════════════
-# [4] 2026-04-12 (UTC)
-#     30일 예측 지그재그 수정 + GARCH 전면 적용 + 신호 AI 해설 간극 분석
+# [4] 2026-04-12 10:30 (UTC)
+#     30일 예측 톱니 패턴(지그재그) 수정
+# ══════════════════════════════════════════════════════════
+#
+# [문제]
+#   - 30일 예측 차트가 뾰족한 톱니 모양으로 나옴 (특히 QQQ 등)
+#   - 원인: _garch_forecast()에서 앙상블 raw_ret의 부호(sign)만 사용
+#     → raw_ret이 작을 때 부호가 쉽게 뒤집혀 매일 ±g_sigma × 1.5 씩 진동
+#     → 방향 플리핑으로 톱니 패턴 발생
+#
+# [수정 파일]
+#   1. processor/feature4_chart_predict.py  _garch_forecast()
+#      - np.sign() 제거 → 앙상블 raw_ret 크기 유지
+#      - EMA 스무딩 추가 (alpha=0.35): 이전 예측과 혼합하여 방향 연속성 확보
+#      - amplified = ema_ret × 4.0, cap = g_sigma × 1.2
+#      - daily_clip 축소: 5%→4%, 4%→3%, 3%→2.5% (스무딩 보정)
+#
+# [효과]
+#   - 기존: 매일 ±3~5% 지그재그 → 차트가 톱니 모양
+#   - 개선: 스무딩된 방향으로 연속적 트렌드 → 자연스러운 곡선
+#   - 기존 DB 예측은 스케줄러 다음 실행(3시간 주기) 시 자동 갱신
+
+GARCH_FORECAST_FIX = """
+    # EMA 스무딩 상태: 이전 예측값과 혼합하여 방향 연속성 확보 (지그재그 방지)
+    ema_ret = None
+    ema_alpha = 0.35  # 낮을수록 더 부드러움 (0.3~0.4 권장)
+
+    for k in range(1, n_days + 1):
+        feat = build_features_v2(hist)
+        last_feat = feat.iloc[[-1]][feature_cols].values
+        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
+
+        preds = [m.predict(last_feat)[0] for m in models]
+        raw_ret = np.mean(preds)
+
+        # EMA 스무딩: 방향 플리핑 억제 (톱니 패턴 방지)
+        if ema_ret is None:
+            ema_ret = raw_ret
+        else:
+            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
+
+        g_sigma = garch_sigma_daily[k - 1]
+
+        # 스무딩된 raw_ret을 증폭 → GARCH σ로 상한 설정
+        # (기존: sign(raw_ret) * g_sigma * 1.5 → 방향 플리핑 / 개선: 크기 유지)
+        amplified = ema_ret * 4.0
+        max_magnitude = g_sigma * 1.2
+        pred_ret = float(np.clip(amplified, -max_magnitude, max_magnitude))
+
+        # 일일 수익률 클램핑
+        pred_ret = float(np.clip(pred_ret, -daily_clip, daily_clip))
+        ...
+"""
+
+
+# ══════════════════════════════════════════════════════════
+# [5] 2026-04-12 10:50 (UTC)
+#     30일 예측: GARCH 제거 → 변동성 3배 증폭 방식 전환
+# ══════════════════════════════════════════════════════════
+#
+# [변경 사항]
+#   - 30일 예측에서 GARCH(1,1) 기반 _garch_forecast() 사용 중단
+#   - _recursive_forecast() (변동성 3배 증폭 방식)으로 통일
+#   - _recursive_forecast()에 EMA 스무딩(α=0.35) 추가하여 톱니 패턴 방지
+#
+# [수정 파일]
+#   1. processor/feature4_chart_predict.py
+#      - run_chart_predict_single(): HAS_ARCH 분기 제거,
+#        무조건 _recursive_forecast() 사용
+#      - _recursive_forecast(): EMA 스무딩 추가
+#        (이전 예측과 0.35:0.65로 혼합 → 방향 연속성 확보)
+
+RUN_CHART_PREDICT_SINGLE_FORECAST = """
+    # 재귀 예측: 3배 증폭 방식 (GARCH 미사용)
+    predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
+"""
+
+RECURSIVE_FORECAST_WITH_EMA = """
+def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
+    \"\"\"5-모델 평균 앙상블 재귀 예측 (변동성 3배 증폭).
+
+    EMA 스무딩으로 방향 연속성을 확보하여 톱니 패턴을 방지한다.
+    \"\"\"
+    hist = close_history.copy()
+    predictions = []
+    last_date = hist.index[-1]
+    start_price = float(close_history.iloc[-1])
+
+    # EMA 스무딩 상태 (방향 플리핑 억제)
+    ema_ret = None
+    ema_alpha = 0.35  # 낮을수록 더 부드러움
+
+    for k in range(1, n_days + 1):
+        feat = build_features_v2(hist)
+        last_feat = feat.iloc[[-1]][feature_cols].values
+        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
+
+        preds = [m.predict(last_feat)[0] for m in models]
+        raw_ret = np.mean(preds)
+
+        # EMA 스무딩
+        if ema_ret is None:
+            ema_ret = raw_ret
+        else:
+            ema_ret = ema_alpha * raw_ret + (1 - ema_alpha) * ema_ret
+
+        pred_ret = ema_ret * 3.0  # 변동성 3배 증폭
+        pred_ret = float(np.clip(pred_ret, -0.03, 0.03))
+        # ... (이하 기존과 동일)
+"""
+# ══════════════════════════════════════════════════════════
+# [6] 2026-04-12 (UTC) — main 브랜치 병합
+#     30일 예측 톱니 수정(3일 이동평균) + 신호 AI 해설 간극 분석
 # ══════════════════════════════════════════════════════════
 #
 # [문제 1] 30일 예측 그래프가 뾰족뾰족 지그재그로 출력됨
@@ -519,3 +632,23 @@ def refresh_crash_surge():                                       # 수동 새로
     macro = macro.resample('MS').last()
     macro = macro.ffill(limit=3)   # 지연 지표를 최대 3개월까지 앞값으로 채움
     macro = macro.dropna()          # ffill 후에도 NaN인 행 제거 (초기 히스토리)
+
+
+# ══════════════════════════════════════════════════════════
+# [8] 2026-04-12 11:30 (UTC) — 병합 후 사용자 요청 재적용
+#     GARCH 사용 안 함 + _recursive_forecast(3배 증폭) 사용
+# ══════════════════════════════════════════════════════════
+#
+# [변경 사항]
+#   - main 브랜치는 _garch_forecast() 사용 (arch 라이브러리)
+#   - 사용자 요청: "garch를 하지말고 변동성3배 증폭으로 바꿔봐"
+#   - _recursive_forecast() 함수를 다시 추가하여 사용
+#   - main의 EMA 스무딩(α=0.3) + 3일 이동평균 후처리는 그대로 채용
+#   - _garch_forecast() 함수는 코드만 보존 (사용 안 함)
+#
+# [수정 파일]
+#   1. processor/feature4_chart_predict.py
+#      - _recursive_forecast() 재추가 (3배 증폭 + EMA + 3일 이동평균)
+#      - run_chart_predict_single(): _garch_forecast → _recursive_forecast 사용
+#      - OOS sigma 계산 복원 (신뢰구간용)
+

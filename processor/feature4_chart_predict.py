@@ -122,6 +122,77 @@ def _safe_float(v):
     return f
 
 
+def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
+    """5-모델 평균 앙상블 재귀 예측 (변동성 3배 증폭).
+
+    EMA 스무딩(α=0.3) + 3일 이동평균 후처리로 톱니 패턴 방지.
+    GARCH 미사용 — 단순 3배 증폭만 사용.
+    """
+    hist = close_history.copy()
+    raw_predictions = []
+    last_date = hist.index[-1]
+    start_price = float(close_history.iloc[-1])
+
+    # EMA 스무딩 상태 (방향 플리핑 억제)
+    ema_ret = 0.0
+    alpha = 0.3  # 낮을수록 더 부드러움
+
+    for k in range(1, n_days + 1):
+        feat = build_features_v2(hist)
+        last_feat = feat.iloc[[-1]][feature_cols].values
+
+        # NaN 피처를 0으로 대체하여 예측 안정성 확보
+        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
+
+        preds = [m.predict(last_feat)[0] for m in models]
+        raw_ret = np.mean(preds)
+
+        # 변동성 3배 증폭
+        scaled_ret = raw_ret * 3.0
+
+        # EMA 스무딩: 재귀 피드백에 의한 지그재그 방지
+        ema_ret = alpha * scaled_ret + (1 - alpha) * ema_ret
+        pred_ret = float(np.clip(ema_ret, -0.03, 0.03))  # 일일 ±3%
+
+        current_price = float(hist.iloc[-1])
+        next_price = current_price * np.exp(pred_ret)
+
+        # 누적 가격 범위 제한: 시작가 대비 ±30%
+        next_price = np.clip(next_price, start_price * 0.7, start_price * 1.3)
+
+        margin = 1.28 * sigma * np.sqrt(k)
+        lower = current_price * np.exp(pred_ret - margin)
+        upper = current_price * np.exp(pred_ret + margin)
+        # 신뢰구간도 범위 제한
+        lower = max(lower, start_price * 0.5)
+        upper = min(upper, start_price * 1.5)
+
+        next_date = last_date + pd.tseries.offsets.BDay(k)
+        raw_predictions.append({
+            'date': str(next_date.date()),
+            'yhat': next_price,
+            'lower': lower,
+            'upper': upper,
+        })
+        hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
+
+    # 최종 스무딩: 3일 이동평균으로 잔여 진동 제거
+    yhats = [p['yhat'] for p in raw_predictions]
+    for i in range(1, len(yhats) - 1):
+        yhats[i] = (yhats[i - 1] + yhats[i] + yhats[i + 1]) / 3.0
+
+    predictions = []
+    for i, p in enumerate(raw_predictions):
+        predictions.append({
+            'date': p['date'],
+            'yhat': _safe_float(round(yhats[i], 2)),
+            'lower': _safe_float(round(p['lower'], 2)),
+            'upper': _safe_float(round(p['upper'], 2)),
+        })
+
+    return predictions
+
+
 # 변동성이 큰 ETF는 범위 제한을 넉넉하게
 _HIGH_VOL_TICKERS = {'ARKK', 'SOXX', 'SMH', 'XLE', 'IWM'}
 
@@ -129,9 +200,9 @@ _HIGH_VOL_TICKERS = {'ARKK', 'SOXX', 'SMH', 'XLE', 'IWM'}
 def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
     """GARCH(1,1) 기반 재귀 예측 — 전체 ETF 공용.
 
-    앙상블 모델의 평균 수익률 예측을 방향(direction)으로 사용하고,
-    GARCH(1,1)로 추정한 조건부 변동성으로 스케일링한다.
-    고정 3배 증폭 대신 시장 상태에 맞는 동적 변동성을 적용.
+    앙상블 모델의 평균 수익률 예측을 GARCH(1,1) σ로 스케일링하되,
+    EMA 스무딩으로 방향 연속성을 확보하여 지그재그 예측을 방지한다.
+    (기존 sign-only 방식은 raw_ret이 작을 때 부호가 쉽게 뒤집혀 톱니 패턴 발생)
     """
     hist = close_history.copy()
     predictions = []
@@ -142,15 +213,15 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
     if ticker.upper() in _HIGH_VOL_TICKERS:
         price_band = 0.25   # ±25%
         ci_band = 0.40       # 신뢰구간 ±40%
-        daily_clip = 0.05    # 일일 ±5%
+        daily_clip = 0.04    # 일일 ±4% (기존 5% → 4%, 스무딩으로 보정)
     elif ticker.upper() in {'SPY', 'VOO', 'VTI', 'DIA', 'SCHD'}:
         price_band = 0.15   # ±15% (대형 안정)
         ci_band = 0.30
-        daily_clip = 0.03
+        daily_clip = 0.025   # 일일 ±2.5% (기존 3% → 2.5%)
     else:
         price_band = 0.20   # ±20% (기본)
         ci_band = 0.35
-        daily_clip = 0.04
+        daily_clip = 0.03    # 일일 ±3% (기존 4% → 3%)
 
     # --- GARCH(1,1) 적합 ---
     log_ret = (np.log(close_history / close_history.shift(1)).dropna()) * 100  # % 스케일
@@ -258,8 +329,13 @@ def run_chart_predict_single(ticker):
     # 전체 데이터로 최종 모델 학습
     models_final = _train_models(data[feat_cols].values, data['target'].values)
 
-    # GARCH(1,1) 기반 재귀 예측
-    predicted = _garch_forecast(models_final, close, 30, feat_cols, ticker)
+    # OOS sigma: train만으로 학습한 모델의 val 잔차 (신뢰구간 계산용)
+    models_oos = _train_models(X_tr, y_tr)
+    oos_preds = np.mean([m.predict(X_val) for m in models_oos], axis=0)
+    sigma = np.std(y_val - oos_preds)
+
+    # 재귀 예측: 변동성 3배 증폭 방식 (GARCH 미사용)
+    predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
 
     # 최근 30일 실제 종가
     recent = close.tail(30)
