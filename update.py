@@ -417,3 +417,71 @@ def refresh_crash_surge():                                       # 수동 새로
 # - Negative (-): price reflects fundamentals well (rational market)
 # - Positive (+): price deviated, driven by sentiment/liquidity (emotional market)
 # - Higher positive = greater divergence (0~2: mild, 2+: significant)
+
+
+# ══════════════════════════════════════════════════════════
+# [4] 2026-04-12 (UTC)
+#     30일 예측 지그재그 수정 + GARCH 전면 적용 + 신호 AI 해설 간극 분석
+# ══════════════════════════════════════════════════════════
+#
+# [문제 1] 30일 예측 그래프가 뾰족뾰족 지그재그로 출력됨
+#   - 원인: Railway에 arch 미설치 → _recursive_forecast(3배 증폭) 사용
+#     재귀 예측에서 예측 가격이 다음 피처(ret_1d)에 반영 → 양/음 교대 → 3배 증폭 → 지그재그
+#   - 또한 _garch_forecast에서 np.sign으로 방향만 추출 → 미세한 양/음 전환 시 큰 진동
+#
+# [문제 2] 신호 AI 해설이 등급(주의/보통) 중심으로만 설명
+#   - 하락/상승 점수 간 간극의 크기와 추세가 더 유의미한 정보
+#
+# [문제 3] AI 해설에서 간극이 항상 0.0으로 표시
+#   - 원인: DB 필드가 crash_score/surge_score인데 crash_prob/surge_prob로 조회
+#
+# [수정 파일]
+#   1. requirements.txt            - arch 라이브러리 추가
+#   2. processor/feature4_chart_predict.py
+#      - _recursive_forecast(3배 증폭 fallback) 함수 삭제
+#      - _garch_forecast만 사용: 앙상블 방향 + GARCH(1,1) 동적 변동성
+#      - np.sign 제거 → raw_ret * 3.0 + EMA 스무딩(alpha=0.3) + 3일 이동평균
+#      - from arch import arch_model 직접 임포트 (try/except 제거)
+#   3. api/routers/market_summary.py
+#      - 신호 AI 해설: 간극(Gap = surge - crash) 중심 해설로 변경
+#      - 30일 간극 추세 분석 추가 (초기/최근 5일 평균 비교, 최대/최소 간극)
+#      - crash_prob → crash_score 필드명 수정 (간극 0.0 버그)
+#      - 간극 부호: surge - crash (양수=상승 우위, 음수=하락 우위)
+#      - 시장 탭 AI 요약 방향성도 간극 중심으로 변경
+#   4. Prophet → 앙상블(Ensemble) 명칭 변경
+#      - repositories.py docstring, i18n.js UI 텍스트, job.py 로그
+#
+# ──────────────────────────────────────────────────────────
+# processor/feature4_chart_predict.py  _garch_forecast 핵심 변경
+# ──────────────────────────────────────────────────────────
+
+    # 변경 전 (np.sign → 지그재그 원인):
+    # direction = np.sign(raw_ret) if abs(raw_ret) > 1e-8 else 0.0
+    # pred_ret = direction * g_sigma * 1.5
+
+    # 변경 후 (EMA 스무딩으로 매끄러운 곡선):
+    ema_ret = 0.0
+    alpha = 0.3
+    # ...
+    scaled_ret = raw_ret * 3.0
+    ema_ret = alpha * scaled_ret + (1 - alpha) * ema_ret
+    pred_ret = np.clip(ema_ret, -daily_clip, daily_clip)
+
+    # 최종 3일 이동평균 스무딩
+    yhats = [p['yhat'] for p in raw_predictions]
+    for i in range(1, len(yhats) - 1):
+        yhats[i] = (yhats[i - 1] + yhats[i] + yhats[i + 1]) / 3.0
+
+# ──────────────────────────────────────────────────────────
+# api/routers/market_summary.py  신호 탭 간극 분석 추가
+# ──────────────────────────────────────────────────────────
+
+    # 간극 계산 (양수=상승 우위, 음수=하락 우위)
+    crash_s = cs.get('crash_score') or cs.get('crash_prob') or 0
+    surge_s = cs.get('surge_score') or cs.get('surge_prob') or 0
+    gap = round(surge_s - crash_s, 1)
+
+    # 30일 간극 추세 분석
+    history = fetch_crash_surge_history(30)
+    # 초기 5일 평균 vs 최근 5일 평균 비교 → 추세 판단
+    # trend_delta > 5: 상승 기울기 / < -5: 하락 기울기 / 그 외: 안정
