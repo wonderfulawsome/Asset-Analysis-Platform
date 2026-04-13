@@ -485,3 +485,37 @@ def refresh_crash_surge():                                       # 수동 새로
     history = fetch_crash_surge_history(30)
     # 초기 5일 평균 vs 최근 5일 평균 비교 → 추세 판단
     # trend_delta > 5: 상승 기울기 / < -5: 하락 기울기 / 그 외: 안정
+
+
+# ══════════════════════════════════════════════════════════
+# [5] 2026-04-13 (UTC)
+#     섹터 경기국면 데이터 지연 해소 + 매크로 10년 추세 차트 추가
+# ══════════════════════════════════════════════════════════
+#
+# [문제]
+#   - 거시경제 탭이 2026-01-01에 멈춰있음
+#   - 원인: collector/sector_macro.py의 dropna()가 8개 FRED 지표 중
+#     하나라도 NaN이면 해당 월 전체를 제거 → 가장 느린 INDPRO(~6주 지연)에 맞춰 2-3개월 뒤처짐
+#   - 세부페이지에 매크로 지표의 과거 추이를 볼 수 있는 차트가 없음
+#
+# [수정 파일]
+#   1. collector/sector_macro.py    - dropna() → ffill(limit=3) + dropna()
+#      지연 지표를 최대 3개월까지 앞값으로 채워 최신 월 데이터 유지
+#   2. database/repositories.py     - fetch_sector_macro_history() 추가
+#      sector_macro_raw 테이블에서 최근 120건(10년) 조회
+#   3. api/routers/sector_cycle.py  - GET /macro-history 엔드포인트 추가
+#   4. static/js/sector.js          - SVG 스파크라인 함수 + 10년 추세 섹션 추가
+#      renderSectorDetail() 내 매크로 스냅샷 뒤에 8개 지표별 추세 차트 표시
+#   5. static/js/i18n.js            - sector.macroTrend 번역 키 추가 (한/영)
+#
+# ──────────────────────────────────────────────────────────
+# collector/sector_macro.py 119줄 핵심 변경
+# ──────────────────────────────────────────────────────────
+
+    # 변경 전:
+    macro = macro.resample('MS').last().dropna()
+
+    # 변경 후:
+    macro = macro.resample('MS').last()
+    macro = macro.ffill(limit=3)   # 지연 지표를 최대 3개월까지 앞값으로 채움
+    macro = macro.dropna()          # ffill 후에도 NaN인 행 제거 (초기 히스토리)

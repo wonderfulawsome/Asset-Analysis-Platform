@@ -290,6 +290,46 @@ function renderSectorDetail(body) {
     body.innerHTML += macroHtml;
   }
 
+  // ── 3b) 매크로 10년 추세 차트 ──
+  body.innerHTML += `<div class="feat-section-title">${t('sector.macroTrend')}</div>`;
+  body.innerHTML += '<div id="macro-trend-charts" style="margin-bottom:20px"><div style="text-align:center;padding:16px"><div class="loading-spinner sm"></div></div></div>';
+
+  fetch('/api/sector-cycle/macro-history')
+    .then(r => r.json())
+    .then(history => {
+      const container = document.getElementById('macro-trend-charts');
+      if (!history || history.length < 2) {
+        container.innerHTML = `<div style="text-align:center;font-size:12px;color:var(--sub);padding:12px">${t('detail.noData')}</div>`;
+        return;
+      }
+      const indicators = ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy'];
+      const colors = ['#4CAF50','#2196F3','#FF9800','#EF4444','#9C27B0','#00BCD4','#FF5722','#607D8B'];
+      let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+      indicators.forEach((key, idx) => {
+        const label = getMacroLabels()[key] || key;
+        const values = history.map(r => r[key]);
+        const latest = values.filter(v => v != null).slice(-1)[0];
+        const display = latest != null ? (key === 'pmi' ? latest.toFixed(1) : key === 'anfci' ? latest.toFixed(2) : signStr(latest) + '%') : '--';
+        html += `<div style="padding:10px;background:var(--card);border-radius:10px;box-shadow:var(--shadow)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:10px;color:var(--sub);font-weight:600">${label}</span>
+            <span style="font-size:11px;font-weight:700">${display}</span>
+          </div>
+          <div id="spark-${key}"></div>
+        </div>`;
+      });
+      html += '</div>';
+      container.innerHTML = html;
+      indicators.forEach((key, idx) => {
+        const el = document.getElementById('spark-' + key);
+        if (el) _renderSparkline(el, history.map(r => r[key]), colors[idx]);
+      });
+    })
+    .catch(() => {
+      const c = document.getElementById('macro-trend-charts');
+      if (c) c.innerHTML = '';
+    });
+
   // ── 4) 매크로 지표 설명 ──
   if (macroKeys.length > 0) {
     body.innerHTML += `<div class="feat-section-title">${t('sector.macroDesc')}</div>`;
@@ -371,4 +411,23 @@ function renderSectorDetail(body) {
     topHtml += '</div>';
     body.innerHTML += topHtml;
   }
+}
+
+// ── SVG 스파크라인 렌더링 ──
+function _renderSparkline(container, values, color) {
+  const W = 160, H = 48;
+  const pad = 4;
+  const filtered = values.map((v, i) => v != null ? { i, v } : null).filter(Boolean);
+  if (filtered.length < 2) { container.innerHTML = '<span style="font-size:10px;color:var(--sub2)">N/A</span>'; return; }
+  const vals = filtered.map(d => d.v);
+  const yMin = Math.min(...vals), yMax = Math.max(...vals);
+  const yRange = yMax - yMin || 1;
+  const x = idx => pad + (idx / (values.length - 1)) * (W - pad * 2);
+  const y = v => pad + (1 - (v - yMin) / yRange) * (H - pad * 2);
+  const path = filtered.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(d.i).toFixed(1)},${y(d.v).toFixed(1)}`).join(' ');
+  const last = filtered[filtered.length - 1];
+  container.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
+    <circle cx="${x(last.i).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="2.5" fill="${color}"/>
+  </svg>`;
 }

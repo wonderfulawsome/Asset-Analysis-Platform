@@ -225,6 +225,19 @@ def upsert_sector_macro(records: list[dict]) -> None:
     print(f"[DB] sector_macro_raw {len(records)}건 upsert 완료")
 
 
+def fetch_sector_macro_history(limit: int = 120) -> list[dict]:
+    """sector_macro_raw에서 최근 N건 매크로 지표를 날짜 오름차순으로 조회합니다."""
+    client = get_client()
+    response = (
+        client.table("sector_macro_raw")
+        .select("date,pmi,yield_spread,anfci,icsa_yoy,permit_yoy,real_retail_yoy,capex_yoy,real_income_yoy")
+        .order("date", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return list(reversed(response.data))
+
+
 # ── sector_cycle_result ───────────────────────────────────────
 
 def upsert_sector_cycle(record: dict) -> None:
