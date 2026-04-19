@@ -158,7 +158,7 @@ def diagnose():
     return diag
 
 # 사이트 도메인 (sitemap, robots.txt에서 사용)
-SITE_URL = 'https://passive-financial-data-analysis-production.up.railway.app'
+SITE_URL = 'https://dinsightlab.com'
 
 # robots.txt: 검색엔진 크롤러 허용 규칙 + sitemap 위치
 @app.get('/robots.txt', response_class=PlainTextResponse)

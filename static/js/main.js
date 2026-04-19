@@ -2048,7 +2048,7 @@ function getOrCreateUserHash() {
 function trackVisit() {
   try {
     const userHash = getOrCreateUserHash();
-    const baseUrl = window.location.origin || 'https://passive-financial-data-analysis-production.up.railway.app';
+    const baseUrl = window.location.origin || 'https://dinsightlab.com';
     fetch(baseUrl + '/api/tracking/visit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
