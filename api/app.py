@@ -1,12 +1,12 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse            # 텍스트 응답 (robots.txt 등)
-from fastapi.middleware.cors import CORSMiddleware        # CORS 미들웨어 (앱에서 API 호출용)
+from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
-from api.routers import regime, macro, index_feed, sector_cycle, crash_surge, market_summary, chart
+from api.routers import regime, macro, index_feed, sector_cycle, crash_surge, market_summary, chart, real_estate
 try:
     from api.routers import tracking
 except Exception:
@@ -70,18 +70,28 @@ app.include_router(sector_cycle.router,  prefix='/api/sector-cycle', tags=['섹�
 app.include_router(crash_surge.router,  prefix='/api/crash-surge',  tags=['폭락/급등 전조'])
 app.include_router(market_summary.router, prefix='/api/market-summary', tags=['마켓 오버뷰'])
 app.include_router(chart.router, prefix='/api/chart', tags=['차트'])
+app.include_router(real_estate.router, prefix='/api/realestate', tags=['부동산'])
 if tracking:
     app.include_router(tracking.router, prefix='/api/tracking', tags=['사용자 추적'])
 
-# GET / 요청이 오면 index.html을 렌더링해서 반환
 @app.get('/')
 def root(request: Request):
-    return templates.TemplateResponse(request=request, name='index.html')
+    return templates.TemplateResponse(request=request, name='landing.html')
 
-# 사용자 통계 대시보드 페이지
+@app.get('/stocks')
+def stocks_page(request: Request):
+    return templates.TemplateResponse(request=request, name='stocks.html')
+
 @app.get('/stats')
 def stats_page(request: Request):
     return templates.TemplateResponse(request=request, name='stats.html')
+
+# /realestate/* 는 모두 Vite 빌드 index.html로 — React Router가 클라이언트 라우팅 처리.
+# /static/realestate/assets/* 는 StaticFiles 마운트가 먼저 잡으므로 충돌 없음.
+@app.get('/realestate')
+@app.get('/realestate/{path:path}')
+def realestate_spa(request: Request, path: str = ''):
+    return FileResponse('static/realestate/index.html')
 
 # 파이프라인 헬스체크: 스케줄러 상태 + 모델 파일 존재 여부
 @app.get('/api/health')

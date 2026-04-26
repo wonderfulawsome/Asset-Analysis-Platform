@@ -11,7 +11,8 @@ TICKERS = [
     'TLT', 'HYG', 'VNQ', 'EEM', 'EFA', 'VGK',        # 채권/리츠/해외 ETF
     'KWEB', 'XBI', 'JETS', 'SCHD', 'VXUS',            # 테마/배당/해외 ETF
     'XLK', 'XLF', 'XLE', 'XLV', 'XLB', 'XLP',        # 섹터 ETF (기술/금융/에너지/헬스/소재/필수소비)
-    'XLU', 'XLI', 'XLRE',                              # 섹터 ETF (유틸리티/산업/부동산)
+    'XLU', 'XLI', 'XLRE', 'XLY', 'XLC',                # 섹터 ETF (유틸리티/산업/부동산/소비재/통신)
+    'IGV',                                             # 소프트웨어 (Tech sub-sector)
 ]
 
 

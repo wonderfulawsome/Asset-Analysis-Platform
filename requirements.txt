@@ -20,3 +20,5 @@ shap
 catboost
 groq
 arch
+xmltodict
+httpx

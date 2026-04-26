@@ -2078,7 +2078,11 @@ function trackVisit() {
     if (chartTab) {
       chartTab.querySelectorAll('.fade-target').forEach(ft => ft.classList.add('visible'));
     }
-    if (typeof initChartTab === 'function' && !window._chartLoaded) {
+    // home view 가 활성 (scroll-wrap display:none) 상태면 차트 init 스킵 —
+    // 0 폭 컨테이너에서 SVG 그리면 빈 차트가 됨. 탭 클릭 시 init 되게 둠.
+    const homeView = document.getElementById('home-view');
+    const homeActive = homeView && homeView.style.display !== 'none' && !homeView.hidden;
+    if (typeof initChartTab === 'function' && !window._chartLoaded && !homeActive) {
       window._chartLoaded = true;
       initChartTab();
     }

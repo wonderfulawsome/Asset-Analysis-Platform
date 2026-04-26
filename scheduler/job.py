@@ -26,6 +26,232 @@ from processor.feature3_crash_surge import (
 )
 from processor.feature4_chart_predict import run_chart_predict_all
 from database.repositories import upsert_chart_predict
+from collector.real_estate_trade import fetch_trades, fetch_rents
+from collector.real_estate_population import (
+    fetch_population, fetch_household_by_size, fetch_all_sgg_codes,
+)
+from collector.real_estate_geocode import batch_geocode
+from processor.feature5_real_estate import build_mapping, compute_region_summary
+from processor.feature6_buy_signal import compute_buy_signal
+from collector.ecos_macro import fetch_macro_rate_kr as ecos_fetch_macro_rate_kr
+from collector.kosis_migration import fetch_kosis_migration
+from database.repositories import (
+    upsert_re_trades, upsert_re_rents, upsert_mois_population, upsert_mois_household,
+    upsert_stdg_admm_mapping, upsert_geo_stdg, upsert_region_summary, fetch_geo_stdg,
+    upsert_buy_signal, fetch_region_timeseries,
+    upsert_macro_rate_kr, fetch_macro_rate_kr as repo_fetch_macro_rate_kr,
+    upsert_region_migration, fetch_region_migration,
+)
+
+
+# ── 부동산 API 응답(camelCase) → DB 스키마(snake_case) 변환 헬퍼 ────────────────
+
+def _re_norm_trades(items: list[dict], sgg_cd: str, deal_ym: str) -> list[dict]:
+    # [입력 출처] fetch_trades(sgg_cd, re_ym) — 국토부 매매 API (camelCase, 값은 str)
+    #
+    # [출력 행선지] upsert_re_trades() → real_estate_trade_raw 테이블
+    #               + compute_region_summary(trades=...) → 법정동 집계용
+    #
+    # [출력 예시] result[0] = {
+    #   "sgg_cd": "11680", "deal_ym": "202603", "apt_nm": "한라비발디",
+    #   "apt_seq": "11680-4474", "umd_nm": "도곡동", "umd_cd": "11800",
+    #   "stdg_cd": "1168011800", "deal_amount": 235000,
+    #   "exclu_use_ar": 84.8861, "floor": 6, "build_year": 2016,
+    #   "deal_date": "2026-03-28", "dealing_gbn": "중개거래",
+    #   "road_nm": "남부순환로365길"}
+    #
+    # 국토부 API가 같은 (apt_seq, deal_date, floor, exclu_use_ar) 조합을 2건 이상
+    # 반환하는 경우가 있어 upsert 전 dedupe. 테이블 UNIQUE 제약과 동일 키.
+    result = []
+    seen_trade: set[tuple] = set()
+    for it in items:
+        y = it.get("dealYear", "")
+        m = it.get("dealMonth", "").zfill(2)
+        d = it.get("dealDay", "").zfill(2)
+        deal_date = f"{y}-{m}-{d}" if y and m and d else None
+        umd_cd = (it.get("umdCd") or "").zfill(5)
+        exclu = float(it.get("excluUseAr") or 0)
+        floor = int(it.get("floor") or 0)
+        apt_seq = it.get("aptSeq")
+        key = (apt_seq, deal_date, floor, exclu)
+        if key in seen_trade:
+            continue
+        seen_trade.add(key)
+        result.append({
+            "sgg_cd": sgg_cd,
+            "deal_ym": deal_ym,
+            "apt_nm": it.get("aptNm"),
+            "apt_seq": apt_seq,
+            "umd_nm": it.get("umdNm"),
+            "umd_cd": umd_cd,
+            "stdg_cd": sgg_cd.zfill(5) + umd_cd,
+            "deal_amount": int(str(it.get("dealAmount", "0") or "0").replace(",", "")),
+            "exclu_use_ar": exclu,
+            "floor": floor,
+            "build_year": int(it.get("buildYear")) if it.get("buildYear") else None,
+            "deal_date": deal_date,
+            "dealing_gbn": it.get("dealingGbn"),
+            "road_nm": it.get("roadNm"),
+        })
+    return result
+
+
+def _re_norm_rents(items: list[dict], sgg_cd: str, deal_ym: str) -> list[dict]:
+    # [입력 출처] fetch_rents(sgg_cd, re_ym) — 국토부 전월세 API
+    #              (매매와 달리 road 관련 필드만 소문자 roadnm/roadnmcd …)
+    #
+    # [출력 행선지] upsert_re_rents() → real_estate_rent_raw 테이블
+    #               + compute_region_summary(rents=...) → 시군구 전/월세 집계용
+    #
+    # [출력 예시] result[0] = {
+    #   "sgg_cd": "11680", "deal_ym": "202603", "apt_nm": "래미안대치팰리스",
+    #   "apt_seq": "11680-4394", "umd_nm": "대치동",
+    #   "deposit": 130000, "monthly_rent": 0,    # monthly_rent=0 → 전세
+    #   "exclu_use_ar": 59.99, "floor": 3,
+    #   "deal_date": "2026-03-21", "contract_type": None,
+    #   "road_nm": "삼성로51길 37"}
+    #
+    # trades 와 동일하게 테이블 UNIQUE 제약 동일 키로 dedupe
+    # (apt_seq, deal_date, floor, exclu_use_ar, deposit, monthly_rent) 중복 제거
+    result = []
+    seen_rent: set[tuple] = set()
+    for it in items:
+        y = it.get("dealYear", "")
+        m = it.get("dealMonth", "").zfill(2)
+        d = it.get("dealDay", "").zfill(2)
+        deal_date = f"{y}-{m}-{d}" if y and m and d else None
+        deposit = int(str(it.get("deposit", "0") or "0").replace(",", ""))
+        monthly_rent = int(str(it.get("monthlyRent", "0") or "0").replace(",", ""))
+        exclu = float(it.get("excluUseAr") or 0)
+        floor = int(it.get("floor") or 0)
+        apt_seq = it.get("aptSeq")
+        key = (apt_seq, deal_date, floor, exclu, deposit, monthly_rent)
+        if key in seen_rent:
+            continue
+        seen_rent.add(key)
+        result.append({
+            "sgg_cd": sgg_cd,
+            "deal_ym": deal_ym,
+            "apt_nm": it.get("aptNm"),
+            "apt_seq": apt_seq,
+            "umd_nm": it.get("umdNm"),
+            "deposit": deposit,
+            "monthly_rent": monthly_rent,
+            "exclu_use_ar": exclu,
+            "floor": floor,
+            "deal_date": deal_date,
+            "contract_type": it.get("contractType"),
+            # 전월세 API는 roadNm 대신 소문자 roadnm 사용
+            "road_nm": it.get("roadnm") or it.get("roadNm"),
+        })
+    return result
+
+
+def _re_norm_population(items: list[dict], stats_ym: str) -> list[dict]:
+    # [입력 출처] fetch_population(sgg_cd_10, re_ym) — 행안부 인구통계 API lv=3
+    #              (시군구 10자리 → 법정동별 집계, admmCd는 None)
+    #
+    # [출력 행선지] upsert_mois_population() → mois_population 테이블
+    #               + compute_region_summary(population=...) → 법정동 인구 컬럼
+    #
+    # [출력 예시] result[0] = {
+    #   "stats_ym": "202603", "stdg_cd": "1168010100", "stdg_nm": "역삼동",
+    #   "sgg_nm": "강남구", "tot_nmpr_cnt": 70093, "hh_cnt": 39424,
+    #   "hh_nmpr": 1.78, "male_nmpr_cnt": 33465, "feml_nmpr_cnt": 36628,
+    #   "male_feml_rate": 0.91}
+    result = []
+    for it in items:
+        stdg_cd = it.get("stdgCd")
+        if not stdg_cd:
+            continue
+        result.append({
+            "stats_ym": stats_ym,
+            "stdg_cd": stdg_cd,
+            "stdg_nm": it.get("stdgNm"),
+            "sgg_nm": it.get("sggNm"),
+            "tot_nmpr_cnt": int(str(it.get("totNmprCnt", "0") or "0").replace(",", "")),
+            "hh_cnt": int(str(it.get("hhCnt", "0") or "0").replace(",", "")),
+            "hh_nmpr": float(it.get("hhNmpr") or 0),
+            "male_nmpr_cnt": int(str(it.get("maleNmprCnt", "0") or "0").replace(",", "")),
+            "feml_nmpr_cnt": int(str(it.get("femlNmprCnt", "0") or "0").replace(",", "")),
+            "male_feml_rate": float(it.get("maleFemlRate") or 0),
+        })
+    return result
+
+
+def _re_norm_household(items: list[dict], stats_ym: str) -> list[dict]:
+    # [입력 출처] fetch_household_by_size(admm_cd, re_ym) — 행안부 세대원수 API lv=3
+    #              (행정동 10자리 단위 호출 — mapping.admm_cd를 순회)
+    #
+    # [출력 행선지] upsert_mois_household() → mois_household_by_size 테이블
+    #               + compute_region_summary(household=...) → solo_rate 가중합
+    #
+    # [출력 예시] result[0] = {
+    #   "stats_ym": "202603", "admm_cd": "1168051000", "dong_nm": "신사동",
+    #   "sgg_nm": "강남구", "tot_hh_cnt": 6534,
+    #   "hh_1": 2466, "hh_2": 1505, "hh_3": 1226, "hh_4": 1001,
+    #   "hh_5": 242, "hh_6": 63, "hh_7plus": 31,    # = 16+13+2+0
+    #   "solo_rate": 0.3773}                         # = 2466 / 6534
+    #
+    # MOIS API가 같은 admm_cd를 여러 건 반환하거나 호출자가 여러 번 누적할 때
+    # 중복 발생 → 테이블 UNIQUE (stats_ym, admm_cd) 충돌. 함수 내에서 dedupe.
+    result = []
+    seen_hh: set[tuple] = set()
+    for it in items:
+        admm_cd = it.get("admmCd")
+        if not admm_cd:
+            continue
+        key = (stats_ym, admm_cd)
+        if key in seen_hh:
+            continue
+        seen_hh.add(key)
+        tot = int(str(it.get("totHhCnt", "0") or "0").replace(",", ""))
+        hh_1 = int(str(it.get("hhNmprCnt1", "0") or "0").replace(",", ""))
+        # hhNmprCnt7~10 합산 → hh_7plus
+        hh_7plus = sum(int(str(it.get(f"hhNmprCnt{i}", "0") or "0").replace(",", "")) for i in range(7, 11))
+        result.append({
+            "stats_ym": stats_ym,
+            "admm_cd": admm_cd,
+            "dong_nm": it.get("dongNm"),
+            "sgg_nm": it.get("sggNm"),
+            "tot_hh_cnt": tot,
+            "hh_1": hh_1,
+            "hh_2": int(str(it.get("hhNmprCnt2", "0") or "0").replace(",", "")),
+            "hh_3": int(str(it.get("hhNmprCnt3", "0") or "0").replace(",", "")),
+            "hh_4": int(str(it.get("hhNmprCnt4", "0") or "0").replace(",", "")),
+            "hh_5": int(str(it.get("hhNmprCnt5", "0") or "0").replace(",", "")),
+            "hh_6": int(str(it.get("hhNmprCnt6", "0") or "0").replace(",", "")),
+            "hh_7plus": hh_7plus,
+            "solo_rate": (hh_1 / tot) if tot > 0 else None,
+        })
+    return result
+
+
+def _re_norm_mapping(pairs: list[dict]) -> list[dict]:
+    # [입력 출처] build_mapping(sgg_cd_10, re_ym) — processor/feature5_real_estate
+    #              (내부에서 fetch_mapping_pairs(stdgCd, ym)를 읍면동마다 호출해 dedupe)
+    #
+    # [출력 행선지] upsert_stdg_admm_mapping() → stdg_admm_mapping 테이블
+    #               + compute_region_summary(mapping=...) → 행정동→법정동 join 키
+    #               + batch_geocode(f"{ctpv_nm} {sgg_nm} {stdg_nm}") → 지오코딩 주소 조합
+    #
+    # [출력 예시] return[0] = {
+    #   "ref_ym": "202603", "stdg_cd": "1168010100", "stdg_nm": "역삼동",
+    #   "admm_cd": "1168053000", "admm_nm": "역삼1동",
+    #   "ctpv_nm": "서울특별시", "sgg_nm": "강남구"}
+    return [
+        {
+            "ref_ym": p.get("ref_ym"),
+            "stdg_cd": p.get("stdgCd"),
+            "stdg_nm": p.get("stdgNm"),
+            "admm_cd": p.get("admmCd"),
+            "admm_nm": p.get("admmNm"),
+            "ctpv_nm": p.get("ctpvNm"),
+            "sgg_nm": p.get("sggNm"),
+        }
+        for p in pairs
+        if p.get("stdgCd") and p.get("admmCd")
+    ]
 
 
 def run_pipeline(light: bool = False) -> None:
@@ -209,6 +435,7 @@ def run_pipeline(light: bool = False) -> None:
     if not light:
         # Step 6: 섹터 경기국면 분석 (FRED 매크로 + 섹터 ETF + XGBoost)
         print('\n[Step 6] 섹터 경기국면 분석...')
+        cycle_result = None
         try:
             sector_macro = fetch_sector_macro()
             macro_records = to_sector_macro_records(sector_macro)
@@ -220,6 +447,16 @@ def run_pipeline(light: bool = False) -> None:
             upsert_sector_cycle(cycle_result)
         except Exception as e:
             print(f'[Step 6] 섹터 경기국면 실패, 건너뜀: {e}')
+            traceback.print_exc()
+
+        # Step 6b: 섹터 펀더멘털 갭 — yfinance ETF 가격 + holdings 가중 EPS 로
+        # log(P).diff(12) - log(E).diff(12) 시계열 산출 (28점/ETF). idempotent.
+        print('\n[Step 6b] 섹터 펀더멘털 갭 산출...')
+        try:
+            from processor.sector_fundamental_gap import backfill_all as fg_backfill_all
+            fg_backfill_all()
+        except Exception as e:
+            print(f'[Step 6b] 섹터 펀더멘털 갭 실패, 건너뜀: {e}')
             traceback.print_exc()
 
         # Step 7: XGBoost 폭락/급등 전조 탐지 (모델 학습 + 오늘 예측)
@@ -315,6 +552,121 @@ def run_pipeline(light: bool = False) -> None:
             print(f'[Step 8] {len(predict_results)}건 예측 완료')
         except Exception as e:
             print(f'[Step 8] 앙상블 예측 실패, 건너뜀: {e}')
+            traceback.print_exc()
+
+        # Step 8b: ECOS 거시지표 (기준금리·주담대 금리·잔액) — 24개월
+        # 부동산 수집보다 먼저 호출해 buy_signal 계산 시 이용 가능하게.
+        print('\n[Step 8b] ECOS 거시지표 수집...')
+        try:
+            ecos_rows = ecos_fetch_macro_rate_kr(months=24)
+            upsert_macro_rate_kr(ecos_rows)
+            print(f'[Step 8b] {len(ecos_rows)}개월 ECOS 저장')
+        except Exception as e:
+            print(f'[Step 8b] ECOS 실패, 건너뜀: {e}')
+            traceback.print_exc()
+
+        # Step 9: 부동산 월별 수집 (매매·전월세·인구·세대원수·매핑·지역집계)
+        print('\n[Step 9] 부동산 데이터 수집...')
+        try:
+            # 기준월 = 전월 — MOIS 인구통계가 당월엔 미집계(1~2개월 lag)라
+            # 당월로 호출하면 resultCode=10 INVALID_REQUEST_PARAMETER 반환됨.
+            _today = datetime.date.today()
+            re_ym = (_today.replace(day=1) - datetime.timedelta(days=1)).strftime('%Y%m')
+            # 전국 시군구 코드 동적 조회 (MOIS lv=1→lv=2) — 신규 시군구 자동 반영
+            re_sgg_codes = fetch_all_sgg_codes(re_ym)
+            # KOSIS 인구이동 — 시군구별로 한 번에 (셀 한도 안 넘게 묶음)
+            try:
+                kosis_rows = fetch_kosis_migration(re_sgg_codes, months=24)
+                upsert_region_migration(kosis_rows)
+                print(f'  KOSIS 인구이동 {len(kosis_rows)}건 저장')
+            except Exception as e_k:
+                print(f'  KOSIS 실패, 건너뜀: {e_k}')
+
+            # ECOS 시계열 한 번 읽어 두고 buy_signal 계산 시 매번 재사용
+            rate_ts = repo_fetch_macro_rate_kr(months=24)
+            print(f'  [Step 9] 전국 {len(re_sgg_codes)}개 시군구 대상')
+
+            for sgg_cd in re_sgg_codes:
+                print(f'  [Step 9] sgg_cd={sgg_cd}...')
+                try:
+                    raw_trades = fetch_trades(sgg_cd, re_ym)
+                    trades = _re_norm_trades(raw_trades, sgg_cd, re_ym)
+                    upsert_re_trades(trades)
+
+                    raw_rents = fetch_rents(sgg_cd, re_ym)
+                    rents = _re_norm_rents(raw_rents, sgg_cd, re_ym)
+                    upsert_re_rents(rents)
+
+                    # 행안부 API는 시군구도 10자리 코드로 호출 (뒷 5자리 0 패딩)
+                    sgg_cd_10 = sgg_cd + "00000"
+                    raw_pop = fetch_population(sgg_cd_10, re_ym)
+                    population = _re_norm_population(raw_pop, re_ym)
+                    upsert_mois_population(population)
+
+                    raw_mapping = build_mapping(sgg_cd_10, re_ym)
+                    mapping = _re_norm_mapping(raw_mapping)
+                    upsert_stdg_admm_mapping(mapping)
+
+                    # MOIS API가 상위 admm_cd 호출 시 하위 admm_cd까지 섞어 반환 →
+                    # 누적 후 (stats_ym, admm_cd) 중복 제거 (테이블 UNIQUE 키와 동일)
+                    hh_seen: set[tuple] = set()
+                    household: list[dict] = []
+                    admm_cds = list({m["admm_cd"] for m in mapping if m.get("admm_cd")})
+                    for admm_cd in admm_cds:
+                        raw_hh = fetch_household_by_size(admm_cd, re_ym)
+                        for row in _re_norm_household(raw_hh, re_ym):
+                            k = (row["stats_ym"], row["admm_cd"])
+                            if k in hh_seen:
+                                continue
+                            hh_seen.add(k)
+                            household.append(row)
+                    upsert_mois_household(household)
+
+                    summary = compute_region_summary(
+                        trades=trades, rents=rents,
+                        population=population, mapping=mapping,
+                        household=household or None,
+                        sgg_cd=sgg_cd, stats_ym=re_ym,
+                    )
+                    upsert_region_summary(summary)
+
+                    # 매수 시그널 — region_summary 시계열 + ECOS 금리 + KOSIS 이동
+                    ts = fetch_region_timeseries(sgg_cd)
+                    flow_ts = fetch_region_migration(sgg_cd)
+                    signal_rec = compute_buy_signal(ts, rate_ts=rate_ts, flow_ts=flow_ts)
+                    if signal_rec:
+                        signal_rec['sgg_cd'] = sgg_cd
+                        upsert_buy_signal(signal_rec)
+
+                    # 신규 법정동만 지오코딩 — (ctpv_nm, sgg_nm, stdg_nm) 조합으로 검색
+                    existing_geo = {g["stdg_cd"] for g in fetch_geo_stdg(sgg_cd)}
+                    seen_stdg: set[str] = set()
+                    uniq_new: list[dict] = []
+                    for m in mapping:
+                        if m.get("stdg_cd") not in existing_geo and m["stdg_cd"] not in seen_stdg:
+                            seen_stdg.add(m["stdg_cd"])
+                            uniq_new.append(m)
+                    if uniq_new:
+                        addresses = [
+                            f'{m.get("ctpv_nm", "")} {m.get("sgg_nm", "")} {m.get("stdg_nm", "")}'.strip()
+                            for m in uniq_new
+                        ]
+                        geo_results = batch_geocode(addresses)
+                        geo_records = [
+                            {"stdg_cd": m["stdg_cd"], "stdg_nm": m.get("stdg_nm"),
+                             "sgg_nm": m.get("sgg_nm"), "lat": geo["lat"], "lng": geo["lng"]}
+                            for m, geo in zip(uniq_new, geo_results) if geo
+                        ]
+                        if geo_records:
+                            upsert_geo_stdg(geo_records)
+                            print(f'    지오코딩 {len(geo_records)}건 저장')
+                except Exception as e_sgg:
+                    print(f'  [Step 9] sgg_cd={sgg_cd} 실패, 건너뜀: {e_sgg}')
+                    traceback.print_exc()
+
+            print(f'[Step 9] 완료 ({len(re_sgg_codes)}개 시군구)')
+        except Exception as e:
+            print(f'[Step 9] 부동산 수집 실패, 건너뜀: {e}')
             traceback.print_exc()
 
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산

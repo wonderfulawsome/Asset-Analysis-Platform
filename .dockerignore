@@ -10,6 +10,9 @@ practice/
 # Python 캐시
 __pycache__/
 *.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # Git
 .git/
@@ -18,3 +21,24 @@ __pycache__/
 # OS 파일
 .DS_Store
 Thumbs.db
+
+# Node 의존성 — Stage 1에서 컨테이너 내부에 새로 설치 (로컬 빌드 캐시 유입 방지)
+node_modules/
+frontend-realestate/node_modules/
+
+# Vite 빌드 산출물 — Stage 1에서 새로 생성하므로 로컬 산출물 불필요
+frontend-realestate/dist/
+static/realestate/assets/
+static/realestate/index.html
+static/realestate/*.svg
+static/realestate/vite.svg
+
+# 노트북·원시 데이터·학습 산출물 — 이미지에 포함하지 않음
+notebooks/
+.ipynb_checkpoints/
+data/
+catboost_info/
+models/*.pkl
+
+# 업데이트 로그 — 런타임에 사용되지 않음
+update.py

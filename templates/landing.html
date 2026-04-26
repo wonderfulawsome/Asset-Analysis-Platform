@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Passive Financial</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #06060a;
+      color: #c8c8d0;
+      font-family: 'Pretendard', -apple-system, sans-serif;
+      gap: 2rem;
+    }
+    h1 { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.02em; }
+    .buttons { display: flex; gap: 1.25rem; }
+    a.btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 180px;
+      height: 56px;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    a.btn:hover { opacity: 0.85; }
+    .btn-stocks  { background: #ff8c00; color: #06060a; }
+    .btn-realestate { background: #3b82f6; color: #ffffff; }
+  </style>
+</head>
+<body>
+  <h1>Passive Financial</h1>
+  <div class="buttons">
+    <a class="btn btn-stocks" href="/stocks">주식 · ETF</a>
+    <a class="btn btn-realestate" href="/realestate">부동산</a>
+  </div>
+</body>
+</html>
