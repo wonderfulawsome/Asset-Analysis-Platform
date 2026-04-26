@@ -1,7 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
-from fastapi.responses import PlainTextResponse, FileResponse
+from fastapi.responses import PlainTextResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -75,8 +75,10 @@ if tracking:
     app.include_router(tracking.router, prefix='/api/tracking', tags=['사용자 추적'])
 
 @app.get('/')
-def root(request: Request):
-    return templates.TemplateResponse(request=request, name='landing.html')
+def root():
+    # 부동산 SPA 가 아직 미완성 → landing 우회하고 바로 주식 앱 (/stocks) 으로 직행.
+    # 부동산 완성되면 templates.TemplateResponse(name='landing.html') 로 복귀.
+    return RedirectResponse(url='/stocks', status_code=307)
 
 @app.get('/stocks')
 def stocks_page(request: Request):
