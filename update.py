@@ -4089,6 +4089,84 @@ def z(x, samples):
 #   - 페이지 h2 page-title
 
 
+# ──────────────────────────────────────────────────────────
+# [41] 2026-04-28 (UTC) — 30일 예측 모델 업그레이드: GJR-GARCH-Skew-t + FHS + fan chart
+# ──────────────────────────────────────────────────────────
+
+# [요구]
+# 사용자가 AI차트 탭 30일 예측이 평탄하고 정확도 부족 + 변동성 부재 라고 보고. 노트북에서
+# walk-forward backtest (10년, 매월 cutoff 119건) 검증 결과:
+#   - 기존 production: hit rate 0.69 (그러나 specificity 0.0, 하락 사례 9/9 모두 놓침)
+#   - 평탄 차트 원인: hard clipping 삼중 (daily_clip ±2.5~4%, price_band ±15~25%, 3일 MA)
+#                   + scaled_ret * 3.0 증폭 + 단일 σ forecast (path 1개)
+# 노트북 검증 후 plan stage 1+2+3+4 본 코드 적용 결정.
+
+# [수정 파일 — 4개]
+# 1. processor/feature4_chart_predict.py
+#    - 새 함수 _garch_skewt_fhs_forecast() 추가 (line 200~)
+#      · GJR-GARCH(1,1,1) + Skew-t (arch_model: o=1, dist='skewt')
+#      · 1년 윈도우 (252일) — 5y 윈도우의 σ 부풀림 회피
+#      · FHS Monte Carlo 1000 path (표준화 잔차 부트스트랩)
+#      · hard clipping 모두 제거 (sanity_clip ±10% 만)
+#      · 분위수 산출: p05/p10/p50/p90/p95 + sample_paths 30개 + metrics
+#    - run_chart_predict_single 수정: _recursive_forecast → _garch_skewt_fhs_forecast
+#    - DB 저장: chart_predict_result.predicted JSONB 안에
+#               {forecast, sample_paths, metrics, predicted(legacy), metadata}
+#               schema 변경 X
+# 2. api/routers/chart.py
+#    - _is_prediction_valid: dict 형식 (forecast/predicted) + legacy list 둘 다 인식
+#    - /predict 응답: forecast/sample_paths/metrics/metadata 펴서 노출 + legacy predicted 유지
+# 3. static/js/chart.js
+#    - 4-layer fan chart SVG:
+#      · Layer 1 (p50~p95): rgba(156,163,175,0.10) 옅은 회색 상한
+#      · Layer 2 (p10~p50): rgba(59,130,246,0.13) 옅은 파랑 중립
+#      · Layer 3 (p05~p10): rgba(239,68,68,0.32) **빨강 위험 zone (강조)**
+#      · Median: rgba(156,163,175,0.7) 옅은 회색 점선 (mean bull-bias 강조 X)
+#    - renderPredictLegend: metrics 박스 (기대 수익률 / 5% 확률 손실 / 10% 확률 손실
+#                          / 상승 확률) + 색상 범례 + black swan disclaimer
+#    - legacy 데이터 (DB 옛 row) 도 단일 밴드로 정상 작동 (하위 호환)
+# 4. templates/stocks.html
+#    - chart.js ?v=22 캐시 버스터
+
+# [노트북 검증 결과 (forecast_gjr_garch_fhs_experiment.ipynb)]
+#   - p05 coverage: 89 시점 평가에서 93.3% (이상 95% 거의 도달)
+#   - p10 coverage: 91.0% (이상 90% 통과)
+#   - prob_down_5pct 신호 약함 → 강조 X (mean 점예측 bull-bias 한계는 본질적)
+#   - VaR 5% / VaR 10% / 분위수는 calibration OK → 강조 OK
+#   - Stage 5 conformal calibration 시도 — 효과 거의 0 (이미 stage 1+2 calibration 통과)
+#                                        + 복잡도만 증가 → production 적용 X
+
+# [endpoint 응답 검증 (SPY)]
+# top-level keys: ticker, actual, predicted (legacy), forecast, sample_paths, metrics, metadata
+# forecast 30점, sample_paths 30 × 30
+# metrics: expected_return_30d, var_5pct_30d, var_10pct_30d, prob_up_30d,
+#          prob_down_5pct_30d, prob_down_10pct_30d
+# metadata: model='XGB+CatBoost+RF+Ridge+SVR ensemble + GJR-GARCH(1,1,1)-SkewT + FHS'
+
+# [핵심 코드 — _garch_skewt_fhs_forecast]
+def _garch_skewt_fhs_forecast(models, close_history, n_days, feature_cols, ticker='SPY',
+                                n_sims=1000, garch_window=252, sanity_clip=0.10):
+    # 1) Mean path μ̂ — 5-모델 앙상블 recursive (hard clip 제거)
+    # 2) GJR-GARCH(1,1,1) + Skew-t fit on 1년 윈도우
+    am = arch_model(log_ret_window, vol='Garch', p=1, o=1, q=1, mean='Zero', dist='skewt')
+    # 3) FHS Monte Carlo — 표준화 잔차 부트스트랩
+    z = rng.choice(std_resid)
+    eps_t = sqrt(max(var_t, 1e-9)) * z
+    paths[s, h] = mu_path[h] + eps_t / 100.0
+    # 4) 분위수 + metrics + sample_paths 직렬화
+
+# [효과]
+# - 평탄 차트 → fan chart (cone of uncertainty)
+# - 단일 yhat 신뢰구간 → 4-layer fan + 빨강 위험 zone
+# - mean 강조 X (bull-bias 한계 honest 표현) → 분위수 + VaR 강조
+# - 30개 sample paths 그림자 — 'live' 한 모습
+
+# [한계 인정 (UI에 disclaimer)]
+# - Black swan event (코로나, 베어 시작) 사전 예측 불가
+# - "정상 시장 분포 추정. 시장 충격 사전 예측 불가" 명시
+
+
+
 
 
 

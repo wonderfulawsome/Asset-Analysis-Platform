@@ -275,9 +275,32 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
   const realN = allCandles.length;
 
   // 예측 데이터 연장 (캔들 오른쪽에 이어서 표시)
-  const predArr = (_predictVisible && _predictData) ? _predictData.predicted : [];
+  // 신규 forecast (분위수) 우선, 없으면 legacy predicted (yhat/lower/upper)
+  const fcArr = (_predictVisible && _predictData && Array.isArray(_predictData.forecast)
+                 && _predictData.forecast.length > 0) ? _predictData.forecast : null;
+  const predArr = !fcArr && (_predictVisible && _predictData)
+                  ? (_predictData.predicted || []) : [];
   const predPoints = [];
-  if (predArr.length > 0 && realN > 0) {
+  if (fcArr && realN > 0) {
+    const lastDate = allCandles[realN - 1].d;
+    fcArr.forEach(p => {
+      if (p.date > lastDate && p.median != null) {
+        predPoints.push({
+          d: p.date,
+          o: p.median,
+          h: (p.p95 != null ? p.p95 : p.median),
+          l: (p.p05 != null ? p.p05 : p.median),
+          c: p.median, v: 0,
+          _pred: {
+            mean: p.mean, median: p.median,
+            p05: p.p05, p10: p.p10, p90: p.p90, p95: p.p95,
+            // legacy 호환 (touch detail 등에서 yhat 사용)
+            yhat: p.median, lower: p.p10, upper: p.p90,
+          },
+        });
+      }
+    });
+  } else if (predArr.length > 0 && realN > 0) {
     const lastDate = allCandles[realN - 1].d;
     predArr.forEach(p => {
       if (p.date > lastDate && p.yhat != null && p.lower != null && p.upper != null) {
@@ -364,28 +387,60 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
       candleSvg += `<rect x="${(cx - candleW / 2).toFixed(1)}" y="${bodyTop.toFixed(1)}" width="${candleW.toFixed(1)}" height="${bodyH.toFixed(1)}" fill="${color}" rx="0.3"/>`;
     });
 
-    // 예측 오버레이 (신뢰구간 + 예측선 + 구분선 + 애니메이션)
+    // 예측 오버레이 — 4-layer fan + 위험 zone (Stage 4 적용)
     let predSvg = '';
     if (predPoints.length > 0) {
-      // 구분선 (마지막 캔들과 첫 예측 사이)
+      // 구분선
       const divX = (xPos(realN - 1) + xPos(realN)) / 2;
       predSvg += `<line x1="${divX.toFixed(1)}" y1="${pad.top}" x2="${divX.toFixed(1)}" y2="${pad.top + cH}" stroke="var(--sub)" stroke-width="0.8" stroke-dasharray="3 3" opacity="0.5" class="pred-anim-fade"/>`;
 
-      // 신뢰구간 영역
       const predIdxs = [];
       allPoints.forEach((p, i) => { if (p._pred) predIdxs.push(i); });
-      if (predIdxs.length > 1) {
+
+      // 분위수 데이터 존재 여부 — 신규 fan 모드 vs legacy 단일 밴드
+      const hasFan = predIdxs.length > 1
+                     && allPoints[predIdxs[0]]._pred.p05 != null
+                     && allPoints[predIdxs[0]]._pred.p95 != null;
+
+      if (hasFan) {
+        // ── Stage 4: 4-layer fan chart ──
+        const xs = predIdxs.map(i => xPos(i).toFixed(1));
+        const xsRev = xs.slice().reverse();
+        const yAt = (i, key) => yFn(allPoints[i]._pred[key]).toFixed(1);
+
+        // Layer 1: p50 ~ p95 (옅은 회색, 상한 — 덜 중요)
+        let p95Path = predIdxs.map((i, k) => `${xs[k]},${yAt(i, 'p95')}`).join(' L');
+        let p50DownPath = predIdxs.slice().reverse().map(i => `${xPos(i).toFixed(1)},${yAt(i, 'median')}`).join(' L');
+        predSvg += `<path d="M${p95Path} L${p50DownPath} Z" fill="rgba(156,163,175,0.10)" stroke="none" class="pred-anim-fade"/>`;
+
+        // Layer 2: p10 ~ p50 (옅은 파랑, 중립)
+        let p50UpPath = predIdxs.map((i, k) => `${xs[k]},${yAt(i, 'median')}`).join(' L');
+        let p10DownPath = predIdxs.slice().reverse().map(i => `${xPos(i).toFixed(1)},${yAt(i, 'p10')}`).join(' L');
+        predSvg += `<path d="M${p50UpPath} L${p10DownPath} Z" fill="rgba(59,130,246,0.13)" stroke="none" class="pred-anim-fade"/>`;
+
+        // Layer 3: p05 ~ p10 (빨강 위험 zone — 강조)
+        let p10UpPath = predIdxs.map((i, k) => `${xs[k]},${yAt(i, 'p10')}`).join(' L');
+        let p05DownPath = predIdxs.slice().reverse().map(i => `${xPos(i).toFixed(1)},${yAt(i, 'p05')}`).join(' L');
+        predSvg += `<path d="M${p10UpPath} L${p05DownPath} Z" fill="rgba(239,68,68,0.32)" stroke="none" class="pred-anim-fade"/>`;
+
+        // Median (옅은 회색 점선 — bull-bias mean 강조 X)
+        let medianPts = [`${xPos(realN - 1).toFixed(1)},${yFn(lastC).toFixed(1)}`];
+        predIdxs.forEach(i => {
+          medianPts.push(`${xPos(i).toFixed(1)},${yAt(i, 'median')}`);
+        });
+        predSvg += `<path d="M${medianPts.join(' L')}" fill="none" stroke="rgba(156,163,175,0.7)" stroke-width="1.2" stroke-dasharray="3 3" stroke-linecap="round" class="pred-anim-line"/>`;
+      } else {
+        // ── Legacy: 단일 밴드 (옛 DB 데이터 호환) ──
         let upper = predIdxs.map(i => `${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.upper).toFixed(1)}`).join(' L');
         let lower = predIdxs.slice().reverse().map(i => `${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.lower).toFixed(1)}`).join(' L');
         predSvg += `<path d="M${upper} L${lower} Z" fill="rgba(59,130,246,0.12)" stroke="none" class="pred-anim-fade"/>`;
-      }
 
-      // 예측선 (마지막 종가에서 연결) — stroke-dashoffset 애니메이션
-      let predLinePts = [`${xPos(realN - 1).toFixed(1)},${yFn(lastC).toFixed(1)}`];
-      predIdxs.forEach(i => {
-        predLinePts.push(`${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.yhat).toFixed(1)}`);
-      });
-      predSvg += `<path d="M${predLinePts.join(' L')}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" class="pred-anim-line"/>`;
+        let predLinePts = [`${xPos(realN - 1).toFixed(1)},${yFn(lastC).toFixed(1)}`];
+        predIdxs.forEach(i => {
+          predLinePts.push(`${xPos(i).toFixed(1)},${yFn(allPoints[i]._pred.yhat).toFixed(1)}`);
+        });
+        predSvg += `<path d="M${predLinePts.join(' L')}" fill="none" stroke="#3B82F6" stroke-width="2" stroke-linecap="round" class="pred-anim-line"/>`;
+      }
     }
 
     // MA선
@@ -950,11 +1005,39 @@ function renderPredictLegend(show) {
   const el = document.getElementById('predict-legend');
   if (!el) return;
   if (!show) { el.innerHTML = ''; return; }
-  el.innerHTML = `
-    <div class="predict-legend-item">
-      <span class="predict-legend-dot" style="background:#3B82F6"></span>${t('chart.predictForecast')}
-    </div>
-    <div class="predict-legend-item">
-      <span class="predict-legend-bar" style="background:rgba(59,130,246,0.15)"></span>${t('chart.predictConfidence')}
-    </div>`;
+
+  // 신규 fan + metrics 모드
+  const m = _predictData && _predictData.metrics;
+  const hasFan = _predictData && Array.isArray(_predictData.forecast) && _predictData.forecast.length > 0;
+
+  if (hasFan && m) {
+    const fmt = (v) => v != null ? (v >= 0 ? '+' : '') + (v * 100).toFixed(1) + '%' : '-';
+    const expected = fmt(m.expected_return_30d);
+    const var5 = fmt(m.var_5pct_30d);
+    const var10 = fmt(m.var_10pct_30d);
+    const probUp = m.prob_up_30d != null ? Math.round(m.prob_up_30d * 100) + '%' : '-';
+
+    el.innerHTML = `
+      <div class="predict-metrics" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:12px;padding:8px 10px;background:rgba(255,255,255,0.04);border-radius:8px;margin-top:4px;">
+        <div><span style="color:var(--sub);">기대 수익률</span> <strong>${expected}</strong></div>
+        <div><span style="color:var(--sub);">상승 확률</span> <strong>${probUp}</strong></div>
+        <div><span style="color:#EF4444;">5% 확률 손실</span> <strong style="color:#EF4444;">${var5}</strong></div>
+        <div><span style="color:#EF4444;">10% 확률 손실</span> <strong style="color:#EF4444;">${var10}</strong></div>
+      </div>
+      <div class="predict-legend-row" style="display:flex;gap:10px;flex-wrap:wrap;font-size:10.5px;color:var(--sub);margin-top:6px;">
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:8px;background:rgba(239,68,68,0.32);border-radius:2px;"></span>위험 zone (5~10% 확률)</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:8px;background:rgba(59,130,246,0.13);border-radius:2px;"></span>중립 (10~50%)</span>
+        <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:8px;background:rgba(156,163,175,0.10);border-radius:2px;"></span>상한 (50~95%)</span>
+      </div>
+      <div style="font-size:10px;color:var(--sub);margin-top:6px;font-style:italic;">⚠️ 정상 시장 분포 추정. 시장 충격(black swan) 사전 예측 불가</div>`;
+  } else {
+    // legacy
+    el.innerHTML = `
+      <div class="predict-legend-item">
+        <span class="predict-legend-dot" style="background:#3B82F6"></span>${t('chart.predictForecast')}
+      </div>
+      <div class="predict-legend-item">
+        <span class="predict-legend-bar" style="background:rgba(59,130,246,0.15)"></span>${t('chart.predictConfidence')}
+      </div>`;
+  }
 }

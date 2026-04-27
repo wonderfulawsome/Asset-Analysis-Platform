@@ -197,6 +197,162 @@ def _recursive_forecast(models, close_history, n_days, sigma, feature_cols):
 _HIGH_VOL_TICKERS = {'ARKK', 'SOXX', 'SMH', 'XLE', 'IWM'}
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1+2: GJR-GARCH(1,1,1) + Skew-t + Filtered Historical Simulation
+# ─────────────────────────────────────────────────────────────────────────────
+# 노트북 검증 결과 (forecast_gjr_garch_fhs_experiment.ipynb):
+#   - 89 시점 walk-forward p05 coverage 93.3% (이상 95% 거의 도달)
+#   - prob_down_5pct 신호는 약함 → mean 강조 X, 분위수 강조
+#   - hard clipping/scaling 모두 제거 — FHS 가 자연 변동성 표현
+def _garch_skewt_fhs_forecast(models, close_history, n_days, feature_cols, ticker='SPY',
+                                n_sims=1000, garch_window=252, sanity_clip=0.10):
+    """GJR-GARCH(1,1,1) + Skew-t + FHS Monte Carlo 30일 예측.
+
+    Args:
+        models: 5-모델 앙상블 (mean path μ̂ 산출용)
+        close_history: 종가 시계열 (학습 데이터 전체)
+        n_days: 예측 일수 (30)
+        feature_cols: build_features_v2 의 컬럼명
+        ticker: 정보용
+        n_sims: Monte Carlo path 개수 (기본 1000)
+        garch_window: GJR-GARCH 적합 윈도우 (기본 252일 = 1년)
+        sanity_clip: 일별 log-return clip 한계 (기본 ±10%, 극단치 방어용)
+
+    Returns:
+        dict with:
+          - 'forecast': list[{date, mean, median, p05, p10, p90, p95}] × n_days
+          - 'sample_paths': list[list[float]] (30개 샘플 가격 path × n_days)
+          - 'metrics': {expected_return_30d, var_5pct_30d, var_10pct_30d,
+                        prob_up_30d, prob_down_5pct_30d, prob_down_10pct_30d}
+          - 'predicted': legacy [{date, yhat, lower, upper}] (하위 호환, p10~p90)
+          - 'metadata': {model, garch_window_days, n_simulations, version}
+    """
+    from arch import arch_model
+
+    hist = close_history.copy()
+    last_date = hist.index[-1]
+    S0 = float(hist.iloc[-1])
+
+    # ── 1) Mean path μ̂ — 5-모델 앙상블 recursive forecast (hard clip 제거)
+    mu_path = []
+    for k in range(n_days):
+        feat = build_features_v2(hist)
+        last_feat = feat.iloc[[-1]][feature_cols].values
+        last_feat = np.nan_to_num(last_feat, nan=0.0, posinf=0.0, neginf=0.0)
+        preds = [m.predict(last_feat)[0] for m in models]
+        raw_ret = float(np.mean(preds))
+        # sanity clip — 모델 outlier prediction 방어 (production 안전)
+        raw_ret = float(np.clip(raw_ret, -sanity_clip, sanity_clip))
+        mu_path.append(raw_ret)
+        next_price = float(hist.iloc[-1]) * np.exp(raw_ret)
+        next_date = last_date + pd.tseries.offsets.BDay(k + 1)
+        hist = pd.concat([hist, pd.Series([next_price], index=[next_date])])
+
+    mu_path = np.array(mu_path)
+    future_dates = pd.bdate_range(last_date + pd.Timedelta(days=1), periods=n_days)
+
+    # ── 2) GJR-GARCH(1,1,1) + Skew-t fit on 1년 윈도우
+    try:
+        log_ret_pct = (np.log(close_history / close_history.shift(1)).dropna()) * 100
+        log_ret_window = log_ret_pct.iloc[-garch_window:]
+        am = arch_model(log_ret_window, vol='Garch', p=1, o=1, q=1,
+                        mean='Zero', dist='skewt')
+        res = am.fit(disp='off', show_warning=False)
+
+        std_resid = (res.resid / res.conditional_volatility).dropna().values
+        omega = res.params['omega']
+        alpha = res.params.get('alpha[1]', 0.0)
+        gamma = res.params.get('gamma[1]', 0.0)
+        beta = res.params['beta[1]']
+        last_var = float(res.conditional_volatility.iloc[-1] ** 2)
+        last_eps = float(res.resid.iloc[-1])
+    except Exception as e:
+        # GARCH 적합 실패 시 fallback: 최근 60일 실현 변동성으로 정규 분포 가정
+        print(f'[chart_predict] {ticker} GARCH 적합 실패, fallback: {e}')
+        log_ret = np.log(close_history / close_history.shift(1)).dropna()
+        sigma_fallback = float(log_ret.tail(60).std()) * 100
+        std_resid = np.random.standard_normal(500)
+        omega, alpha, gamma, beta = sigma_fallback ** 2 * 0.05, 0.1, 0.1, 0.85
+        last_var = sigma_fallback ** 2
+        last_eps = 0.0
+
+    # ── 3) FHS Monte Carlo n_sims path
+    rng = np.random.default_rng(42)
+    paths = np.zeros((n_sims, n_days))
+    for s in range(n_sims):
+        var_t, eps_t = last_var, last_eps
+        for h in range(n_days):
+            I = 1.0 if eps_t < 0 else 0.0
+            var_t = omega + alpha * eps_t**2 + gamma * eps_t**2 * I + beta * var_t
+            z = rng.choice(std_resid)
+            eps_t = np.sqrt(max(var_t, 1e-9)) * z
+            day_ret = mu_path[h] + eps_t / 100.0
+            paths[s, h] = float(np.clip(day_ret, -sanity_clip, sanity_clip))
+
+    price_paths = S0 * np.exp(np.cumsum(paths, axis=1))
+
+    # ── 4) 분위수 산출
+    p05 = np.percentile(price_paths, 5, axis=0)
+    p10 = np.percentile(price_paths, 10, axis=0)
+    p50 = np.percentile(price_paths, 50, axis=0)
+    p90 = np.percentile(price_paths, 90, axis=0)
+    p95 = np.percentile(price_paths, 95, axis=0)
+    mean_path_price = price_paths.mean(axis=0)
+
+    forecast = []
+    legacy_predicted = []
+    for i, d in enumerate(future_dates):
+        date_str = str(d.date())
+        forecast.append({
+            'date': date_str,
+            'mean': _safe_float(round(mean_path_price[i], 2)),
+            'median': _safe_float(round(p50[i], 2)),
+            'p05': _safe_float(round(p05[i], 2)),
+            'p10': _safe_float(round(p10[i], 2)),
+            'p90': _safe_float(round(p90[i], 2)),
+            'p95': _safe_float(round(p95[i], 2)),
+        })
+        # 하위 호환 — yhat=median, lower=p10, upper=p90 (80% 신뢰)
+        legacy_predicted.append({
+            'date': date_str,
+            'yhat': _safe_float(round(p50[i], 2)),
+            'lower': _safe_float(round(p10[i], 2)),
+            'upper': _safe_float(round(p90[i], 2)),
+        })
+
+    # ── 5) Sample paths (30개만 직렬화 — payload 크기 관리)
+    sample_idx = rng.choice(n_sims, min(30, n_sims), replace=False)
+    sample_paths = [
+        [_safe_float(round(v, 2)) for v in price_paths[i].tolist()]
+        for i in sample_idx
+    ]
+
+    # ── 6) Metrics
+    last_prices = price_paths[:, -1]
+    ret = last_prices / S0 - 1
+    metrics = {
+        'expected_return_30d': _safe_float(round(float(np.median(ret)), 4)),
+        'var_5pct_30d': _safe_float(round(float(np.percentile(ret, 5)), 4)),
+        'var_10pct_30d': _safe_float(round(float(np.percentile(ret, 10)), 4)),
+        'prob_up_30d': _safe_float(round(float((last_prices > S0).mean()), 4)),
+        'prob_down_5pct_30d': _safe_float(round(float((ret < -0.05).mean()), 4)),
+        'prob_down_10pct_30d': _safe_float(round(float((ret < -0.10).mean()), 4)),
+    }
+
+    return {
+        'forecast': forecast,
+        'sample_paths': sample_paths,
+        'metrics': metrics,
+        'predicted': legacy_predicted,
+        'metadata': {
+            'model': 'XGB+CatBoost+RF+Ridge+SVR ensemble + GJR-GARCH(1,1,1)-SkewT + FHS',
+            'garch_window_days': garch_window,
+            'n_simulations': n_sims,
+            'version': '2.0.0',
+        },
+    }
+
+
 def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
     """GARCH(1,1) 기반 재귀 예측 — 전체 ETF 공용.
 
@@ -329,13 +485,10 @@ def run_chart_predict_single(ticker):
     # 전체 데이터로 최종 모델 학습
     models_final = _train_models(data[feat_cols].values, data['target'].values)
 
-    # OOS sigma: train만으로 학습한 모델의 val 잔차 (신뢰구간 계산용)
-    models_oos = _train_models(X_tr, y_tr)
-    oos_preds = np.mean([m.predict(X_val) for m in models_oos], axis=0)
-    sigma = np.std(y_val - oos_preds)
-
-    # 재귀 예측: 변동성 3배 증폭 방식 (GARCH 미사용)
-    predicted = _recursive_forecast(models_final, close, 30, sigma, feat_cols)
+    # Stage 1+2: GJR-GARCH-Skew-t + FHS Monte Carlo 적용 (노트북 검증 완료)
+    fc_result = _garch_skewt_fhs_forecast(
+        models_final, close, 30, feat_cols, ticker=ticker
+    )
 
     # 최근 30일 실제 종가
     recent = close.tail(30)
@@ -343,13 +496,23 @@ def run_chart_predict_single(ticker):
               for idx, val in recent.items()]
 
     # 메모리 정리
-    del models_final, models_oos
+    del models_final
+
+    # 새 형식 — predicted JSONB 안에 forecast/sample_paths/metrics/predicted(legacy) 모두 포함
+    # 기존 chart_predict_result 테이블 schema 변경 X
+    predicted_payload = {
+        'forecast': fc_result['forecast'],
+        'sample_paths': fc_result['sample_paths'],
+        'metrics': fc_result['metrics'],
+        'predicted': fc_result['predicted'],         # legacy 하위 호환
+        'metadata': fc_result['metadata'],
+    }
 
     return {
         'date': str(datetime.date.today()),
         'ticker': ticker,
         'actual': json.dumps(actual, ensure_ascii=False),
-        'predicted': json.dumps(predicted, ensure_ascii=False),
+        'predicted': json.dumps(predicted_payload, ensure_ascii=False),
     }
 
 

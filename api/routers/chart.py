@@ -149,12 +149,31 @@ def _sanitize_floats(obj):
 
 
 def _is_prediction_valid(predicted):
-    """예측 데이터에 유효한 값이 있는지 확인."""
-    if not predicted or not isinstance(predicted, list):
+    """예측 데이터에 유효한 값이 있는지 확인.
+
+    두 형식 모두 지원:
+      - 신규 dict: {'forecast': [...], 'predicted': [...], 'metrics': {...}, ...}
+      - legacy list: [{date, yhat, lower, upper}, ...]
+    """
+    if not predicted:
         return False
-    valid = [p for p in predicted
-             if isinstance(p, dict) and p.get('yhat') is not None]
-    return len(valid) >= 5  # 최소 5개 유효 포인트
+    # 신규 dict 형식 — forecast 또는 predicted (legacy) 안의 유효 row 5개 이상
+    if isinstance(predicted, dict):
+        for key in ('forecast', 'predicted'):
+            arr = predicted.get(key)
+            if isinstance(arr, list):
+                valid_key = 'median' if key == 'forecast' else 'yhat'
+                valid = [p for p in arr
+                         if isinstance(p, dict) and p.get(valid_key) is not None]
+                if len(valid) >= 5:
+                    return True
+        return False
+    # Legacy list 형식
+    if isinstance(predicted, list):
+        valid = [p for p in predicted
+                 if isinstance(p, dict) and p.get('yhat') is not None]
+        return len(valid) >= 5
+    return False
 
 
 # 백그라운드 재생성 상태 관리
@@ -225,11 +244,26 @@ def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
         if result is None:
             return {'error': 'prediction generation failed, please try again later'}
 
-    return {
+    pred_clean = _sanitize_floats(result['predicted'])
+
+    response = {
         'ticker': result['ticker'],
         'actual': _sanitize_floats(result['actual']),
-        'predicted': _sanitize_floats(result['predicted']),
     }
+
+    # 신규 dict 형식이면 forecast/sample_paths/metrics/metadata 모두 펴서 노출
+    # 동시에 legacy 'predicted' 필드도 유지 (chart.js 하위 호환)
+    if isinstance(pred_clean, dict):
+        response['predicted'] = pred_clean.get('predicted', [])         # legacy
+        response['forecast'] = pred_clean.get('forecast', [])           # 신규 분위수
+        response['sample_paths'] = pred_clean.get('sample_paths', [])
+        response['metrics'] = pred_clean.get('metrics', {})
+        response['metadata'] = pred_clean.get('metadata', {})
+    else:
+        # 옛 DB row (list) — chart.js 그대로 작동
+        response['predicted'] = pred_clean
+
+    return response
 
 
 @router.get('/tickers')
