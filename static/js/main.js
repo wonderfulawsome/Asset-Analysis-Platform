@@ -953,36 +953,48 @@ tabs.forEach(tab => {
 });
 
 // ── 뒤로가기(popstate) 처리 ──
+// 변경된 동작:
+//   1. detail overlay 열려있음 → 닫기
+//   2. 탭 페이지 활성 (home view 숨김 상태) → home view 로 무조건 복귀 (탭 history 무시)
+//   3. home view 활성 → 2초 내 두 번 누르면 종료
 window.addEventListener('popstate', (e) => {
   const overlay = document.getElementById('detail-overlay');
-  // 1. 상세 페이지가 열려있으면 닫기
   if (overlay && overlay.classList.contains('open')) {
-    overlay.classList.remove('open');                       // 상세 페이지 닫기 (슬라이드 아웃)
+    overlay.classList.remove('open');
     return;
   }
-  // 2. 히스토리에 탭 상태가 있으면 복원
-  if (e.state && e.state.tab !== undefined) {
-    switchTab(e.state.tab, false);                         // 히스토리 추가 없이 탭 전환
+  const homeView = document.getElementById('home-view');
+  const homeActive = homeView && homeView.style.display !== 'none' && !homeView.hidden;
+
+  if (!homeActive) {
+    // 탭 또는 sector-tab 활성 → home 으로 복귀
+    if (typeof window.showHome === 'function') {
+      window.showHome();
+    } else if (homeView) {
+      // fallback — home.js 미로딩 상황
+      homeView.style.display = '';
+      const sw = document.querySelector('.scroll-wrap');
+      if (sw) sw.style.display = 'none';
+      const bk = document.getElementById('back-to-home');
+      if (bk) bk.hidden = true;
+      document.body.classList.remove('with-back');
+    }
+    history.pushState({ view: 'home' }, '');               // 다음 뒤로가기 위한 history 보충
     return;
   }
-  // 3. 마지막 화면 (시장 탭)에서 뒤로가기
-  if (_currentTabIdx !== 0) {
-    switchTab(0, false);                                   // 시장 탭으로 이동
-    history.pushState({ tab: 0 }, '');                     // 히스토리 보충
-    return;
-  }
-  // 4. 시장 탭에서 뒤로가기 → 2번 눌러야 종료 (모든 환경)
+
+  // home view 활성 → 2-tap 종료
   const now = Date.now();
-  if (now - _lastBackTime < 2000) {                        // 2초 이내 두 번째 뒤로가기
-    return;                                                // 브라우저 기본 동작 (종료/이탈)
+  if (now - _lastBackTime < 2000) {
+    return;                                                 // 브라우저 기본 (앱 종료)
   }
-  _lastBackTime = now;                                     // 첫 번째 뒤로가기 시간 기록
-  history.pushState({ tab: 0 }, '');                       // 히스토리 보충 (종료 방지)
-  showBackToast();                                         // 토스트 메시지 표시
+  _lastBackTime = now;
+  history.pushState({ view: 'home' }, '');
+  showBackToast();
 });
 
-// 초기 히스토리 상태 설정
-history.replaceState({ tab: 0 }, '');
+// 초기 히스토리 상태 설정 — home 시작
+history.replaceState({ view: 'home' }, '');
 
 // ── 뒤로가기 토스트 메시지 ──
 function showBackToast() {

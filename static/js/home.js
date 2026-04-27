@@ -59,6 +59,7 @@
     if (sw) sw.style.display = '';
     document.getElementById('back-to-home').hidden = false;
     document.body.classList.add('with-back');
+    history.pushState({ view: 'sector-tab', id: id }, '');     // 시스템 뒤로가기로 home 복귀
     // .scroll-wrap 안의 모든 main.content 를 숨기고 target 만 표시
     document.querySelectorAll('.scroll-wrap > main.content').forEach(el => {
       el.style.display = 'none';
@@ -254,6 +255,9 @@
 
     document.getElementById('back-to-home').addEventListener('click', showHome);
   }
+
+  // main.js popstate 가 호출할 수 있도록 window 에 노출
+  window.showHome = showHome;
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
