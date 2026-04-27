@@ -1029,7 +1029,7 @@ function renderPredictLegend(show) {
         <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:8px;background:rgba(59,130,246,0.13);border-radius:2px;"></span>중립 (10~50%)</span>
         <span style="display:inline-flex;align-items:center;gap:4px;"><span style="display:inline-block;width:14px;height:8px;background:rgba(156,163,175,0.10);border-radius:2px;"></span>상한 (50~95%)</span>
       </div>
-      <div style="font-size:10px;color:var(--sub);margin-top:6px;font-style:italic;">⚠️ 정상 시장 분포 추정. 시장 충격(black swan) 사전 예측 불가</div>`;
+      <div style="font-size:10px;color:var(--sub);margin-top:6px;font-style:italic;">⚠️ 본 예측은 정보 제공용이며 투자 권유가 아닙니다.</div>`;
   } else {
     // legacy
     el.innerHTML = `
