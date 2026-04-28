@@ -543,10 +543,12 @@ def run_pipeline(light: bool = False) -> None:
                 print(f'[Step 7b] 폭락/급등 백필 실패, 건너뜀: {e}')
                 traceback.print_exc()
 
-        # Step 8: 앙상블 ETF 30일 가격 예측 (16 tickers)
-        print('\n[Step 8] ETF 앙상블 예측...')
+        # Step 8: 앙상블 ETF 30일 가격 예측 (16 tickers) — 추론 모드 (.pkl load)
+        # 학습은 매월 1일 train_chart_pipeline 가 별도 담당 (api/app.py Stage 3)
+        # .pkl 없으면 run_chart_predict_single 가 자동으로 fallback 1회 학습
+        print('\n[Step 8] ETF 앙상블 예측 (추론 모드)...')
         try:
-            predict_results = run_chart_predict_all()
+            predict_results = run_chart_predict_all(train=False)
             for rec in predict_results:
                 upsert_chart_predict(rec)
             print(f'[Step 8] {len(predict_results)}건 예측 완료')

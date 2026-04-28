@@ -7,7 +7,9 @@ OOS sigma로 현실적 신뢰구간을 생성한다.
 
 import datetime
 import json
+import os
 import time
+import joblib
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -29,6 +31,34 @@ from arch import arch_model
 
 CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
                  'XLK', 'XLF', 'XLE', 'XLV', 'ARKK', 'GLD', 'TLT', 'SCHD']
+
+# 5-모델 앙상블 직렬화 위치 — Stage 1+2 학습/추론 분리
+CHART_MODELS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models', 'chart_models')
+
+
+def _save_chart_models(models, feature_cols, ticker):
+    """5-모델 앙상블 + 피처 컬럼 + 학습 시각을 .pkl 로 저장."""
+    os.makedirs(CHART_MODELS_DIR, exist_ok=True)
+    bundle = {
+        'models': models,
+        'feature_cols': feature_cols,
+        'trained_at': datetime.datetime.utcnow().isoformat(),
+    }
+    path = os.path.join(CHART_MODELS_DIR, f'{ticker}.pkl')
+    joblib.dump(bundle, path)
+
+
+def _load_chart_models(ticker):
+    """저장된 5-모델 앙상블 load. 없으면 (None, None)."""
+    path = os.path.join(CHART_MODELS_DIR, f'{ticker}.pkl')
+    if not os.path.exists(path):
+        return None, None
+    try:
+        bundle = joblib.load(path)
+        return bundle['models'], bundle['feature_cols']
+    except Exception as e:
+        print(f'[chart_predict] {ticker} .pkl load 실패: {e}')
+        return None, None
 
 
 def _rsi(series, period=14):
@@ -455,8 +485,15 @@ def _garch_forecast(models, close_history, n_days, feature_cols, ticker='SPY'):
     return predictions
 
 
-def run_chart_predict_single(ticker):
-    """단일 티커에 대해 5-모델 앙상블 30일 예측을 실행한다."""
+def run_chart_predict_single(ticker, train=False):
+    """단일 티커에 대해 5-모델 앙상블 30일 예측.
+
+    Args:
+        ticker: ETF 티커
+        train: True 면 5-모델 재학습 + .pkl 저장 (월 1회 cron 용).
+               False 면 .pkl load 후 추론만 (3시간 cron 용).
+               .pkl 없으면 자동 fallback 으로 1회 학습 + 저장.
+    """
     df = yf.download(ticker, period='max', interval='1d',
                      auto_adjust=True, progress=False)
     if df.empty:
@@ -475,17 +512,24 @@ def run_chart_predict_single(ticker):
         return None
 
     feat_cols = [c for c in data.columns if c != 'target']
-    val_size = 60
 
-    train = data.iloc[:-val_size]
-    val = data.iloc[-val_size:]
-    X_tr, y_tr = train[feat_cols].values, train['target'].values
-    X_val, y_val = val[feat_cols].values, val['target'].values
+    # Stage 1+2: 학습/추론 분리
+    if train:
+        # 학습 모드 — 5-모델 재학습 + .pkl 저장
+        models_final = _train_models(data[feat_cols].values, data['target'].values)
+        _save_chart_models(models_final, feat_cols, ticker)
+    else:
+        # 추론 모드 — .pkl load 시도, 없으면 1회 학습 + 저장 (fallback)
+        models_final, saved_cols = _load_chart_models(ticker)
+        if models_final is None:
+            print(f'[chart_predict] {ticker} .pkl 없음 — 1회 학습 + 저장')
+            models_final = _train_models(data[feat_cols].values, data['target'].values)
+            _save_chart_models(models_final, feat_cols, ticker)
+        else:
+            # 학습 시점 컬럼 사용 (피처 변경 시 보호)
+            feat_cols = saved_cols
 
-    # 전체 데이터로 최종 모델 학습
-    models_final = _train_models(data[feat_cols].values, data['target'].values)
-
-    # Stage 1+2: GJR-GARCH-Skew-t + FHS Monte Carlo 적용 (노트북 검증 완료)
+    # 추론: GJR-GARCH-Skew-t + FHS Monte Carlo
     fc_result = _garch_skewt_fhs_forecast(
         models_final, close, 30, feat_cols, ticker=ticker
     )
@@ -516,15 +560,21 @@ def run_chart_predict_single(ticker):
     }
 
 
-def run_chart_predict_all():
-    """16개 ETF 티커 전체에 대해 앙상블 예측을 실행한다."""
+def run_chart_predict_all(train=False):
+    """16개 ETF 전체에 대해 앙상블 예측 (default 추론 모드).
+
+    Args:
+        train: True 면 16 ETF 모두 재학습 (월 1회 cron 용)
+               False 면 .pkl load 후 추론만 (3시간 cron 용)
+    """
     n = 5 if HAS_CATBOOST else 4
-    print(f'  앙상블: {n}개 모델 (CatBoost: {"O" if HAS_CATBOOST else "X"}, GARCH: O)')
+    mode = '학습+추론' if train else '추론만 (.pkl load)'
+    print(f'  앙상블: {n}개 모델, 모드: {mode}')
     results = []
     for i, ticker in enumerate(CHART_TICKERS):
         try:
-            print(f'  [{i+1}/{len(CHART_TICKERS)}] {ticker} 예측 중...')
-            rec = run_chart_predict_single(ticker)
+            print(f'  [{i+1}/{len(CHART_TICKERS)}] {ticker} 진행 중...')
+            rec = run_chart_predict_single(ticker, train=train)
             if rec:
                 results.append(rec)
                 print(f'  [{i+1}/{len(CHART_TICKERS)}] {ticker} 완료')

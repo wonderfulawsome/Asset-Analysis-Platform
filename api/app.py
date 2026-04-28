@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from api.routers import regime, macro, index_feed, sector_cycle, crash_surge, market_summary, chart, real_estate
 try:
     from api.routers import tracking
@@ -18,6 +19,48 @@ from scheduler.job import run_pipeline
 _scheduler_enabled = os.getenv('RUN_SCHEDULER', 'true').lower() == 'true'
 
 
+def _need_init_once(models_dir: str) -> bool:
+    """첫 deploy 또는 어떤 모델 .pkl 이라도 빠져있으면 True.
+
+    - HMM, crash_surge .pkl
+    - chart_models/{ticker}.pkl × 16 (Stage 4 가드)
+    """
+    from processor.feature4_chart_predict import CHART_TICKERS
+    required = [
+        os.path.join(models_dir, 'noise_hmm.pkl'),
+        os.path.join(models_dir, 'crash_surge_xgb.pkl'),
+    ]
+    chart_dir = os.path.join(models_dir, 'chart_models')
+    chart_pkls = [os.path.join(chart_dir, f'{t}.pkl') for t in CHART_TICKERS]
+    return any(not os.path.exists(p) for p in required + chart_pkls)
+
+
+def _train_chart_models_monthly():
+    """월 1회 16 ETF × 5-모델 앙상블 재학습 + .pkl 저장 + DB upsert.
+
+    Stage 3 — full_pipeline (3시간) 은 추론만, 이 함수가 학습 전담.
+    """
+    print('[App][train_monthly] 16 ETF chart 모델 재학습 시작')
+    try:
+        from processor.feature4_chart_predict import run_chart_predict_single, CHART_TICKERS
+        from database.repositories import upsert_chart_predict
+        ok, fail = 0, 0
+        for ticker in CHART_TICKERS:
+            try:
+                res = run_chart_predict_single(ticker, train=True)
+                if res:
+                    upsert_chart_predict(res)
+                    ok += 1
+                else:
+                    fail += 1
+            except Exception as e:
+                print(f'[App][train_monthly] {ticker} 실패: {e}')
+                fail += 1
+        print(f'[App][train_monthly] 완료 — 성공 {ok}, 실패 {fail}')
+    except Exception as e:
+        print(f'[App][train_monthly] 전체 실패: {e}')
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     scheduler = None
@@ -25,18 +68,24 @@ async def lifespan(_app: FastAPI):
         scheduler = BackgroundScheduler()
         # 경량 파이프라인: 10분마다 최근 데이터만 갱신 (거시지표 + ETF 가격 + 실시간 예측)
         scheduler.add_job(run_pipeline, 'interval', minutes=10, id='light_pipeline', kwargs={'light': True})
-        # 전체 파이프라인: 3시간마다 실행 (100년치 수집 + HMM/XGBoost 모델 학습)
+        # 전체 파이프라인: 3시간마다 실행 (수집 + HMM/XGBoost/chart 모두 추론, chart 학습 X)
         scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')
-        # 모델 파일이 없을 때만 시작 60초 후 1회 full pipeline 실행
+        # Stage 3: 매월 1일 03:00 KST (= UTC 18:00) chart 5-모델 재학습 1회
+        scheduler.add_job(
+            _train_chart_models_monthly,
+            CronTrigger(day=1, hour=18, minute=0),
+            id='train_chart_pipeline',
+        )
+        # Stage 4: 모델 .pkl 하나라도 빠져있으면 60초 후 init_once 1회 실행
         models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
-        hmm_exists = os.path.exists(os.path.join(models_dir, 'noise_hmm.pkl'))
-        cs_exists = os.path.exists(os.path.join(models_dir, 'crash_surge_xgb.pkl'))
-        if not hmm_exists or not cs_exists:
+        if _need_init_once(models_dir):
             from datetime import datetime, timedelta
             scheduler.add_job(run_pipeline, 'date', run_date=datetime.now() + timedelta(seconds=60), id='init_once')
-            print('[App] 모델 없음 — 60초 후 초기 full pipeline 1회 실행')
+            print('[App] 모델 .pkl 미완비 — 60초 후 초기 full pipeline 1회 실행 (chart 모델은 fallback 학습)')
+        else:
+            print('[App] 모든 모델 .pkl 존재 — init_once 건너뜀')
         scheduler.start()
-        print('[App] 스케줄러 활성화 (RUN_SCHEDULER=true)')
+        print('[App] 스케줄러 활성화 (light=10m, full=3h 추론, train=매월 1일 03:00 KST)')
     else:
         print('[App] 스케줄러 비활성화 — 웹 서버 전용 모드 (RUN_SCHEDULER=false)')
     # FastAPI 앱 실행 구간 (요청 처리)

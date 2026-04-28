@@ -4166,6 +4166,94 @@ def _garch_skewt_fhs_forecast(models, close_history, n_days, feature_cols, ticke
 # - "정상 시장 분포 추정. 시장 충격 사전 예측 불가" 명시
 
 
+# ──────────────────────────────────────────────────────────
+# [42] 2026-04-28 (UTC) — Railway compute 최적화: chart 모델 학습/추론 분리 + 월 1회 cron
+# ──────────────────────────────────────────────────────────
+
+# [요구]
+# 사용자가 Railway compute 비용 최소화 + 메모리 룰 (feedback_compute_minimization.md):
+#   - 학습 빈도 ↓ (월 1회), 추론은 cache + lazy
+#   - light 모델 우선, scheduler 분리, init_once DB 가드
+
+# [현재 비용 구조 진단]
+# - light_pipeline 10분 — 가벼움 (yfinance 가격만)
+# - full_pipeline 3시간 — Step 8 chart_predict_all 16 ETF × 5모델 학습 (가장 무거움)
+# - chart 모델 .pkl 저장 X → 매 3시간 재학습 = 하루 8회 × 16 ETF × 5모델 = 19,200/월
+# - 학습/추론 비율: 학습 85-90%, 추론 10-15%
+
+# [수정 파일]
+# 1. processor/feature4_chart_predict.py
+#    - import joblib, os 추가
+#    - CHART_MODELS_DIR = models/chart_models/ 신규
+#    - _save_chart_models(models, feature_cols, ticker) — joblib.dump bundle
+#    - _load_chart_models(ticker) -> (models, feature_cols) or (None, None)
+#    - run_chart_predict_single(ticker, train=False) — train 인자 추가
+#       · train=True: 학습 + .pkl 저장 + 추론
+#       · train=False: .pkl load → 추론만 (없으면 fallback 1회 학습 + 저장)
+#    - run_chart_predict_all(train=False) — train default 추론
+# 2. api/app.py
+#    - apscheduler.triggers.cron.CronTrigger import
+#    - _need_init_once(models_dir): HMM/crash_surge .pkl + chart_models 16개 .pkl
+#      모두 존재할 때만 False (Stage 4 가드 강화)
+#    - _train_chart_models_monthly(): 16 ETF × 5-모델 재학습 + .pkl 저장 + DB upsert
+#    - scheduler.add_job(_train_chart_models_monthly, CronTrigger(day=1, hour=18, minute=0),
+#                          id='train_chart_pipeline')  # UTC 18:00 = KST 03:00
+# 3. scheduler/job.py
+#    - Step 8: run_chart_predict_all() → run_chart_predict_all(train=False) (추론만)
+
+# [핵심 코드]
+# processor/feature4_chart_predict.py
+def _save_chart_models(models, feature_cols, ticker):
+    bundle = {'models': models, 'feature_cols': feature_cols,
+              'trained_at': datetime.datetime.utcnow().isoformat()}
+    joblib.dump(bundle, os.path.join(CHART_MODELS_DIR, f'{ticker}.pkl'))
+
+def _load_chart_models(ticker):
+    path = os.path.join(CHART_MODELS_DIR, f'{ticker}.pkl')
+    if not os.path.exists(path): return None, None
+    bundle = joblib.load(path)
+    return bundle['models'], bundle['feature_cols']
+
+def run_chart_predict_single(ticker, train=False):
+    if train:
+        models = _train_models(...); _save_chart_models(models, feat_cols, ticker)
+    else:
+        models, saved_cols = _load_chart_models(ticker)
+        if models is None:
+            models = _train_models(...); _save_chart_models(...)  # fallback
+        else:
+            feat_cols = saved_cols
+    fc_result = _garch_skewt_fhs_forecast(models, close, 30, feat_cols, ticker=ticker)
+
+# api/app.py scheduler
+scheduler.add_job(run_pipeline, 'interval', minutes=10, id='light_pipeline', kwargs={'light': True})
+scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')   # 추론만
+scheduler.add_job(_train_chart_models_monthly,
+                   CronTrigger(day=1, hour=18, minute=0),
+                   id='train_chart_pipeline')                                # 매월 1일 KST 03:00
+if _need_init_once(models_dir):
+    scheduler.add_job(run_pipeline, 'date', run_date=now+60s, id='init_once')
+
+# [검증 결과 (SPY local)]
+# - train=True:  35.8s (5-모델 학습 + .pkl 2.81MB 저장)
+# - train=False:  6.5s (.pkl load + GJR-GARCH-Skew-t + FHS 추론만)
+# - 5.5배 가속, 학습 85% 가설 검증
+# - 16 ETF 합계 .pkl 용량 추정: 45MB (예상 80-240MB 보다 작음)
+
+# [비용 절감 추정]
+# - chart 학습 횟수: 19,200/월 → 80/월 (99.6% 절감)
+# - full_pipeline 1회 시간: 30-45min → 5-10min (~75% 단축)
+# - Deploy 시 학습: 매번 → 첫 deploy 만 (init_once 가드)
+# - 월간 compute: ~160h → ~22h (약 7배 절감)
+
+# [잠재 이슈]
+# 1. 모델 stale: 월 1회 학습이라 regime change 후 1개월 옛 모델 사용. mean prediction 어차피
+#    bull-bias 라 큰 차이 없음 (노트북 검증). GARCH 분포는 매 추론마다 새로 fit 하므로 OK
+# 2. .pkl 디스크: Railway service 가 persistent volume 인지 ephemeral 인지 확인 필요.
+#    ephemeral 이면 redeploy 마다 .pkl 사라짐 → init_once 가 fallback 학습 (1회)
+# 3. 첫 학습 30-45분 block: full_pipeline 첫 실행 길어짐. background 라 사용자 영향 X
+
+
 
 
 
