@@ -125,25 +125,31 @@ def get_fear_greed():
 # ─────────────────────────────────────────────────────────
 import time as _time
 _VAL_SIG_PROMPT = """/no_think
-너는 한국어 금융 해설가다. 주어진 composite z-score 결과를 일반 투자자가
-이해하도록 한 단락(2~3문장)으로 해설하라.
+너는 한국어 금융 해설가다. 주어진 시장 평가 점수를 **일반 투자자**가 이해하도록
+2~3문장으로 부드럽게 풀어 설명하라.
 
-배경 지식:
-- z_comp = 0.4·z_ERP + 0.3·z_VIX + 0.3·z_DD60 (가중 합성, 최근 5년 분포 기준)
-- z_ERP: 주식 기대수익(1/PER) − 10년 국채 yield 의 z-score (ERP↑ → z↑)
-- z_VIX: 공포지수 z-score (VIX↑ → z↑, 공포는 contrarian 저평가 신호)
-- z_DD : SPY 60일 drawdown z-score (drawdown 깊을수록 z↑)
-- z > +1: 명확한 저평가 / 0~+1: 다소 저평가 / -1~0: 다소 고평가 / z<-1: 명확한 고평가
-- ERP 단독으로는 가격 충격에 둔감 → 공포·드로다운 합성으로 위기 reactive 신호 보강
+배경:
+- 종합 점수 = 주식 매력도(40%) + 공포 점수(30%) + 하락 충격 점수(30%) 의 가중합.
+  비교 기준은 "최근 5년 평균"
+- 점수 > +1.0 = 명확한 저평가 (매수 기회) / 0 ~ +1.0 = 다소 저평가
+- -1.0 ~ 0 = 다소 고평가 / -1.0 미만 = 명확한 고평가 (조심)
+- 세 점수 모두 양수면 매수 기회 신호, 음수면 비싼 구간 신호
+
+각 점수 의미:
+- "주식 매력도 점수": 양수면 평소보다 쌈, 음수면 평소보다 비쌈
+- "공포 점수": 양수면 평소보다 시장이 불안 (역설적으로 매수 기회 가능)
+- "하락 충격 점수": 양수면 평소보다 큰 낙폭 (역시 매수 기회 가능)
 
 설명할 내용:
-1. 현재 z_comp 가 의미하는 것 — 어느 component 가 dominant 한지 한 줄 (예: "VIX↓·DD 작아 ERP 음수가 끌어내림")
-2. 투자자에게 어떤 액션 (한 문장)
+1. 현재 종합 점수가 어느 영역인지 + 어느 하위 점수가 가장 영향 크게 줬는지
+   (예: "주식 매력도 점수가 깎여 종합이 낮아짐")
+2. 투자자에게 한 줄 액션 (관망 / 분할 매수 / 채권 비중 늘리기 등)
+
 규칙:
 - 2~3문장, 총 160자 이내
-- 부드럽고 구체적인 어투
-- "z_comp=X.X (z_ERP a, z_VIX b, z_DD c)" 한 번 언급
-- 마크다운 금지"""
+- 친근하지만 구체적인 어투. 공식·약어(z, σ, ERP, VIX) **금지**
+- 한 번은 "종합 점수 X.XX점" 처럼 점수 수치 언급
+- 마크다운·이모지 금지"""
 
 _val_sig_cache = {'data': None, 'ts': 0}
 _VAL_SIG_TTL = 24 * 3600
@@ -215,28 +221,32 @@ def get_valuation_signal():
 
     z_comp_now = today.get('z_comp') or 0.0
 
-    # LLM 해설 (Groq)
+    # LLM 해설 (Groq) — 평어 키로 입력 데이터 정제 (LLM 이 자연스럽게 평어로 답하도록)
+    ze = today.get('z_erp')   or 0.0
+    zv = today.get('z_vix')   or 0.0
+    zd = today.get('z_dd')    or 0.0
     try:
         from api.routers.market_summary import _groq_call
         import json as _json
         user_text = _json.dumps({
-            'today': {k: today.get(k) for k in (
-                'date', 'spy_per', 'earnings_yield', 'tnx_yield', 'erp',
-                'vix', 'dd_60d', 'z_erp', 'z_vix', 'z_dd', 'z_comp', 'label',
-            )},
-            'baselines_5y': {
-                'erp_mean_pct': round(baselines['erp']['mean'] * 100, 2),
-                'erp_std_pct':  round(baselines['erp']['std']  * 100, 2),
-                'vix_mean':     round(baselines['vix']['mean'], 2),
-                'vix_std':      round(baselines['vix']['std'], 2),
-                'dd_mean_pct':  round(baselines['dd']['mean']  * 100, 2),
-                'dd_std_pct':   round(baselines['dd']['std']   * 100, 2),
-                'weights': baselines.get('weights', {'erp': 0.4, 'vix': 0.3, 'dd': 0.3}),
+            '오늘': {
+                '종합_점수':           round(z_comp_now, 2),
+                '라벨':                today.get('label'),
+                '주식_매력도_점수':    round(ze, 2),
+                '공포_점수':           round(zv, 2),
+                '하락_충격_점수':      round(zd, 2),
+                '주식_매력도_원본_pct': round((today.get('erp') or 0) * 100, 2),
+                '공포지수_VIX':        today.get('vix'),
+                '60일_하락폭_pct':     round((today.get('dd_60d') or 0) * 100, 2),
             },
-            'history_summary': {
-                'days': len(history),
-                'z_comp_min_60d': min((h.get('z_comp') or 0) for h in history) if history else None,
-                'z_comp_max_60d': max((h.get('z_comp') or 0) for h in history) if history else None,
+            '최근_5년_평균': {
+                '주식_매력도_pct': round(baselines['erp']['mean'] * 100, 2),
+                '공포지수':        round(baselines['vix']['mean'], 2),
+                '60일_하락폭_pct': round(baselines['dd']['mean']  * 100, 2),
+            },
+            '60일_종합점수_범위': {
+                '최저': round(min((h.get('z_comp') or 0) for h in history), 2) if history else None,
+                '최고': round(max((h.get('z_comp') or 0) for h in history), 2) if history else None,
             },
         }, ensure_ascii=False, indent=2)
         interpretation = _groq_call(_VAL_SIG_PROMPT, user_text, max_tokens=240)
@@ -245,17 +255,27 @@ def get_valuation_signal():
         interpretation = None
 
     if not interpretation:
+        # 평어 fallback
         label = today.get('label', '')
-        ze, zv, zd = today.get('z_erp', 0), today.get('z_vix', 0), today.get('z_dd', 0)
-        if '저평가' in label:
-            interpretation = (f"composite z={z_comp_now:+.2f}σ (ERP {ze:+.2f} · VIX {zv:+.2f} · DD {zd:+.2f}) — "
-                              "5년 분포 대비 매력적 구간. 분할 매수 검토.")
+        # 어느 component 가 가장 dominant 한지 자동 판별
+        contribs = {
+            '주식 매력도': abs(ze * 0.4),
+            '공포':        abs(zv * 0.3),
+            '하락 충격':   abs(zd * 0.3),
+        }
+        dom = max(contribs, key=contribs.get)
+        if '명확한 저평가' in label:
+            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 5년 평균보다 매력적인 구간이에요. "
+                              f"{dom} 점수가 가장 크게 긍정 기여. 분할 매수를 고려해 보세요.")
+        elif '다소 저평가' in label:
+            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 평균보다 살짝 매력적입니다. "
+                              f"{dom} 점수가 주로 끌어올렸어요. 큰 베팅보다 관심 종목을 조금씩 담아보는 정도가 적절합니다.")
         elif '명확한 고평가' in label:
-            interpretation = (f"composite z={z_comp_now:+.2f}σ (ERP {ze:+.2f} · VIX {zv:+.2f} · DD {zd:+.2f}) — "
-                              "5년 분포 대비 비싼 구간. 현금·채권 비중 검토.")
+            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 5년 평균 대비 비싼 구간입니다. "
+                              f"{dom} 점수가 깎여 종합이 낮아졌어요. 현금이나 채권 비중을 늘리는 방어 전략을 고려하세요.")
         else:
-            interpretation = (f"composite z={z_comp_now:+.2f}σ (ERP {ze:+.2f} · VIX {zv:+.2f} · DD {zd:+.2f}) — "
-                              "평균 부근. 큰 포지션 변경보다 관망.")
+            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 다소 고평가된 상황이에요. "
+                              f"{dom} 점수가 주된 원인입니다. 관망하거나 방어적인 포지션을 고려해 보세요.")
 
     response = {
         'today': today,

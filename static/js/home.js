@@ -382,13 +382,12 @@
     ];
     const arcs = segs.map(s => arcPath(cx, cy, r, s.from, s.to, s.color)).join('');
 
-    const zSign = z >= 0 ? '+' : '';
     return `
       <svg viewBox="0 0 220 130">
         ${arcs}
         <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="#fff" stroke="#1c1c1e" stroke-width="2"/>
       </svg>
-      <span class="mv-label">${escapeHtml(label || '-')} · z=${zSign}${z.toFixed(2)}σ</span>`;
+      <span class="mv-label">${escapeHtml(label || '-')}</span>`;
   }
 
   // 게이지 호 그리기 (선형 stroke)
@@ -436,9 +435,9 @@
         <line x1="${pad.l}" y1="${yPlus1}" x2="${pad.l + innerW}" y2="${yPlus1}" stroke="#3b82f6" stroke-width="0.5" stroke-dasharray="2 3"/>
         <line x1="${pad.l}" y1="${y0}" x2="${pad.l + innerW}" y2="${y0}" stroke="#9ca3af" stroke-width="0.6" stroke-dasharray="3 3"/>
         <line x1="${pad.l}" y1="${yMinus1}" x2="${pad.l + innerW}" y2="${yMinus1}" stroke="#ef4444" stroke-width="0.5" stroke-dasharray="2 3"/>
-        <text x="${pad.l - 4}" y="${yPlus1 + 3}" text-anchor="end" font-size="9" fill="#3b82f6">+1σ</text>
+        <text x="${pad.l - 4}" y="${yPlus1 + 3}" text-anchor="end" font-size="9" fill="#3b82f6">저평가</text>
         <text x="${pad.l - 4}" y="${y0 + 3}" text-anchor="end" font-size="9" fill="#9ca3af">평균</text>
-        <text x="${pad.l - 4}" y="${yMinus1 + 3}" text-anchor="end" font-size="9" fill="#ef4444">−1σ</text>
+        <text x="${pad.l - 4}" y="${yMinus1 + 3}" text-anchor="end" font-size="9" fill="#ef4444">고평가</text>
         <path d="M${areaPts}" fill="${fillColor}" stroke="none"/>
         <path d="M${linePts}" fill="none" stroke="${lineColor}" stroke-width="1.5" stroke-linejoin="round"/>
         <circle cx="${lastX}" cy="${lastY}" r="3" fill="${lineColor}"/>

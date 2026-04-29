@@ -4591,6 +4591,35 @@ except Exception as e:
 # 실행 / Railway env 변경 / yfinance 차단 우회 등) 본격 수정.
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [49] 2026-04-29 (UTC) — 시장 밸류 UX 후속 (차트 라벨 / 해석 카드 / LLM 평어)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 사용자 피드백: 게이지 라벨 z=-0.63σ 노출 X (라벨만), 차트 y축 ±1σ → 직관적
+# 단어, 해석 박스 디자인을 다른 탭의 ai-explain-card 와 통일, LLM 해설은
+# z/σ/ERP/VIX 같은 기술 용어 제거하고 일반 투자자도 이해할 한국어로.
+
+# [수정 파일]
+# - static/js/home.js: renderGauge 가 라벨 뒤 "· z=Xσ" 제거 (게이지에 라벨만);
+#   renderCompositeHistory 의 y축 레이블 +1σ → "저평가", −1σ → "고평가"
+#   ("평균"은 그대로). 에러 표시문도 d.error/d.detail 그대로 표출.
+# - templates/stocks.html: market-valuation 탭의 해석 div 를 .card.ai-explain-card
+#   구조로 감쌈 (다른 탭 fundamental/sector-val/sector-mom 과 동일 head + AI 뱃지).
+#   "해석" mv-section-label 제거 (카드 head 가 대체).
+# - api/routers/macro.py: _VAL_SIG_PROMPT 전면 재작성 — z/σ/ERP/VIX 약어 사용
+#   금지, "주식 매력도 점수 / 공포 점수 / 하락 충격 점수 / 종합 점수" 평어.
+#   LLM 입력 user_text 키도 한글 평어로 변환 (LLM 이 자연스럽게 평어로 응답
+#   유도). Fallback 메시지도 dominant component 자동 판별 + 평어로 재작성.
+
+# [LLM 응답 예시 (2026-04-29 z_comp=-0.63 다소 고평가)]
+# 신규: "현재 종합 점수 -0.63점으로 다소 고평가입니다. 주식 매력도가 크게
+#       떨어져 비싸진 시기입니다. 시장 분위기도 안정적이라 기다리는 게 좋겠습니다."
+# 기존: "현재 z_comp=-0.634 (z_ERP -0.92, z_VIX -0.23, z_DD -0.66)로 ERP 하락이
+#       주된 원인입니다. ..."
+
+# [캐시 버스트] templates/stocks.html: home.js?v=20 → ?v=21
+
+
 
 
 
