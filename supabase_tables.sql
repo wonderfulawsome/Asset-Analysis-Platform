@@ -371,3 +371,34 @@ CREATE TABLE IF NOT EXISTS sector_valuation (
     UNIQUE (date, ticker)
 );
 CREATE INDEX IF NOT EXISTS idx_sector_val_date ON sector_valuation (date DESC);
+
+
+-- ── ERP + Composite Z (A1+C7) 일별 시그널 ──
+-- ERP (Fed Model) + VIX + 60일 drawdown 합성 z-score. 라벨은 z_comp 기반.
+CREATE TABLE IF NOT EXISTS valuation_signal (
+    id              BIGSERIAL PRIMARY KEY,
+    date            DATE NOT NULL UNIQUE,
+    spy_per         DOUBLE PRECISION,         -- SPY trailing P/E
+    earnings_yield  DOUBLE PRECISION,         -- 1 / SPY_per
+    tnx_yield       DOUBLE PRECISION,         -- 10y treasury yield (^TNX / 100)
+    erp             DOUBLE PRECISION,         -- earnings_yield - tnx_yield
+    vix             DOUBLE PRECISION,         -- ^VIX close
+    dd_60d          DOUBLE PRECISION,         -- SPY / max(SPY 60d) - 1 (음수)
+    z_erp           DOUBLE PRECISION,         -- (erp - 5Y mean) / 5Y std
+    z_vix           DOUBLE PRECISION,         -- (vix - 5Y mean) / 5Y std (양수=공포=저평가 신호)
+    z_dd            DOUBLE PRECISION,         -- -(dd60 - 5Y mean) / 5Y std (양수=큰 drawdown)
+    z_comp          DOUBLE PRECISION,         -- 0.4·z_erp + 0.3·z_vix + 0.3·z_dd
+    label           TEXT,                     -- z_comp 기반: 명확한 저평가/다소 저평가/다소 고평가/명확한 고평가
+    created_at      TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_valuation_signal_date ON valuation_signal (date DESC);
+ALTER TABLE valuation_signal DISABLE ROW LEVEL SECURITY;
+
+-- ── 마이그레이션 (기존 테이블이 이미 있으면 컬럼 추가) ──
+ALTER TABLE valuation_signal
+    ADD COLUMN IF NOT EXISTS vix     DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS dd_60d  DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_erp   DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_vix   DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_dd    DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_comp  DOUBLE PRECISION;

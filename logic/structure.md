@@ -613,6 +613,7 @@ RUN_SCHEDULER=true                        # false=스케줄러 비활성
 - **단지 적정가 비교**: `/api/realestate/complex/benchmark` — 평형·연식·시군구 필터로 유사 단지 평단가 분포
 - **상세 페이지 전월세 흐름·평형별 가격·거래량 변화**: `/trades?ym=` 여러 월 호출 또는 시계열 endpoint 추가
 - **알림 (시그널 매수 전환)**: 사용자 favorite 시군구의 signal 변화 push
+- **시장 밸류 composite z (적용 완료, 2026-04-29)**: `collector/valuation_signal.py` 가 `z_comp = 0.4·z_ERP(5Y) + 0.3·z_VIX(5Y) + 0.3·z_DD60(5Y)` 산출 → `valuation_signal` 테이블에 6개 컬럼(vix/dd_60d/z_erp/z_vix/z_dd/z_comp) 추가. `/api/macro/valuation-signal` 응답에 `baselines_5y={erp,vix,dd,weights}` + 각 행 `z_*` 포함. 부호 컨벤션: 양수=저평가/공포 (DD 부호 반전). Baseline 캐시: `models/valuation_baselines.json` (TTL 90일). 한계: mild 충격은 max +0.84σ 가 천장 — 임계 완화 / EWMA / VIX intraday high 가 후보.
 
 ### 15.3 인프라
 - Supabase 유료 전환 (1GB 초과 시)
@@ -647,4 +648,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-04-26 (Passive 홈 화면 카드 그리드 + 섹터 밸류에이션·모멘텀 신규 — /sector-cycle/{valuation,momentum} + home.js/css + 모달 UI)
+마지막 갱신 시점: 2026-04-29 (시장 밸류 분해 표 일반어 리네이밍 — home.js mv-formula/decompose/interpretation 한글 풀이 + zPhrase() 자동 평어 변환 + cache bust ?v=18. update.py [47])

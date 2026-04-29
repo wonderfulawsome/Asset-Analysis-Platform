@@ -229,3 +229,78 @@ body.with-back .app-header > div:first-child {
   margin-bottom: 12px; font-size: 12px; color: var(--text-secondary, #9ca3af);
 }
 .sv-phase strong { color: var(--text-primary, #fff); font-weight: 700; }
+
+/* ── Market Valuation (ERP / Fed Model) 페이지 ─────────────────────── */
+.mv-formula {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary, #9ca3af);
+  margin: 8px 0 16px;
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.2px;
+}
+.mv-gauge {
+  position: relative;
+  width: 100%; height: 130px;
+  display: flex; align-items: flex-end; justify-content: center;
+  margin-bottom: 18px;
+}
+.mv-gauge svg { width: 220px; height: 120px; overflow: visible; }
+.mv-gauge .mv-label {
+  position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+  font-size: 14px; font-weight: 700;
+  background: rgba(245, 158, 11, 0.85); color: #1c1c1e;
+  padding: 3px 10px; border-radius: 8px;
+}
+.mv-section-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.2em;
+  color: var(--text-secondary, #9ca3af);
+  margin: 18px 4px 8px;
+  text-transform: uppercase;
+}
+.mv-decompose {
+  background: rgba(28, 28, 34, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 4px 14px;
+}
+.mv-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 13px;
+}
+.mv-row:last-child { border-bottom: none; }
+.mv-row.mv-highlight {
+  margin: 4px -14px -4px;
+  padding: 12px 14px;
+  background: rgba(239, 68, 68, 0.10);
+  border-radius: 0 0 11px 11px;
+  border-bottom: none;
+}
+.mv-row.mv-highlight .mv-key { font-weight: 700; color: #fff; }
+.mv-key { color: var(--text-secondary, #9ca3af); display: flex; align-items: center; gap: 8px; }
+.mv-key .mv-op { color: #6b7280; font-family: ui-monospace, monospace; width: 14px; text-align: center; }
+.mv-val { font-family: ui-monospace, monospace; font-weight: 700; }
+.mv-history {
+  background: rgba(28, 28, 34, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 14px;
+}
+.mv-history svg { width: 100%; height: 120px; display: block; }
+.mv-interpretation {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.18), rgba(245, 158, 11, 0.10));
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 12px;
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-primary, #fff);
+}
+.mv-interpretation .mv-avg {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--text-secondary, #9ca3af);
+}

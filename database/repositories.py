@@ -1144,3 +1144,60 @@ def fetch_sector_valuation_latest() -> list[dict]:
         .execute()
     )
     return response.data
+
+
+# ── valuation_signal (ERP / Fed Model) ─────────────────────────
+
+def upsert_valuation_signal(record: dict) -> None:
+    """ERP 1행 upsert (date UNIQUE)."""
+    if not record:
+        return
+    client = get_client()
+    client.table("valuation_signal").upsert(
+        record, on_conflict="date"
+    ).execute()
+
+
+def upsert_valuation_signal_bulk(records: list[dict]) -> None:
+    """30일 backfill 등 다행 일괄 upsert."""
+    if not records:
+        return
+    client = get_client()
+    for i in range(0, len(records), 200):
+        client.table("valuation_signal").upsert(
+            records[i:i + 200], on_conflict="date"
+        ).execute()
+
+
+def fetch_valuation_signal_latest() -> dict | None:
+    """가장 최근 1건. 없으면 None."""
+    client = get_client()
+    try:
+        r = (
+            client.table("valuation_signal")
+            .select("*")
+            .order("date", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[DB] valuation_signal latest 실패: {e}")
+        return None
+    return r.data[0] if r.data else None
+
+
+def fetch_valuation_signal_history(days: int = 30) -> list[dict]:
+    """최근 N 거래일 historical (오래된 → 최신)."""
+    client = get_client()
+    try:
+        r = (
+            client.table("valuation_signal")
+            .select("*")
+            .order("date", desc=True)
+            .limit(days)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[DB] valuation_signal history 실패: {e}")
+        return []
+    return list(reversed(r.data or []))

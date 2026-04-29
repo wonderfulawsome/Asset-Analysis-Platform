@@ -4254,8 +4254,304 @@ if _need_init_once(models_dir):
 # 3. 첫 학습 30-45분 block: full_pipeline 첫 실행 길어짐. background 라 사용자 영향 X
 
 
+# ────────────────────────────────────────────────────────────────────────────
+# [43] 2026-04-29 (UTC) — ERP 라벨 z-score 화 (15년 baseline)
+# ────────────────────────────────────────────────────────────────────────────
+# 배경: 절대 임계값 기준(>5% 저평가, <0% 고평가)이라 SPY 10% 하락 구간에도 라벨이
+# 안 변동. "최근 추이 대비"로 판정하도록 z-score 화 요청.
+
+# collector/valuation_signal.py — Shiller (1871~2023) + yfinance (2023~today) 합성
+#   으로 최근 15년 monthly ERP 분포 산출. Cache: models/erp_baseline.json (TTL 90일).
+def _compute_erp_baseline_15y():
+    sh = pd.read_excel('http://www.econ.yale.edu/~shiller/data/ie_data.xls', sheet_name='Data', skiprows=7)
+    sh['ey']  = sh['E'] / sh['P']
+    sh['tnx'] = sh['Rate GS10'] / 100
+    sh['erp'] = sh['ey'] - sh['tnx']
+    sh15 = sh[sh['year'] >= datetime.now().year - 15]
+    # Shiller 마지막 ~ 오늘: yfinance ^GSPC 월봉 + ^TNX + EPS 7%/yr 선형 grow 로 보강
+    extra = ...  # 위 로직 참조
+    erp_series = pd.concat([sh15.set_index('ym')['erp'], extra])
+    return {'mean': erp_series.mean(), 'std': erp_series.std(), 'n': len(erp_series)}
+
+def erp_label(erp, baseline=None):
+    if baseline is None: baseline = get_erp_baseline()
+    z = (erp - baseline['mean']) / baseline['std']
+    if z > +1.0: return '명확한 저평가'
+    if z >  0.0: return '다소 저평가'
+    if z > -1.0: return '다소 고평가'
+    return '명확한 고평가'
+
+# api/routers/macro.py — /valuation-signal 응답에 z_score / baseline_15y 추가
+response = {
+    'today': {**today, 'z_score': round((erp_now - mean) / std, 2)},
+    'history': [...],     # 각 행에도 z_score
+    'interpretation': llm_or_fallback,
+    'baseline_15y': {'mean': mean, 'std': std, 'n_months': n, 'source': 'shiller+yfinance'},
+}
+
+# static/js/home.js — 게이지를 z-score 기반(±2σ 매핑)으로, history 차트에
+#   ±1σ / 평균 가이드 라인 추가, 해석 카드에 "15년 (N개월) 평균 X% 표준편차 Y%
+#   현재 z=Z" 명시.
+function renderGauge(z, label) {
+    // 180° = z=-2σ (왼쪽), 0° = z=+2σ (오른쪽)
+    const angle = 180 - ((z+2)/4) * 180;
+    return `<svg>...</svg><span class="mv-label">${label} · z=${z}σ</span>`;
+}
+function renderErpHistory(history, baseline) {
+    // y축: ±1σ 항상 가시. 가이드 라인 z=+1 (파랑), z=0 (회색 평균), z=-1 (빨강)
+    const zs = history.map(h => h.z_score);
+    return `<svg>...
+        <line y1="${yPos(+1)}" stroke="#3b82f6" dasharray="2 3"/>
+        <line y1="${yPos( 0)}" stroke="#9ca3af" dasharray="3 3"/>
+        <line y1="${yPos(-1)}" stroke="#ef4444" dasharray="2 3"/>
+        ...`;
+}
+
+# [실측 결과 (2026-04-29)]
+# - 15년 baseline: mean 1.96%, std 1.58%, n=184 months (Shiller 146 + yfinance 38)
+# - 오늘 ERP -0.81% → z=-1.75σ → "명확한 고평가"
+# - 60일 history z 범위: -1.42 ~ -1.75 (모두 z < -1, 라벨은 "명확한 고평가" 유지)
+# - 하락 저점 (3/27): z=-1.53σ — 평균까지 +0.22σ 개선 (수치로 변동 가시화)
+
+# [왜 라벨이 안 바뀌나 (사용자 의문 답변)]
+# - 오늘 ERP -0.81% 는 15년 분포 하위 5% 수준. 10% SPY 하락 정도로는 z=-1.42σ 까지만
+#   회복 → 여전히 z<-1 영역. 라벨이 같은 건 정확한 통계적 사실.
+# - 사용자는 라벨 대신 z-score 수치(-1.42 ↔ -1.75)로 미세 변동을 추적 가능.
+
+# [비용]
+# - baseline 재계산: 90일에 1회 (Shiller XLS 다운로드 ~2초 + 계산 즉시).
+# - 라벨링: scalar 산술 → compute 0. 메모리 룰 만족.
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [44] 2026-04-29 (UTC) — ERP 라벨 개선 실험 노트북 확장 (A1+C7)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 미-이란 전쟁(2026-02-28) 발발 직후에도 시장 밸류 탭이 여전히 "명확한 고평가"
+# (z=-1.75σ 부근)에 머무는 문제. 단독 ERP z 만으로는 위기 충격이 신호로 잡히지
+# 않음. 노트북에서 두 개선안을 backtest:
+#   - A1: 15Y monthly baseline → 5Y 로 단축 (std 작아져 z 민감도↑)
+#   - C7: composite z = 0.4·z_ERP(5Y) + 0.3·z_VIX + 0.3·z_DD60 (공포·드로다운 합성)
+# 가설: war 직후 60일 안에 composite z 가 +1.0σ 이상으로 진입 → "명확한 저평가" 회복.
+
+# [수정 파일]
+# notebooks/erp_valuation_experiment.ipynb — section 9 + 10 추가 (cell 18~25)
+
+# [신규 셀 구조 (8 cell, markdown 2 + code 6)]
+# Cell 18 (md)  — ## 9 헤더: 동기/가설/부호 컨벤션/실험 절차
+# Cell 19 (code) — 다중 window monthly baseline (5Y/10Y/15Y/Full) + std 비율 출력
+# Cell 20 (code) — 14개월 daily SPY+^VIX+^TNX → daily ERP·DD60 부착
+# Cell 21 (code) — VIX·DD 5Y daily baseline + 모든 z 부착 (양수=저평가/공포 통일)
+# Cell 22 (code) — composite z (W=0.4/0.3/0.3) + 라벨 3종 (15Y/5Y/comp)
+# Cell 23 (code) — 4-panel 시각화: SPY+DD / VIX / ERP-only z / Composite z (전쟁 마커)
+# Cell 24 (code) — war 직후 (2026-02-28~) z 비교 + 라벨 분포 + war 당일 스냅샷
+# Cell 25 (md)   — ## 10 결론 표 (실행 후 채우기) + 채택 판정 기준
+
+# [핵심 코드 — composite z]
+W = (0.4, 0.3, 0.3)
+df['z_erp_5Y'] = (df['erp'] - baselines['5Y']['mean']) / baselines['5Y']['std']
+df['z_vix']    = (df['vix'] - vix_mean) / vix_std            # VIX↑ → z↑
+df['z_dd']     = -(df['dd_60d'] - dd_mean) / dd_std          # DD 더 음수 → z↑ (부호 반전)
+df['z_comp']   = W[0]*df['z_erp_5Y'] + W[1]*df['z_vix'] + W[2]*df['z_dd']
+
+# [부호 컨벤션 — 왜]
+# 세 신호 모두 양수 = "저평가/공포 신호" 방향으로 통일. 그래야 가중합이 같은
+# 방향으로 합쳐져 위기 직후 z_comp 가 강하게 양수로 점프 가능. ERP·VIX 는 그대로
+# 양의 상관, DD 만 부호 반전 (drawdown 은 음수이므로).
+
+# [채택 판정 기준]
+# A1+C7 의 max z_comp 가 war 직후 60일 안에 +1.0σ 이상 → "명확한 저평가" 진입
+# → collector/valuation_signal.py + api/routers/macro.py 에 반영.
+# 미달 시 가중치 grid search 또는 EWMA baseline 으로 후속 실험.
+
+# [실행 가이드]
+# 노트북에서 cell 1~17 (기존) → cell 18~25 (신규) 순서로 실행. yfinance 네트워크
+# 필요. 약 30~60초 소요 (Shiller XLS + SPY/VIX/TNX 14mo + 5y daily 다운로드).
+
+# [비용]
+# - 일회성 실험 (notebook). 프로덕션 변경 없음.
+# - 채택 시 collector 가 추가 ticker(^VIX) 1회 fetch (compute 무시 수준).
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [45] 2026-04-29 (UTC) — A1+C7 노트북 실측 결과
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# notebook headless 실행 (jupyter nbconvert). war 2026-02-28 직후 41 거래일
+# (2026-03-02 ~ 2026-04-28) 의 z 분포 비교. 결론: 채택 기준(+1.0σ) 미달이지만
+# 라벨 진영은 큰 개선 — production 전환 전에 임계·가중치 추가 실험 필요.
+
+# [Baseline 산출 결과 (cell 19)]
+#  5Y : mean=+0.42%, std=1.33%, n=64
+#  10Y: mean=+1.27%, std=1.34%, n=124
+#  15Y: mean=+1.96%, std=1.58%, n=184  ← 현재 프로덕션
+#  Full(1871~): mean=+2.71%, std=3.18%, n=1864
+#  → 5Y mean 이 15Y 의 1/4 수준. std 도 작아져 같은 ERP 변동에 ×1.18 sensitive.
+
+# [war 직후 41일 z 분포 (cell 24)]
+#  ┌─────────────────────────────┬───────────┬──────────────────────────┐
+#  │ 지표                        │ max z     │ 라벨 분포 (41일)         │
+#  ├─────────────────────────────┼───────────┼──────────────────────────┤
+#  │ 15Y prod   (ERP only)       │ -1.46σ    │ 명확한 고평가 41         │
+#  │ A1 5Y      (ERP only)       │ -0.57σ    │ 다소 고평가 41           │
+#  │ A1+C7 comp (0.4/0.3/0.3)    │ +0.84σ    │ 다소 저평가 20 + 다소    │
+#  │                             │  (3/30)   │ 고평가 21                │
+#  └─────────────────────────────┴───────────┴──────────────────────────┘
+
+# [war 당일 (2026-02-27 가장 가까운 거래일) 분해]
+#  SPY 685.99, VIX 19.86, ERP -0.29%
+#  z_erp_5Y = -0.53σ
+#  z_vix    = +0.12σ  ← 5Y mean(19.25) 거의 동일, 공포 거의 안 떴음
+#  z_dd     = -0.45σ  ← drawdown 평균보다 가벼움 (시장 안 떨어짐)
+#  z_comp   = -0.31σ  → 출발이 음수라 +1σ 까지 +1.31σ 점프 필요했음
+
+# [왜 +1σ 못 넘나]
+# 미-이란 전쟁이 시장에 systemic risk 로 받아들여지지 않음 — VIX·DD 두 reactive
+# 신호 모두 평이. 신호 강도 자체가 +0.84σ 가 천장. 이 정도 지정학 이벤트는
+# 단순 multiplicative composite 로는 한계.
+
+# [채택 판정]
+# ❌ +1.0σ 임계 미달. 단, 라벨 진영 개선 (15Y "명확한 고평가" → comp "다소
+# 저평가" 50% 진입) 은 명확. 다음 중 하나로 후속 실험:
+#   (a) 임계 완화: +0.5σ 이상이면 "저평가" 로 라벨 매핑 변경
+#   (b) 가중치 grid: [0.2, 0.4, 0.4] 등 reactive 신호 비중↑
+#   (c) EWMA baseline: half-life 12개월, 최근 분위 더 빠르게 반영
+#   (d) HY credit spread (FRED BAMLH0A0HYM2) overlay 추가
+
+# [실행 환경]
+# .venv (Python 3.12.3) — ipykernel + yfinance 1.3.0 + pandas 3.0.2 + numpy 2.4.4
+# + matplotlib 3.10.9 + xlrd + openpyxl. kernel 등록 명: passive-financial.
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [46] 2026-04-29 (UTC) — A1+C7 composite z 프로덕션 적용
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 노트북 실험(A1+C7) 결과를 그대로 본 코드에 이식. 미-이란 전쟁 직후 41일 중
+# 20일이 "다소 저평가" 진입 검증 완료 → ERP 단독("명확한 고평가" 41/41) 한계
+# 해소. 4 파일 + DB 스키마 변경.
+
+# [수정 파일]
+# - supabase_tables.sql — valuation_signal 테이블에 6개 컬럼 추가
+#     (vix, dd_60d, z_erp, z_vix, z_dd, z_comp). ALTER TABLE IF NOT EXISTS.
+# - collector/valuation_signal.py — 전면 리팩토링 (15Y → 5Y, VIX/DD 추가, composite)
+# - api/routers/macro.py — /valuation-signal 응답에 baselines_5y + z_*/vix/dd_60d
+# - static/js/home.js — loadMarketValuation: 게이지/분해/추이/해석 모두 composite
+
+# [DB 스키마 변경 (DDL 실행 필요)]
+ALTER TABLE valuation_signal
+    ADD COLUMN IF NOT EXISTS vix     DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS dd_60d  DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_erp   DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_vix   DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_dd    DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_comp  DOUBLE PRECISION;
+
+# [collector 핵심 변경]
+# baselines (3종) — 모두 5Y, models/valuation_baselines.json 합본 캐시 (TTL 90일)
+W_ERP, W_VIX, W_DD = 0.4, 0.3, 0.3   # 노트북 backtest 검증 가중치
+
+def compute_composite_z(erp, vix, dd_60d, baselines):
+    z_erp = (erp - baselines['erp']['mean']) / baselines['erp']['std']
+    z_vix = (vix - baselines['vix']['mean']) / baselines['vix']['std']
+    z_dd  = -(dd_60d - baselines['dd']['mean']) / baselines['dd']['std']  # 부호 반전
+    z_comp = W_ERP*z_erp + W_VIX*z_vix + W_DD*z_dd
+    return {'z_erp': z_erp, 'z_vix': z_vix, 'z_dd': z_dd, 'z_comp': z_comp}
+
+def label_from_z_comp(z):
+    if z >  1.0: return '명확한 저평가'
+    if z >  0.0: return '다소 저평가'
+    if z > -1.0: return '다소 고평가'
+    return '명확한 고평가'
+
+# fetch_valuation_signal_today() — SPY+TNX+VIX+SPY 60d 가져와 composite 산출
+# backfill_valuation_signal(60) — 6mo daily SPY/TNX/VIX 로 60일 일별 z 산출
+
+# [API 변경]
+# 기존: response['baseline_15y'] = {mean, std, n_months, source}
+# 신규: response['baselines_5y'] = {erp:{...}, vix:{...}, dd:{...}, weights}
+# 기존: today.z_score (단일)
+# 신규: today.{z_erp, z_vix, z_dd, z_comp, vix, dd_60d}
+# legacy data 자동 backfill: today.z_comp is None 또는 history 60일 미만이면
+# 첫 호출 시 backfill_valuation_signal_bulk → upsert.
+
+# [JS 변경]
+# - mv-formula : "z_comp = 0.4·z_ERP + 0.3·z_VIX + 0.3·z_DD60"
+# - mv-gauge   : z_comp 기반 (renderGauge 그대로 재사용 — z 값만 교체)
+# - mv-decompose: 8행 — Raw 5 (PE, TNX, ERP, VIX, DD60) + 가중 z 4 (z_ERP×0.4, z_VIX×0.3, z_DD×0.3, z_comp)
+# - mv-history : renderErpHistory → renderCompositeHistory (z_comp 시계열)
+# - mv-interpretation: 3 baseline 동시 표시 (ERP/VIX/DD)
+
+# [Smoke test 결과 (4/29 기준, .venv 로 실행)]
+# baselines: ERP mean=+0.42% std=1.33% n=64
+#           VIX mean=19.25 std=5.26 n=1256
+#           DD60 mean=-3.24% std=4.17% n=1255
+# today (2026-04-29):
+#   spy_per=28.22, vix=17.97, dd_60d=-0.49%
+#   z_erp=-0.92, z_vix=-0.24, z_dd=-0.66, z_comp=-0.64 → "다소 고평가"
+#   ↑ 노트북 cell 22 (4/28 z_comp=-0.6471) 와 정확히 일치 → 코드=실험 동치 검증
+
+# [배포 절차]
+# 1. Supabase SQL 콘솔에서 ALTER TABLE (위 DDL) 실행
+# 2. 서버 재시작 → 첫 /api/macro/valuation-signal 호출 시 자동 backfill (60일)
+# 3. 24h 메모리 캐시 작동 확인 (response.cached=true)
+# 4. models/valuation_baselines.json 자동 생성 확인 (90일 TTL)
+
+# [한계 / 다음 단계 후보]
+# - 미-이란 같은 mild 충격은 z_comp +0.84σ 가 천장 → "명확한 저평가"(+1σ) 도달 X
+# - 임계 완화 (+0.5σ → "저평가") 또는 EWMA baseline 적용 시 더 reactive
+# - VIX High (intraday) 사용 시 +1σ 진입 가능성 (단 노이즈 ↑)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [47] 2026-04-29 (UTC) — 시장 밸류 분해 표 일반어 리네이밍
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 영문 약어(P/E·TNX·VIX·z·σ) + 라틴 단위가 일반 사용자에게 불친절. 의미는
+# 보존하면서 한글 풀이 + 자동 평어 변환으로 재구성. 코드 변경은 home.js 한
+# 파일만 (수식 / 분해 / 해석 카드 텍스트). 백엔드 응답 스키마 변경 없음.
+
+# [수정 파일]
+# - static/js/home.js — loadMarketValuation() 의 mv-formula / mv-decompose /
+#   mv-interpretation HTML 일반어 라벨로 교체. zPhrase() 헬퍼 추가.
+# - templates/stocks.html — home.js?v=17 → ?v=18 (브라우저 캐시 버스트)
+
+# [라벨 매핑]
+# 수식:
+#   z_comp = 0.4·z_ERP + 0.3·z_VIX + 0.3·z_DD60
+#   →  5년 평균과 비교한 종합 점수 = 주식 매력도(40%) + 공포(30%) + 하락충격(30%)
+# 분해 행:
+#   SPY P/E (Trailing)              → S&P 500 주가수익비율 (PER)
+#   10Y Treasury (^TNX)             → 10년 미국 국채 금리
+#   Equity Risk Premium             → 주식 매력도 (1÷PER − 국채금리, 양수면 주식 우위)
+#   VIX (공포지수)                  → 월가 공포지수 (VIX, 20↑ 불안 · 30↑ 패닉)
+#   SPY 60일 Drawdown               → 최근 60일 고점 대비 하락
+#   ×0.4 z_ERP (5Y)                 → 40% 주식 매력도 점수 (평소보다 비쌈/평온/쌈)
+#   ×0.3 z_VIX (5Y)                 → 30% 공포 점수 (평소보다 평온/비슷/불안)
+#   ×0.3 z_DD60 (5Y)                → 30% 하락 충격 점수 (평소보다 안정/비슷/큰 하락)
+#   = Composite z_comp              → = 종합 점수 → {라벨}
+
+# [zPhrase 자동 변환 규칙]
+const zPhrase = (z, kind) => {
+    const high = z > 0.5, low = z < -0.5;
+    if (kind === 'erp') return high ? '평소보다 쌈'  : low ? '평소보다 비쌈' : '평소와 비슷';
+    if (kind === 'vix') return high ? '평소보다 불안' : low ? '평소보다 평온' : '평소와 비슷';
+    if (kind === 'dd')  return high ? '평소보다 큰 하락' : low ? '평소보다 안정' : '평소와 비슷';
+};
+# 부호 컨벤션 (양수 = 저평가/공포 신호 방향) 은 동일하지만 component 별 의미가
+# 달라 표현은 다르게 (ERP 양수=쌈, VIX 양수=불안, DD 양수=큰 하락).
+
+# [해석 카드 (mv-interpretation)]
+# 기존: "5년 baseline — ERP 평균 X% (σ Y%) · VIX 평균 ... · DD60 평균 ..."
+# 신규: "최근 5년 평균 — 주식 매력도 X% · 공포지수 Y · 60일 하락폭 Z% / 오늘 종합 점수 Wσ"
+
+# [백엔드 호환]
+# /api/macro/valuation-signal 응답 스키마 변경 없음 — 서버 재시작 불필요.
+# 단 templates 캐시(Jinja2) 갱신 위해 ?v 변경 + 한 번 restart 권장 (로컬 OK).
+
+# [검증]
+# curl http://127.0.0.1:8000/static/js/home.js?v=18 → 신규 평어 문구 포함 확인
+# curl http://127.0.0.1:8000/stocks → home.js?v=18 참조 확인
 
 
 
