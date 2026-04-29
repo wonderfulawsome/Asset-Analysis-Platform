@@ -1,21 +1,16 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import KakaoMap, { PolygonFeature } from "../components/KakaoMap";
-import BottomBar from "../components/BottomBar";
+import FeatureCard from "../components/FeatureCard";
+import MarketSummaryCard from "../components/MarketSummaryCard";
 import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 import { changePctColor } from "../lib/color";
-import type { SggOverview } from "../types/api";
+import type { SggOverview, BuySignal, RegionSummary } from "../types/api";
 
-// GeoJSON name → 우리 sgg_cd 5자리 매핑. southkorea-maps 의 code(11010 등)는
-// 우리 행안부 코드(11110 등)와 다른 체계라 name 으로 매칭한다.
-const SGG_NAME_TO_CD: Record<string, string> = {
-  종로구: "11110", 중구: "11140", 용산구: "11170", 성동구: "11200", 광진구: "11215",
-  동대문구: "11230", 중랑구: "11260", 성북구: "11290", 강북구: "11305", 도봉구: "11320",
-  노원구: "11350", 은평구: "11380", 서대문구: "11410", 마포구: "11440", 양천구: "11470",
-  강서구: "11500", 구로구: "11530", 금천구: "11545", 영등포구: "11560", 동작구: "11590",
-  관악구: "11620", 서초구: "11650", 강남구: "11680", 송파구: "11710", 강동구: "11740",
-};
+// 수도권(서울+경기+인천) 시군구 폴리곤. scripts/build_metro_geojson.py 가
+// southkorea-maps(2013) 데이터를 행안부 LAWD_CD(5자리)로 변환해
+// metro-sgg.geojson 으로 저장하므로, properties.sgg_cd 를 직접 읽어서 매칭.
 
 interface SelectedRegion {
   sggCd: string;
@@ -28,14 +23,13 @@ interface SelectedRegion {
 
 // GeoJSON FeatureCollection → KakaoMap 의 PolygonFeature[] 로 변환.
 async function loadPolygons(overviews: Map<string, SggOverview>): Promise<PolygonFeature[]> {
-  const res = await fetch("/static/realestate/geojson/seoul-sgg.geojson");
+  const res = await fetch("/static/realestate/geojson/metro-sgg.geojson");
   const geo = await res.json();
   const polys: PolygonFeature[] = [];
   for (const feat of geo.features ?? []) {
+    const sggCd = feat.properties?.sgg_cd as string | undefined;
     const name = feat.properties?.name as string | undefined;
-    if (!name) continue;
-    const sggCd = SGG_NAME_TO_CD[name];
-    if (!sggCd) continue;
+    if (!sggCd || !name) continue;
     const ov = overviews.get(sggCd);
     const change = ov?.change_pct_3m ?? null;
     const fillColor = changePctColor(change);
@@ -64,6 +58,8 @@ export default function MapScreen() {
   const [polygons, setPolygons] = useState<PolygonFeature[]>([]);
   const [overviews, setOverviews] = useState<Map<string, SggOverview>>(new Map());
   const [selected, setSelected] = useState<SelectedRegion | null>(null);
+  const [signal, setSignal] = useState<BuySignal | null>(null);
+  const [topStdgSummary, setTopStdgSummary] = useState<RegionSummary | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -82,8 +78,7 @@ export default function MapScreen() {
 
   function handlePolygonClick(sggCd: string) {
     const ov = overviews.get(sggCd);
-    // GeoJSON name → SGG_NAME_TO_CD 매핑의 역 — name 찾기
-    const sggNm = Object.entries(SGG_NAME_TO_CD).find(([, c]) => c === sggCd)?.[0] ?? sggCd;
+    const sggNm = polygons.find((p) => p.sggCd === sggCd)?.name ?? sggCd;
     setSelected({
       sggCd,
       sggNm,
@@ -92,11 +87,32 @@ export default function MapScreen() {
       medianPricePerPy: ov?.median_price_per_py ?? null,
       changePct: ov?.change_pct_3m ?? null,
     });
+    // 시그널 + 대표 법정동 summary 병렬 fetch
+    setSignal(null);
+    setTopStdgSummary(null);
+    apiFetch<BuySignal | Record<string, never>>(ENDPOINTS.buySignal(sggCd))
+      .then((s) => {
+        if (s && (s as BuySignal).signal) setSignal(s as BuySignal);
+      })
+      .catch(() => {});
+    if (ov?.top_stdg_cd) {
+      apiFetch<RegionSummary[]>(ENDPOINTS.summary(sggCd))
+        .then((rows) => {
+          const match = rows.find((r) => r.stdg_cd === ov.top_stdg_cd) ?? rows[0] ?? null;
+          if (match) setTopStdgSummary(match);
+        })
+        .catch(() => {});
+    }
   }
 
   return (
     <div className="relative h-full w-full">
-      <KakaoMap polygons={polygons} onPolygonClick={handlePolygonClick} />
+      <KakaoMap
+        polygons={polygons}
+        onPolygonClick={handlePolygonClick}
+        center={{ lat: 37.45, lng: 127.0 }}
+        level={11}
+      />
 
       {/* 플로팅 상단 검색바 */}
       <div className="absolute top-3 left-3 right-3 z-10">
@@ -111,6 +127,9 @@ export default function MapScreen() {
             readOnly
           />
         </div>
+        {/* 오늘의 시장 요약 LLM 카드 */}
+        <MarketSummaryCard />
+
         {/* 색상 범례 */}
         <div className="mt-2 flex items-center gap-2 text-[10px] text-gray-300
                         bg-gray-900/80 backdrop-blur rounded-lg px-3 py-1.5 w-fit">
@@ -123,9 +142,18 @@ export default function MapScreen() {
         </div>
       </div>
 
-      <BottomBar
+      <FeatureCard
         selected={selected}
-        onTap={(stdg) => navigate(`/stdg/${stdg}`)}
+        signal={signal}
+        topStdgSummary={topStdgSummary}
+        onTap={() => {
+          if (selected?.topStdgCd) navigate(`/stdg/${selected.topStdgCd}`);
+        }}
+        onClose={() => {
+          setSelected(null);
+          setSignal(null);
+          setTopStdgSummary(null);
+        }}
       />
     </div>
   );

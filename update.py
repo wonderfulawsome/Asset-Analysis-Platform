@@ -4825,3 +4825,124 @@ const SECTOR_KR = {
 # 3) 추후 i18n (영어 화면 모드) 추가 시 매핑 한 곳만 토글하면 됨
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [56] 2026-04-29 (UTC) — 시장 이성 점수 부호 반전 (펀더멘털-주가 갭 → 시장 이성)
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# 기존 noise_score 컨벤션:
+#   + (양수) = 감정적 (주가가 펀더멘털과 괴리)
+#   − (음수) = 이성적 (주가가 펀더멘털 반영)
+# 사용자 요청: 라벨을 "시장 이성 점수" 로 바꾸고 부호를 정확히 반대로.
+# 새 컨벤션:
+#   + (양수) = 이성적
+#   − (음수) = 감정적
+# DB 컬럼명은 'noise_score' 그대로 유지 (의미만 반전 — 호환성 위해 필드명 미변경).
+
+# [왜 부호를 뒤집나]
+# - "이성 점수" 라는 이름과 부호가 직관적으로 일치해야 함 (양수=좋음=이성)
+# - UI 게이지/차트에서 양수가 우측·상단으로 가는 일반 컨벤션과 정렬
+
+# [수정 파일]
+# - processor/feature1_regime.py
+#   * compute_noise_score(): return 값에 -1 곱 (가중합을 부호 반전)
+#   * score_to_regime_name(): 임계 부호 반전
+#       기존: score < 0 → 일치, 그 외 불일치
+#       신규: score > 0 → 일치 (이성적), 그 외 불일치 (감정적)
+#   * predict_regime / backfill_noise_regime: feature_contributions 항목의
+#     'contribution' 필드도 -1 곱 (합이 새 noise_score 와 일치하도록)
+#   * 모듈 docstring 에 새 부호 컨벤션 명시
+#
+# - api/routers/regime.py (/score-distribution)
+#   * docstring 에 새 컨벤션 추가
+#   * current_config: gauge_min/mid/max 를 -10/0/+5 로 갱신 (좌=감정·우=이성)
+#
+# - api/routers/market_summary.py
+#   * _build_indicator_text: 한·영 해석 라인을 새 부호 컨벤션으로 다시 작성
+#       기존: ns < -1 → "잘 반영", ns >= 2 → "큰 괴리"
+#       신규: ns > 1 → "잘 반영", ns <= -2 → "큰 괴리"
+#   * 한국어 라벨 "펀더멘털 주가 괴리 점수" → "시장 이성 점수"
+#   * 영어 라벨 "Fundamental-Price Divergence Score" → "Market Rationality Score"
+#   * _SUMMARY_PROMPTS / _EXPLAIN_PROMPTS (KO+EN) 모두 부호·이름 갱신
+#   * 예시 라인의 점수 부호도 반전 (괴리 = 음수)
+#
+# - static/js/main.js
+#   * _buildFgNoiseInsight: noiseScore >= 0 ↔ < 0 조건 모두 반전
+#       (이전: ns >= 0 → 비이성/괴리. 이후: ns < 0 → 비이성/괴리)
+#   * NR_GAP_POS: 좌우 위치 반전 (펀더멘털 반영 12→88, 센티멘트 지배 88→12)
+#   * 게이지 fill 그라디언트: green→…→red 를 red→…→green 으로 뒤집음
+#   * loadRegime 동적 pos: gauge_min=-10, gauge_max=+5 로 매핑 변경
+#       (분포가 음수 쪽으로 더 길게 분포 — 감정 깊이가 더 큼)
+#   * loadNoiseChart dotColor: v >= 0 ? red : green → green : red 로 반전
+#
+# - static/js/i18n.js (KO + EN 둘 다)
+#   * nr.fundamental ↔ nr.price 라벨 swap (좌=감정 / 우=이성)
+#   * nr.match ↔ nr.gap 라벨 swap
+#   * chart.yTop ↔ chart.yBottom 라벨 swap (상=이성 / 하=감정)
+#   * section.nrChart: "이성적·감정적 추이" → "시장 이성 점수 추이"
+#   * detail.noiseScore: "Noise Score:" → "시장 이성 점수:" / "Market Rationality:"
+#   * detail.noiseComposition: 점수 명칭 갱신
+#
+# - templates/stocks.html
+#   * i18n.js?v=2 → ?v=3, main.js?v=113 → ?v=114 (cache bust)
+#
+# - scripts/flip_noise_score_sign.py (★ 신규)
+#   * 1회성 마이그레이션. UPDATE noise_regime SET noise_score = -noise_score
+#     + feature_contributions 의 contribution 필드 부호 반전
+#     + regime_id / regime_name 도 새 임계로 재산정
+#   * --dry 옵션으로 미리보기 가능
+#   * 사용: python -m scripts.flip_noise_score_sign
+
+# [실행 필요 — 사용자가 deployment 환경에서 1회]
+#   $ python -m scripts.flip_noise_score_sign --dry      # 미리보기
+#   $ python -m scripts.flip_noise_score_sign            # 실제 적용
+
+# [검증]
+# - python ast.parse 4개 파일 전부 OK
+# - node --check main.js / i18n.js OK
+# - 게이지 동작 검증: ns=+5 → pos=95% (우측=이성), ns=-10 → pos=5% (좌측=감정)
+# - 라벨 일관성: 좌측='감정적' 매핑 + 우측='이성적' 매핑 + 부호 반전 → 의미 자기일관
+
+# [한계·후속]
+# - DB 마이그레이션 실행 전까지는 30일 차트가 옛 부호로 표시됨
+# - 마이그레이션 후 다음 스케줄러 실행부터 새 부호로 일관 적재
+# - 'noise_score' 컬럼명 자체는 유지 (rename 은 후속 — 외부 의존성 큼)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [57] 2026-04-29 (UTC) — 부동산 데이터 수도권 확장 (Phase 1: 폴리곤·코드)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 기존 부동산 데이터가 서울 25 시군구만 (DB region_summary 1000행 모두 시도코드 11).
+# 수도권(서울+경기+인천)으로 확장. Phase 1 = 지도 폴리곤 + 백필 인프라 / Phase 2
+# = 실제 backfill 실행 (별도 [58] 엔트리 예정).
+
+# [신규 파일]
+# - scripts/build_metro_geojson.py
+#     southkorea-maps(2013) FeatureCollection 다운로드 → 수도권 79 features 필터
+#     → 통계청 코드(11/23/31) → 행안부 LAWD_CD(5자리) 매핑 후 properties.sgg_cd
+#     명시적 부여. 인천 "남구" → 28177 미추홀구 alias / 부천 3구 → 41194 단일.
+# - scripts/backfill_metro.py
+#     수도권 신규 52 LAWD_CD × 24개월 backfill (job.py Step 9 의 다월 버전).
+#     인천 10 + 경기 단일 25 + 일반구 17 = 52. 세대원수만 최근 3개월 (--hh-months 3).
+#     호출 간격 0.4s, 401 발생 시 60s 대기. 매 sgg 종료 시 compute_buy_signal 자동.
+# - frontend-realestate/public/geojson/metro-sgg.geojson (70KB, 79 폴리곤)
+# - static/realestate/geojson/metro-sgg.geojson (Vite public 동기화본)
+
+# [수정 파일]
+# - frontend-realestate/src/screens/MapScreen.tsx
+#     loadPolygons URL 교체 + properties.sgg_cd 직접 사용 (이름 매핑 dict 제거)
+#     handlePolygonClick 의 SGG_NAME_TO_CD 역참조 → polygons.find 로 대체
+#     KakaoMap viewport: center {lat:37.45, lng:127.0} + level 11 (수도권 전체 가시)
+# - static/realestate/{index.html, assets/index-Ct0CBs2c.css, index-lQYfAXan.js}
+#     vite build 산출물 (npm run build, ./node_modules 캐시 활용 4.5s)
+
+# [수도권 매핑 통계]
+# 서울 25 (행안부 코드 그대로)
+# 인천 10 (남구→미추홀 alias)
+# 경기 42 (단일 25 + 일반구 17)
+# = 유니크 행안부 sgg_cd 77, 폴리곤 79 (부천 3구 = 같은 sgg_cd, 다른 폴리곤)
+
+# [Phase 2 — 진행 중]
+# scripts/backfill_metro.py 백그라운드 실행 (PID 6194, ~25~30분, ~8000 API call).
+# 결과 [58] 엔트리에 실측 (성공/실패 시군구 수, 신규 row 수).

@@ -89,7 +89,7 @@ Passive-Financial-Data-Analysis/
 │   ├─ img/                    주식 화면 자산
 │   └─ realestate/             ★ Vite 빌드 산출물 (index.html + assets/ + geojson/)
 ├─ frontend-realestate/        ★ Vite + React + TS + Tailwind
-│   ├─ public/geojson/seoul-sgg.geojson  서울 25구 폴리곤 (149KB)
+│   ├─ public/geojson/{seoul-sgg,metro-sgg}.geojson  서울 25구(149KB) + 수도권 79폴리곤(70KB) — properties.sgg_cd 5자리 행안부 코드
 │   ├─ src/
 │   │   ├─ App.tsx             라우터
 │   │   ├─ main.tsx
@@ -106,7 +106,10 @@ Passive-Financial-Data-Analysis/
 │   ├─ tsconfig.json, tailwind.config.ts, postcss.config.js
 │   └─ package.json
 ├─ scripts/
-│   ├─ build_frontend.sh       npm install + vite build
+│   ├─ build_frontend.sh        npm install + vite build
+│   ├─ build_metro_geojson.py   ★ southkorea-maps → 수도권 metro-sgg.geojson 변환 (이름→행안부 LAWD_CD 매핑)
+│   ├─ backfill_metro.py        ★ 수도권 신규 52 LAWD_CD × 24개월 부동산 backfill (job.py Step 9 다월 버전)
+│   ├─ flip_noise_score_sign.py noise_score 부호 일괄 반전 (1회성)
 │   └─ upload_dim.py
 ├─ models/                     pkl 학습 모델 (HMM, XGBoost, ensemble)
 ├─ supabase_tables.sql         전체 DDL (~20 테이블)
@@ -655,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-04-29 (섹터 이름 한국어 표시 — home.js 에 SECTOR_KR ticker→한국어 매핑 + krSector() 헬퍼 추가, 섹터 밸류/모멘텀 두 탭 표시 단에서만 번역. DB·API·LLM 입력은 영어 그대로 유지. update.py [55])
+마지막 갱신 시점: 2026-04-29 (부동산 데이터 수도권 확장 Phase 1 — metro-sgg.geojson(서울 25 + 인천 10 + 경기 42 = 77 sgg_cd, 79 폴리곤) + scripts/build_metro_geojson.py + backfill_metro.py(52 신규 LAWD_CD × 24개월) + MapScreen.tsx 수도권 viewport. Phase 2 backfill 진행 중. update.py [57])
