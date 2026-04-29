@@ -275,7 +275,9 @@
       const r = await fetch('/api/macro/valuation-signal');
       const d = await r.json();
       if (d.error || !d.today) {
-        fEl.innerHTML = '<span style="color:#ef4444;">데이터 미수집. DDL 실행 + 잠시 기다리세요.</span>';
+        const detail = d.detail ? ` — ${escapeHtml(d.detail)}` : '';
+        const code   = d.error || 'no data';
+        fEl.innerHTML = `<span style="color:#ef4444;">데이터 로드 실패: ${escapeHtml(code)}${detail}</span>`;
         return;
       }
       const t = d.today;

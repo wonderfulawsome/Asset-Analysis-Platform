@@ -4554,6 +4554,43 @@ const zPhrase = (z, kind) => {
 # curl http://127.0.0.1:8000/stocks → home.js?v=18 참조 확인
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [48] 2026-04-29 (UTC) — 시장 밸류 prod 500 안전망 + 진단 메시지
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# dda3a8b 배포 후 dinsightlab.com /api/macro/valuation-signal 이 500 반환,
+# 다른 endpoint 는 모두 200. 가장 의심: Railway 의 prod Supabase 가 .env(local)
+# 와 다른 인스턴스이고 6컬럼 ALTER TABLE 이 미실행 → backfill 의 bulk upsert
+# 실행 시 Supabase 가 unknown column 으로 reject → 예외 → 500.
+#
+# 즉답 어렵고 직접 진단 필요. 다음 수정으로 prod 에서 원인 자동 표출:
+#   1. 모든 외부 호출(DB fetch / backfill / upsert / baseline) 을 try/except 로 감싸
+#      예외 발생 시 500 대신 `{'error':code,'detail':msg}` JSON 반환
+#   2. 프런트는 d.error/d.detail 을 그대로 화면에 표시 → 사용자/개발자가 즉시
+#      문제 카테고리 파악 가능 ("schema_outdated" 면 ALTER TABLE 필요)
+
+# [수정 파일]
+# - api/routers/macro.py : /valuation-signal 엔드포인트 4단계 try/except 추가
+#   (DB fetch / backfill 전체 / bulk upsert 단독 / baseline) — 각 단계 별 의미
+#   있는 error code 반환
+# - static/js/home.js : 에러 화면이 "데이터 미수집..." 일반 문구 → 실제
+#   `error: code — detail` 표출
+# - templates/stocks.html : home.js?v=18 → ?v=19 (캐시 버스트)
+
+# [핵심 코드 — schema_outdated 진단]
+try:
+    upsert_valuation_signal_bulk(backfill)
+except Exception as e:
+    return {
+        'error': 'schema_outdated',
+        'detail': f'DB 컬럼 누락 추정. supabase_tables.sql 의 ALTER TABLE 6컬럼 실행 필요. ({type(e).__name__}: {str(e)[:200]})',
+    }
+
+# [후속 조치]
+# 배포 후 prod 화면에서 정확한 error 메시지 확인 → 원인에 맞춰 (Supabase DDL
+# 실행 / Railway env 변경 / yfinance 차단 우회 등) 본격 수정.
+
+
 
 
 

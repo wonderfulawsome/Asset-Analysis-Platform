@@ -151,14 +151,22 @@ _VAL_SIG_TTL = 24 * 3600
 
 @router.get('/valuation-signal')
 def get_valuation_signal():
-    """오늘 composite z + 60일 history + LLM 해설 (24h 캐시)."""
+    """오늘 composite z + 60일 history + LLM 해설 (24h 캐시).
+
+    안전망: DB 스키마 미마이그레이션·yfinance 차단 등 예상 가능한 환경 차이로
+    인한 실패는 500 대신 `{'error': '...'}` JSON 으로 반환.
+    """
     now = _time.time()
     cached = _val_sig_cache['data']
     if cached and (now - _val_sig_cache['ts']) < _VAL_SIG_TTL:
         return {**cached, 'cached': True}
 
-    today = fetch_valuation_signal_latest()
-    history = fetch_valuation_signal_history(days=60)
+    try:
+        today = fetch_valuation_signal_latest()
+        history = fetch_valuation_signal_history(days=60)
+    except Exception as e:
+        print(f'[valuation_signal] DB fetch 실패: {e}')
+        return {'error': f'DB fetch failed: {type(e).__name__}: {str(e)[:200]}'}
 
     # composite z 가 비어있는 (legacy) 행이 있으면 backfill 강제
     needs_backfill = (
@@ -168,23 +176,42 @@ def get_valuation_signal():
         or any(h.get('z_comp') is None for h in history)
     )
     if needs_backfill:
-        from collector.valuation_signal import (
-            fetch_valuation_signal_today, backfill_valuation_signal,
-        )
-        backfill = backfill_valuation_signal(days=60)
-        if backfill:
-            upsert_valuation_signal_bulk(backfill)
-        rec_today = fetch_valuation_signal_today()
-        if rec_today:
-            upsert_valuation_signal(rec_today)
-            today = rec_today
-        history = fetch_valuation_signal_history(days=60)
+        try:
+            from collector.valuation_signal import (
+                fetch_valuation_signal_today, backfill_valuation_signal,
+            )
+            backfill = backfill_valuation_signal(days=60)
+            if backfill:
+                try:
+                    upsert_valuation_signal_bulk(backfill)
+                except Exception as e:
+                    # DB 컬럼 부재 등 마이그레이션 미완료 가능성
+                    print(f'[valuation_signal] bulk upsert 실패 (DDL 미실행 의심): {e}')
+                    return {
+                        'error': 'schema_outdated',
+                        'detail': f'DB 컬럼 누락 추정. supabase_tables.sql 의 ALTER TABLE 6컬럼 실행 필요. ({type(e).__name__}: {str(e)[:200]})',
+                    }
+            rec_today = fetch_valuation_signal_today()
+            if rec_today:
+                try:
+                    upsert_valuation_signal(rec_today)
+                except Exception as e:
+                    print(f'[valuation_signal] today upsert 실패: {e}')
+                today = rec_today
+            history = fetch_valuation_signal_history(days=60)
+        except Exception as e:
+            print(f'[valuation_signal] backfill 실패: {e}')
+            return {'error': f'backfill failed: {type(e).__name__}: {str(e)[:200]}'}
 
     if not today:
         return {'error': 'no data'}
 
-    from collector.valuation_signal import get_baselines
-    baselines = get_baselines()
+    try:
+        from collector.valuation_signal import get_baselines
+        baselines = get_baselines()
+    except Exception as e:
+        print(f'[valuation_signal] baseline 실패: {e}')
+        return {'error': f'baseline failed: {type(e).__name__}: {str(e)[:200]}'}
 
     z_comp_now = today.get('z_comp') or 0.0
 
