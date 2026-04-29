@@ -4946,3 +4946,71 @@ const SECTOR_KR = {
 # [Phase 2 — 진행 중]
 # scripts/backfill_metro.py 백그라운드 실행 (PID 6194, ~25~30분, ~8000 API call).
 # 결과 [58] 엔트리에 실측 (성공/실패 시군구 수, 신규 row 수).
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [58] 2026-04-30 (UTC) — 시장 이성 점수: 표시단 부호 반전으로 아키텍처 재설계
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# [56] 에서 시장 이성 점수 부호 반전을 "compute_noise_score 가 -1 곱해 NEW 컨벤션
+# 으로 DB 에 저장" 방식으로 구현했음. 그런데 실제 운영 결과:
+# 1) 마이그레이션은 1000 행만 flip (Supabase select 기본 limit)
+# 2) 마이그레이션 후 Railway 스케줄러의 backfill 함수가 옛 코드로 30~60일치
+#    행을 다시 OLD 컨벤션으로 덮어씀
+# 3) 결과: DB 가 옛 컨벤션으로 다시 일관됨, 근데 로컬 코드는 NEW 가정 →
+#    차트는 같은 데이터를 같은 위치에 그리고 라벨만 swap 된 상태
+#
+# 즉 "DB = NEW" 가정의 [56] 접근은 배포 환경에서 깨짐. "DB = OLD 유지 + 표시
+# 단에서만 flip" 으로 아키텍처 재설계.
+
+# [핵심 변경]
+# - DB(noise_regime.noise_score, feature_contributions) 는 옛 컨벤션 그대로:
+#   * + 양수 = 감정적
+#   * - 음수 = 이성적
+# - Repository fetch 함수에서 부호 반전:
+#   * fetch_noise_regime_current / _history 가 _flip_noise_record() 로 변환
+#   * 클라이언트(API/JS/LLM)는 항상 NEW 컨벤션 (+양수=이성) 으로 받음
+# - 결과: 어느 코드(옛/새) 가 DB 에 쓰든 표시단은 항상 NEW 컨벤션
+
+# [수정 파일]
+# - processor/feature1_regime.py
+#   * docstring: 부호 컨벤션을 "DB = OLD, 표시 = NEW (repo 단 변환)" 로 명시
+#   * compute_noise_score(): -1 곱 제거, 원래 OLD 컨벤션 가중합으로 복원
+#   * score_to_regime_name(): 임계 OLD 로 복원 (ns < 0 → 일치)
+#   * predict_regime / backfill_noise_regime: contribution 부호 반전 제거
+#
+# - database/repositories.py (★ 핵심)
+#   * _flip_noise_record(record) 헬퍼 신규
+#       - record['noise_score'] *= -1
+#       - record['feature_contributions'][*]['contribution'] *= -1
+#       - regime_name 은 그대로 ('일치/불일치' 단어 의미가 두 컨벤션에서 공통)
+#   * fetch_noise_regime_current() return 직전에 flip 적용
+#   * fetch_noise_regime_history() 각 행 flip 적용
+#   * fetch_noise_regime_all() 은 date 만 가져와서 flip 불필요
+
+# [그대로 유지]
+# - api/routers/market_summary.py LLM 프롬프트 NEW 컨벤션
+#   (repo 가 NEW 로 내보내므로 그대로 일관)
+# - static/js/main.js NEW 컨벤션 (게이지 그라디언트, dotColor, NR_GAP_POS 등)
+# - static/js/i18n.js NEW 라벨 ("시장 이성 점수", 좌=감정 우=이성)
+# - templates/stocks.html cache bust 그대로
+
+# [왜 이 방식이 나은가]
+# 1) 단일 진실(single source of truth): DB 컬럼 의미가 영속적으로 OLD —
+#    배포 환경의 옛 코드/새 코드 어느 쪽이 써도 동일한 부호 컨벤션
+# 2) 마이그레이션 불필요: 기존 데이터를 손대지 않음
+# 3) Railway 배포 타이밍에 의존하지 않음: 옛 백필이 돌아도 DB 손상 없음
+# 4) 단일 변환 지점: repo 의 _flip_noise_record() 만 보면 부호 동작 파악 가능
+
+# [참고 — 마이그레이션 스크립트]
+# scripts/flip_noise_score_sign.py 는 이제 불필요. 1차 마이그레이션이 oldest
+# 1000 rows 를 flip 했지만 그 후 backfill 이 다시 덮어써서 사실상 효과 없음.
+# 향후 정리 차원에서 그 1000 rows 만 OLD 로 되돌리고 싶으면 다시 한 번 실행.
+# (안 해도 표시는 정상 — backfill 이 덮어쓸 때까지 잠깐 inverted 일 뿐)
+
+# [검증]
+# - python ast.parse 두 파일 OK
+# - 흐름:
+#     scheduler write → DB (OLD) → repo fetch → flip → API → JS/LLM (NEW)
+#   어떤 코드가 써도 사용자는 NEW 컨벤션만 본다.

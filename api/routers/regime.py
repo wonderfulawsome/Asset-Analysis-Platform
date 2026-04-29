@@ -18,7 +18,10 @@ def get_history(days: int = 30):
 
 @router.get('/score-distribution')
 def get_score_distribution():
-    """noise_score 전체 분포 통계 (게이지 기준점 튜닝용)."""
+    """시장 이성 점수(noise_score 컬럼) 전체 분포 통계 (게이지 기준점 튜닝용).
+
+    부호 컨벤션 (2026-04-29~): 양수 = 이성, 음수 = 감정.
+    """
     import numpy as np
 
     records = fetch_noise_regime_history(days=1000)
@@ -71,7 +74,7 @@ def get_score_distribution():
         'percentiles': percentiles,
         'by_regime': regime_stats,
         'histogram': histogram,
-        'current_config': {'gauge_min': -5, 'gauge_mid': 0, 'gauge_max': 10},
+        'current_config': {'gauge_min': -10, 'gauge_mid': 0, 'gauge_max': 5},
         'all_scores': [{'date': r['date'], 'score': r['noise_score'], 'regime': r.get('regime_name')}
                        for r in records if r.get('noise_score') is not None],
     }

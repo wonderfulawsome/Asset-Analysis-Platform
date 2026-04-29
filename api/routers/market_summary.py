@@ -145,27 +145,27 @@ def _build_indicator_text(lang='ko'):
         except (TypeError, ValueError):
             ns_val = 0
         if lang == 'en':
-            if ns_val < -1:                                  # -1 미만: 펀더멘털 잘 반영
+            if ns_val > 1:                                   # +1 초과: 펀더멘털 잘 반영 (이성)
                 interp = 'Price well reflects fundamentals'
-            elif ns_val < 0:                                 # -1~0: 약간 괴리
-                interp = 'Minor divergence, mostly reflecting fundamentals'
-            elif ns_val < 2:                                 # 0~2: 괴리 존재
+            elif ns_val > 0:                                 # 0~+1: 대체로 이성
+                interp = 'Mostly reflecting fundamentals'
+            elif ns_val > -2:                                # -2~0: 괴리 존재 (감정)
                 interp = 'Divergence between price and fundamentals'
-            else:                                            # 2 이상: 큰 괴리
+            else:                                            # -2 이하: 큰 괴리
                 interp = 'Significant divergence from fundamentals'
-            lines.append(f"Fundamental-Price Divergence Score: {ns} → {interp}")
-            lines.append(f"  (Negative = reflecting fundamentals, higher positive = greater divergence)")
+            lines.append(f"Market Rationality Score: {ns} → {interp}")
+            lines.append(f"  (Positive = rational/reflecting fundamentals, larger negative = more emotional/divergent)")
         else:
-            if ns_val < -1:
-                interp = '주가가 펀더멘털을 잘 반영 중'
-            elif ns_val < 0:
-                interp = '약간의 괴리가 있으나 대체로 반영'
-            elif ns_val < 2:
-                interp = '주가와 펀더멘털 사이 괴리 존재'
+            if ns_val > 1:
+                interp = '주가가 펀더멘털을 잘 반영 중 (이성적 시장)'
+            elif ns_val > 0:
+                interp = '대체로 펀더멘털 반영 중'
+            elif ns_val > -2:
+                interp = '주가와 펀더멘털 사이 괴리 존재 (감정적 시장)'
             else:
-                interp = '주가와 펀더멘털이 크게 괴리됨'
-            lines.append(f"펀더멘털 주가 괴리 점수: {ns} → {interp}")
-            lines.append(f"  (음수일수록 펀더멘털 반영, 양수가 클수록 주가가 펀더멘털에서 괴리)")
+                interp = '주가와 펀더멘털이 크게 괴리됨 (감정 지배)'
+            lines.append(f"시장 이성 점수: {ns} → {interp}")
+            lines.append(f"  (양수일수록 이성적/펀더멘털 반영, 음수가 클수록 감정적/괴리)")
     cs = fetch_crash_surge_current()                         # 폭락/급등 점수 조회
     if cs:
         c_s = cs.get('crash_score') or cs.get('crash_prob') or 0  # 하락 점수 (필드명 호환)
@@ -201,13 +201,13 @@ _SUMMARY_PROMPTS = {                                         # AI 종합 요약 
 
 [이모지] 시장 심리 — (공포탐욕·VIX·RSI를 종합한 심리 해석 1문장)
 [이모지] 방향성 — (간극(상승-하락) 수치와 방향 중심으로 단기 전망 1문장. 양수=상승 우위, 음수=하락 우위, 절대값이 클수록 확신)
-[이모지] 펀더멘털 — (펀더멘털 주가 괴리 점수 기반 주가-펀더멘털 관계 1문장)
+[이모지] 펀더멘털 — (시장 이성 점수 기반 주가-펀더멘털 관계 1문장. 양수=이성, 음수=감정)
 [이모지] 종합판단 — (위 3가지를 종합한 결론. 투자자 행동 제안 1문장)
 
 예시:
 ❄️ 시장 심리 — 공포 지수 19로 극단적 공포 구간이며, 투자 심리가 크게 위축된 상황입니다.
 📉 방향성 — 간극 -3.3으로 하락 쪽이 소폭 우세하나, 차이가 작아 방향성이 불분명합니다.
-🧭 펀더멘털 — 괴리 점수 2.1로 주가와 펀더멘털 사이 괴리가 존재합니다.
+🧭 펀더멘털 — 이성 점수 -2.1로 주가와 펀더멘털 사이 괴리가 존재합니다.
 🎯 종합판단 — 공포 속 반등 기대가 있어, 분할 매수 관점의 접근이 유효해 보입니다.
 
 이모지 선택:
@@ -231,13 +231,13 @@ Use an em dash "—" with spaces on both sides. Never merge the title and conten
 
 [emoji] Market Sentiment — (1 sentence interpreting Fear & Greed, VIX, RSI)
 [emoji] Direction — (1 sentence focusing on the Gap value and direction. Positive=upside favored, negative=downside favored, larger absolute value=stronger conviction)
-[emoji] Fundamentals — (1 sentence on price-fundamental relationship via Divergence Score 0-10)
+[emoji] Fundamentals — (1 sentence on price-fundamental relationship via Market Rationality Score; positive=rational, negative=emotional)
 [emoji] Overall — (1 sentence conclusion combining the above 3, with action suggestion)
 
 Example:
 ❄️ Market Sentiment — Fear index at 19, deep in extreme fear territory with severely depressed investor sentiment.
 📉 Direction — Gap at -3.3 tilts slightly toward downside, but the small spread suggests no clear direction.
-🧭 Fundamentals — Divergence score of 2.1 shows a gap between stock prices and fundamentals.
+🧭 Fundamentals — Rationality score of -2.1 shows a gap between stock prices and fundamentals.
 🎯 Overall — With rebound potential amid fear, a dollar-cost averaging approach seems viable.
 
 Emoji choices:
@@ -302,17 +302,17 @@ _EXPLAIN_TTL = 900                                           # 해설 캐시 유
 _EXPLAIN_PROMPTS = {                                         # 탭별 AI 해설 시스템 프롬프트
     'ko': {
         'fundamental': """/no_think
-너는 한국어 금융 해설가다. 주어진 펀더멘털 주가 괴리 분석 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
+너는 한국어 금융 해설가다. 주어진 시장 이성 점수 분석 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
 
 배경 지식:
-- "펀더멘털 주가 괴리 점수"는 주가가 펀더멘털에서 얼마나 벗어났는지를 나타내는 점수다
-- 음수(-): 주가가 펀더멘털(기업 가치)을 잘 반영하고 있다는 뜻 (이성적 시장)
-- 양수(+): 주가가 펀더멘털에서 벗어나 감정이나 유동성에 의해 움직이고 있다는 뜻 (감정적 시장)
-- 양수가 클수록 괴리가 심함 (0~2: 약간 괴리, 2 이상: 큰 괴리)
-- 피처(feature)는 이 점수를 구성하는 개별 지표들이다
+- "시장 이성 점수"는 주가가 펀더멘털(기업 가치)을 얼마나 이성적으로 반영하는지를 나타내는 점수다
+- 양수(+): 주가가 펀더멘털을 잘 반영 중 (이성적 시장)
+- 음수(-): 주가가 펀더멘털에서 벗어나 감정·유동성에 의해 움직임 (감정적 시장)
+- 음수가 클수록(절대값↑) 감정 지배가 심함 (0~-2: 약간 감정적, -2 이하: 강한 감정 지배)
+- 피처(feature)는 이 점수를 구성하는 개별 지표들이다 (양수 기여 = 이성으로 미는 힘)
 
 설명할 내용:
-1. 현재 어떤 상태인지 (괴리 점수 값이 의미하는 것)
+1. 현재 어떤 상태인지 (이성 점수 값이 의미하는 것 — 부호와 절대값)
 2. 왜 이런 결과가 나왔는지 (피처 기여도 상위 3개를 쉬운 말로)
 3. 투자자에게 어떤 의미인지
 
@@ -402,17 +402,17 @@ _EXPLAIN_PROMPTS = {                                         # 탭별 AI 해설 
     },
     'en': {
         'fundamental': """/no_think
-You are a financial commentator. Explain the given Fundamental-Price Divergence analysis in plain English for everyday investors.
+You are a financial commentator. Explain the given Market Rationality analysis in plain English for everyday investors.
 
 Background:
-- "Fundamental-Price Divergence Score" measures how far price has deviated from fundamentals
-- Negative (-): price reflects fundamentals (company value) well (rational market)
-- Positive (+): price has deviated from fundamentals, driven by sentiment or liquidity (emotional market)
-- Higher positive = greater divergence (0~2: mild, 2+: significant)
-- Features are individual indicators that compose this score
+- "Market Rationality Score" measures how rationally price reflects fundamentals (company value)
+- Positive (+): price reflects fundamentals well (rational market)
+- Negative (-): price has deviated from fundamentals, driven by sentiment or liquidity (emotional market)
+- Larger negative |score| = stronger emotional dominance (0~-2: mild, -2 or below: strong)
+- Features are individual indicators composing this score (positive contribution = pushes toward rationality)
 
 Explain:
-1. Current state (what the divergence score value means)
+1. Current state (what the rationality score value means — sign and magnitude)
 2. Why this result occurred (top 3 feature contributors in plain language)
 3. What it means for investors
 
@@ -512,9 +512,9 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
         if regime:
             lines.append(f"{'Regime' if is_en else '레짐'}: {regime.get('regime_name', '?')}")  # 국면명
             if is_en:
-                lines.append(f"Fundamental-Price Divergence Score: {regime.get('noise_score', '?')}")
+                lines.append(f"Market Rationality Score: {regime.get('noise_score', '?')}")
             else:
-                lines.append(f"펀더멘털 주가 괴리 점수: {regime.get('noise_score', '?')}")
+                lines.append(f"시장 이성 점수: {regime.get('noise_score', '?')}")
             fc = regime.get('feature_contributions', [])     # 피처 기여도 (JSONB)
             if isinstance(fc, str):                          # 문자열이면 JSON 파싱
                 try:

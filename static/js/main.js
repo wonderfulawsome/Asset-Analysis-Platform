@@ -3,7 +3,8 @@ var _csData = null;
 var _nrData = null;
 var _fgData = null;  // 공포탐욕 데이터 캐시 (인사이트 연동용)
 
-// ── 공포탐욕 × Noise 인사이트 ──
+// ── 공포탐욕 × 시장 이성 점수 인사이트 ──
+// 부호 컨벤션: 양수 = 이성적, 음수 = 감정적/괴리
 function _buildFgNoiseInsight(noiseScore) {
   if (!_fgData || noiseScore == null) return '';
   const rating = _fgData.rating;
@@ -13,7 +14,7 @@ function _buildFgNoiseInsight(noiseScore) {
 
   let msg, color, tag, tagColor;
   if (FEAR_SET.has(rating)) {
-    if (noiseScore >= 0) {
+    if (noiseScore < 0) {
       tag = 'IRRATIONAL FEAR';
       msg = `공포 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 공포가 감지됩니다`;
       color = '#3B82F6'; tagColor = '#60A5FA';
@@ -23,7 +24,7 @@ function _buildFgNoiseInsight(noiseScore) {
       color = '#EF4444'; tagColor = '#F87171';
     }
   } else if (GREED_SET.has(rating)) {
-    if (noiseScore >= 0) {
+    if (noiseScore < 0) {
       tag = 'IRRATIONAL GREED';
       msg = `탐욕 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 낙관이 감지됩니다`;
       color = '#EF4444'; tagColor = '#F87171';
@@ -60,8 +61,9 @@ function lucideIcon(name, size, sw) {
 
 // NR 국면 데이터 (API 한글 키 기반, 표시 텍스트는 i18n에서 처리)
 const NR_PHASES = ['펀더멘털 반영', '펀더멘털 약반영', '펀더멘털-주가 불일치', '센티멘트 지배']; // 국면 목록
-const NR_GAP_POS   = { '펀더멘털 반영': 12, '펀더멘털 약반영': 37, '펀더멘털-주가 불일치': 63, '센티멘트 지배': 88 }; // 갭바 위치
-const NR_GAP_COLOR = { '펀더멘털 반영': '#4CAF50', '펀더멘털 약반영': '#8BC34A', '펀더멘털-주가 불일치': '#FF9800', '센티멘트 지배': '#F44336' }; // 갭바 색상
+// 부호 반전(2026-04-29): 이성적(펀더멘털 반영)=오른쪽, 감정적(센티멘트)=왼쪽
+const NR_GAP_POS   = { '펀더멘털 반영': 88, '펀더멘털 약반영': 63, '펀더멘털-주가 불일치': 37, '센티멘트 지배': 12 }; // 갭바 위치 (이성=右)
+const NR_GAP_COLOR = { '펀더멘털 반영': '#4CAF50', '펀더멘털 약반영': '#8BC34A', '펀더멘털-주가 불일치': '#FF9800', '센티멘트 지배': '#F44336' }; // 갭바 색상 (의미 기준 — 위치 무관)
 const NR_BADGE = {                                // 뱃지 스타일 (텍스트는 i18n)
   '펀더멘털 반영':   { cls: 'badge-green', icon: 'sun' },
   '펀더멘털 약반영': { cls: 'badge-yellow', icon: 'cloud' },
@@ -632,11 +634,12 @@ async function loadRegime() {
   // 분포 기반 기준: min=-5(P01), mid=0(P50 중앙값), max=10(~P93)
   // 중심점(mid=0)을 50%로, 양쪽 대칭 스케일링
   const ns = data.noise_score ?? null;
+  // 부호 반전 후: 양수=이성, 음수=감정. 좌(감정)~우(이성) 게이지에 그대로 매핑.
   let pos;
   if (ns != null) {
     const mid = 0;
-    if (ns <= mid) { pos = 5 + ((ns - (-5)) / (mid - (-5))) * 45; }   // -5→5%, 0→50%
-    else           { pos = 50 + ((ns - mid) / (10 - mid)) * 45; }     // 0→50%, 10→95%
+    if (ns <= mid) { pos = 5 + ((ns - (-10)) / (mid - (-10))) * 45; }  // -10→5%, 0→50%
+    else           { pos = 50 + ((ns - mid) / (5 - mid)) * 45; }       // 0→50%, +5→95%
     pos = Math.max(5, Math.min(95, pos));
   } else { pos = NR_GAP_POS[name] ?? 50; }
   const color = NR_GAP_COLOR[name] ?? '#999';        // 갭바 색상
@@ -668,7 +671,7 @@ async function loadRegime() {
         <span>${t('nr.price')}</span>
       </div>
       <div class="nr-gap-track">
-        <div class="nr-gap-fill" style="width:${pos}%;background:linear-gradient(to right,#4CAF50,#8BC34A,#FF9800,#F44336)"></div>
+        <div class="nr-gap-fill" style="width:${pos}%;background:linear-gradient(to right,#F44336,#FF9800,#8BC34A,#4CAF50)"></div>
         <div class="nr-gap-dot" style="left:${pos}%;border-color:${color}"></div>
       </div>
       <div class="nr-gap-ticks">
@@ -1544,9 +1547,9 @@ async function loadNoiseChart() {
     renderLineChart('nr-chart', points, {                          // 그래프 렌더링
       color: 'var(--accent)',                                      // 보라색 선
       zeroLine: true,                                              // 0 기준선 표시
-      dotColor: v => v >= 0 ? 'var(--red)' : 'var(--green)',       // 양수(노이즈↑) 빨강, 음수(펀더멘털) 초록
-      yTopLabel: t('chart.yTop'),                                     // Y축 상단: 노이즈 높음
-      yBottomLabel: t('chart.yBottom'),                              // Y축 하단: 펀더멘털 반영
+      dotColor: v => v >= 0 ? 'var(--green)' : 'var(--red)',       // 양수(이성적) 초록, 음수(감정적) 빨강
+      yTopLabel: t('chart.yTop'),                                     // Y축 상단: 이성적 (양수)
+      yBottomLabel: t('chart.yBottom'),                              // Y축 하단: 감정적 (음수)
     });
   } catch (e) {
     console.error('NR chart error:', e);                           // 에러 로그

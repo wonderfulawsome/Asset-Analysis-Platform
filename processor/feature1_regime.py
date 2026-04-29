@@ -2,6 +2,12 @@
 
 노트북 HMM.ipynb Cell 10~14 로직을 production 코드로 변환.
 GaussianHMM(4 states) + RobustScaler + noise_score v2 가중치 기반 국면 매핑.
+
+DB 저장 부호 (옛 컨벤션 유지):
+    + 양수 = 감정적 (주가가 펀더멘털과 괴리)
+    - 음수 = 이성적 (주가가 펀더멘털 반영)
+표시 단에서는 repositories.py 의 _flip_noise_record() 가 부호를 뒤집어 사용자에게는
+"양수 = 이성, 음수 = 감정" 으로 보이도록 매핑한다 (2026-04-30 도입).
 """
 
 import datetime
@@ -29,7 +35,7 @@ PHASE_EMOJIS = {0: '🧠', 1: '⚖️', 2: '🌊', 3: '🔥'}
 
 
 def score_to_regime_name(noise_score: float) -> tuple:
-    """noise_score → (regime_id, regime_name)
+    """noise_score → (regime_id, regime_name) — 옛(저장용) 부호 컨벤션 기준
     score < 0  → 일치 (주가가 펀더멘털 반영)
     score >= 0 → 불일치 (주가가 펀더멘털과 괴리)
     """
@@ -49,10 +55,12 @@ MODEL_PATH = os.path.join(MODEL_DIR, 'noise_hmm.pkl')
 
 
 def compute_noise_score(means: np.ndarray) -> np.ndarray:
-    """noise_score v2: 상관 기반 가중치.
+    """noise_score v2: 상관 기반 가중치 — 양수 = 감정성 (옛 컨벤션, DB 저장용).
 
     피처 순서: fundamental_gap, erp_zscore, residual_corr,
               dispersion, amihud, vix_term, hy_spread, realized_vol
+
+    표시 단(_flip_noise_record)에서 부호 반전되어 "양수=이성"으로 클라이언트에 노출.
     """
     return (
         0.5 * np.abs(means[:, 0])   # fundamental_gap
@@ -192,7 +200,7 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
         '펀더멘털-주가 불일치': round(p_mismatch, 4),
     }
 
-    # 피처별 noise_score 기여도 계산
+    # 피처별 noise_score 기여도 (DB 저장용 옛 컨벤션 — repo 단에서 부호 반전)
     noise_weights = [0.5, 0.3, 1.0, 0.0, 0.5, 2.0, 1.5, 2.0]
     contributions = []
     for i, fname in enumerate(FEATURE_NAMES):
@@ -256,7 +264,7 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
 
     # 기준 날짜 인덱스: SPY 수익률의 최근 N일 (영업일 기준)
     spy_dates = spy_ret.dropna().index[-days:]     # 최근 N 영업일
-    noise_weights = [0.5, 0.3, 1.0, 0.0, 0.5, 2.0, 1.5, 2.0]  # noise_score 가중치
+    noise_weights = [0.5, 0.3, 1.0, 0.0, 0.5, 2.0, 1.5, 2.0]  # noise_score 가중치 (옛 컨벤션)
 
     # 월별 피처(fundamental_gap, erp_zscore)를 일별로 forward-fill
     fg_monthly = features_monthly['fundamental_gap']  # 월별 펀더멘털 갭
@@ -352,7 +360,7 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
                 '펀더멘털-주가 불일치': round(p_mismatch, 4),
             }
 
-            # 피처 기여도 계산
+            # 피처 기여도 계산 (DB 저장용 옛 컨벤션 — repo 단에서 부호 반전)
             contributions = []                         # 기여도 리스트
             for i, fname in enumerate(FEATURE_NAMES):  # 8개 피처 순회
                 w = noise_weights[i]                   # 가중치

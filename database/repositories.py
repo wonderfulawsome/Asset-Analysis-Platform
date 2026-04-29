@@ -298,6 +298,26 @@ def fetch_sector_cycle_history(days: int = 12) -> list[dict]:
 _NR_JSON_FIELDS = ['probabilities', 'feature_contributions', 'feature_values']
 
 
+def _flip_noise_record(record: Optional[dict]) -> Optional[dict]:
+    """DB 저장 부호(양수=감정) → 표시 부호(양수=이성) 변환.
+
+    DB 컬럼 noise_score 와 feature_contributions[*].contribution 의 부호를 반전.
+    regime_name 은 그대로 — '일치/불일치' 단어 의미는 두 컨벤션에서 공통이라서:
+        DB ns=-0.9 (옛 이성), regime='일치' → 반전 후 +0.9 (새 이성), '일치' ✓
+        DB ns=+1.6 (옛 감정), regime='불일치' → 반전 후 -1.6 (새 감정), '불일치' ✓
+    """
+    if record is None:
+        return None
+    if record.get('noise_score') is not None:
+        record['noise_score'] = round(-float(record['noise_score']), 4)
+    fc = record.get('feature_contributions')
+    if isinstance(fc, list):
+        for c in fc:
+            if c.get('contribution') is not None:
+                c['contribution'] = round(-float(c['contribution']), 4)
+    return record
+
+
 def upsert_noise_regime(record: dict) -> None:
     """Noise vs Signal 국면 결과를 noise_regime 테이블에 upsert합니다. (date 기준)"""
     record = dict(record)
@@ -331,7 +351,7 @@ def fetch_noise_regime_current() -> Optional[dict]:
     )
     if not response.data:
         return None
-    return _parse_json_fields(response.data[0], _NR_JSON_FIELDS)
+    return _flip_noise_record(_parse_json_fields(response.data[0], _NR_JSON_FIELDS))
 
 
 def fetch_noise_regime_history(days: int = 30) -> list[dict]:
@@ -344,7 +364,7 @@ def fetch_noise_regime_history(days: int = 30) -> list[dict]:
         .limit(days)
         .execute()
     )
-    return [_parse_json_fields(r, _NR_JSON_FIELDS) for r in response.data]
+    return [_flip_noise_record(_parse_json_fields(r, _NR_JSON_FIELDS)) for r in response.data]
 
 
 def fetch_noise_regime_all() -> list[dict]:

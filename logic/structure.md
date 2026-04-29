@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-04-29 (부동산 데이터 수도권 확장 Phase 1 — metro-sgg.geojson(서울 25 + 인천 10 + 경기 42 = 77 sgg_cd, 79 폴리곤) + scripts/build_metro_geojson.py + backfill_metro.py(52 신규 LAWD_CD × 24개월) + MapScreen.tsx 수도권 viewport. Phase 2 backfill 진행 중. update.py [57])
+마지막 갱신 시점: 2026-04-30 (시장 이성 점수 — 표시단 부호 반전 아키텍처. DB(noise_regime.noise_score)는 OLD 컨벤션(+감정/-이성) 영속, repository._flip_noise_record() 가 fetch 시 부호 뒤집어 클라이언트에 NEW(+이성/-감정) 노출. compute_noise_score / score_to_regime_name / contributions 모두 OLD 로 복원. LLM 프롬프트·JS 게이지·라벨은 NEW 그대로 — repo 단에서 일관되게 NEW 받음. 이전 [56] 의 "DB=NEW" 가정은 Railway 백필이 옛 코드로 덮어써서 깨짐. update.py [58])

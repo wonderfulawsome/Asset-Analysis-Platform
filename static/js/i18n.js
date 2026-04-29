@@ -36,10 +36,10 @@ const I18N = {
     'holdings.loadError': '데이터를 불러올 수 없습니다', // 로드 에러
 
     // ── Noise vs Signal ──
-    'nr.fundamental': '이성적',                    // 갭바 좌측
-    'nr.price': '감정적',                          // 갭바 우측
-    'nr.match': '이성적',                          // 갭바 하단 좌측
-    'nr.gap': '감정적',                            // 갭바 하단 우측
+    'nr.fundamental': '감정적',                    // 갭바 좌측 (음수 영역)
+    'nr.price': '이성적',                          // 갭바 우측 (양수 영역)
+    'nr.match': '감정적',                          // 갭바 하단 좌측
+    'nr.gap': '이성적',                            // 갭바 하단 우측
 
     // ── NR 국면명 (API 응답 한글 → 표시용) ──
     'nr.phase.fundamental': '펀더멘털 반영',      // 국면 1
@@ -60,7 +60,7 @@ const I18N = {
     'nr.badge.danger': '위험',                    // 위험 뱃지
 
     // ── 섹션 라벨 ──
-    'section.nrChart': '이성적·감정적 추이 (30일)', // NR 차트 라벨
+    'section.nrChart': '시장 이성 점수 추이 (30일)', // NR 차트 라벨
     'section.myHoldings': 'My Holdings',           // 보유종목 섹션
     'section.csChart': '방향성 예측 추이 (30일)',    // CS 차트 라벨
 
@@ -154,8 +154,8 @@ const I18N = {
 
     // ── 차트 / 공통 ──
     'chart.noData': '데이터 없음',                // 데이터 없음
-    'chart.yTop': '감정적',                        // Y축 상단
-    'chart.yBottom': '이성적',                     // Y축 하단
+    'chart.yTop': '이성적',                        // Y축 상단 (양수)
+    'chart.yBottom': '감정적',                     // Y축 하단 (음수)
 
     // ── 캔들스틱 차트 탭 ──
     'chart.daily': '일봉',
@@ -187,8 +187,8 @@ const I18N = {
     'detail.mlLabel': '머신러닝 학습 지표',        // 상세페이지 서브타이틀
     'detail.noData': '데이터 없음',               // 데이터 없음
     'detail.currentPhase': '현재 국면',           // 현재 국면
-    'detail.noiseScore': 'Noise Score:',          // 노이즈 점수
-    'detail.noiseComposition': '노이즈 점수 구성', // 노이즈 구성
+    'detail.noiseScore': '시장 이성 점수:',        // 시장 이성 점수
+    'detail.noiseComposition': '시장 이성 점수 구성', // 점수 구성
     'detail.currentIndicators': '현재 지표 수치',  // 현재 지표
     'detail.usedIndicators': '분석에 사용된 지표',  // 사용 지표
     'detail.shapTitle': 'SHAP 기여도',            // SHAP 제목
@@ -443,10 +443,10 @@ const I18N = {
     'holdings.loadError': 'Failed to load data',
 
     // ── Noise vs Signal ──
-    'nr.fundamental': 'Rational',
-    'nr.price': 'Emotional',
-    'nr.match': 'Rational',
-    'nr.gap': 'Emotional',
+    'nr.fundamental': 'Emotional',
+    'nr.price': 'Rational',
+    'nr.match': 'Emotional',
+    'nr.gap': 'Rational',
 
     // ── NR Phase Names ──
     'nr.phase.fundamental': 'Fundamental',
@@ -467,7 +467,7 @@ const I18N = {
     'nr.badge.danger': 'Danger',
 
     // ── Section Labels ──
-    'section.nrChart': 'Rational·Emotional Trend (30d)',
+    'section.nrChart': 'Market Rationality Trend (30d)',
     'section.myHoldings': 'My Holdings',
     'section.csChart': 'Directional Forecast Trend (30d)',
 
@@ -561,8 +561,8 @@ const I18N = {
 
     // ── Chart / Common ──
     'chart.noData': 'No Data',
-    'chart.yTop': 'Emotional',
-    'chart.yBottom': 'Rational',
+    'chart.yTop': 'Rational',
+    'chart.yBottom': 'Emotional',
 
     // ── Candlestick Chart Tab ──
     'chart.daily': 'Daily',
@@ -594,8 +594,8 @@ const I18N = {
     'detail.mlLabel': 'ML-Based Indicators',
     'detail.noData': 'No Data',
     'detail.currentPhase': 'Current Phase',
-    'detail.noiseScore': 'Noise Score:',
-    'detail.noiseComposition': 'Noise Score Breakdown',
+    'detail.noiseScore': 'Market Rationality:',
+    'detail.noiseComposition': 'Rationality Score Breakdown',
     'detail.currentIndicators': 'Current Indicators',
     'detail.usedIndicators': 'Indicators Used',
     'detail.shapTitle': 'SHAP Contributions',
