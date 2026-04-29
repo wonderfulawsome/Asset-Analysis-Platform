@@ -4759,7 +4759,69 @@ def compute_sector_momentum() -> dict:
 # phase_name 필드 제거 — 응답 더 작고 의미 명확.
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [54] 2026-04-29 (UTC) — structure.md 함수 한 줄 요약 추가
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# logic/structure.md 의 collector·processor·repository·정규화 헬퍼·프론트 유틸
+# 시그니처 옆에 "이 함수가 무엇을 하는가" 한 줄 코멘트를 일괄 추가.
+# 코드 변경 0건 — 문서만 갱신.
+
+# [수정 파일]
+# - logic/structure.md
+#   * 5.0 공통 내부 패턴: _fetch_page/_fetch_all/_parse_*/_normalize_items 코멘트 보강
+#   * 5.1 real_estate_trade.py: fetch_trades / fetch_rents
+#   * 5.2 real_estate_population.py: fetch_population / fetch_household_by_size /
+#         fetch_mapping_pairs / fetch_all_sgg_codes
+#   * 5.3 real_estate_geocode.py: geocode / batch_geocode
+#   * 5.4 ecos_macro.py: fetch_ecos_series / fetch_macro_rate_kr
+#   * 5.5 kosis_migration.py: fetch_kosis_migration
+#   * 6.1 feature5_real_estate.py: build_mapping / compute_region_summary
+#   * 6.2 feature6_buy_signal.py: compute_buy_signal
+#   * 7. repositories.py: 부동산 ~20개 upsert/fetch 모두 (원천·가공·시그널·거시)
+#   * 10. scheduler/job.py 정규화 헬퍼: _re_norm_trades / _re_norm_rents /
+#         _re_norm_population / _re_norm_household / _re_norm_mapping
+#   * 11.4 frontend lib/color.ts: changePctColor / changePctTextColor / formatPrice
+#   * "마지막 갱신 시점" 라인 갱신
+
+# [왜]
+# - structure.md 가 함수 시그니처만 늘어놓고 있어 처음 보는 사람이 각 함수의
+#   역할을 파악하려면 실제 파일을 열어 봐야 했음.
+# - 시그니처 옆 한 줄 코멘트로 "이 함수가 무엇을 위해 존재하는가" 를 그 자리에서
+#   읽을 수 있게 만들어 청사진 문서로서의 가독성 강화.
+# - 사용자 요청에 따른 일회성 보강.
+
+# [검증]
+# - 코드 변경 없음 → 런타임 영향 없음.
+# - 함수명·시그니처는 그대로 유지하고 우측에 # 코멘트만 추가했으므로 grep 호환성 유지.
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [55] 2026-04-29 (UTC) — 섹터 이름 한국어 표시 (밸류·모멘텀 탭)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 섹터 밸류에이션·모멘텀 탭에서 섹터명이 영어로 표시됨 ("Technology",
+# "Software"…). 사용자 한국어 표시 요청.
+
+# [수정 파일]
+# - static/js/home.js : SECTOR_KR ticker→한국어 매핑 + krSector(ticker, fb)
+#   헬퍼. loadSectorValuation / loadSectorMomentum 두 사이트에서 사용.
+# - templates/stocks.html : home.js?v=22 → ?v=23
+
+# [매핑 테이블]
+const SECTOR_KR = {
+    XLK: '기술', IGV: '소프트웨어', SOXX: '반도체',
+    XLF: '금융', XLE: '에너지', XLV: '헬스케어',
+    XLY: '경기소비재', XLI: '산업재', XLB: '소재',
+    XLU: '유틸리티', XLRE: '부동산', XLC: '커뮤니케이션',
+    XLP: '필수소비재',
+};
+
+# [설계 — 왜 표시 단에서만 번역?]
+# DB·API 응답은 영어 그대로 둠. 이유:
+# 1) DB 마이그레이션 불필요 (영어 row + 한글 row 혼재 안 됨)
+# 2) LLM 입력(영어 sector_name) 안정적 — Groq/GPT 모두 영어 sector 라벨 잘 인식
+# 3) 추후 i18n (영어 화면 모드) 추가 시 매핑 한 곳만 토글하면 됨
 
 

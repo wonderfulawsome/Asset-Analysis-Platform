@@ -19,6 +19,24 @@
     'market-valuation': { action: 'sector-tab', id: 'tab-market-valuation' },
   };
 
+  // 섹터 ETF ticker → 한국어 표시명 (DB·API 는 영어 그대로, 화면 표시만 번역)
+  const SECTOR_KR = {
+    XLK:  '기술',
+    IGV:  '소프트웨어',
+    SOXX: '반도체',
+    XLF:  '금융',
+    XLE:  '에너지',
+    XLV:  '헬스케어',
+    XLY:  '경기소비재',
+    XLI:  '산업재',
+    XLB:  '소재',
+    XLU:  '유틸리티',
+    XLRE: '부동산',
+    XLC:  '커뮤니케이션',
+    XLP:  '필수소비재',
+  };
+  const krSector = (ticker, fallback) => SECTOR_KR[ticker] || fallback || ticker;
+
   // 탭 바와 conveyor (.feed-section) 는 홈/탭 양쪽에서 항상 표시.
   // 홈 ↔ 탭 토글은 .scroll-wrap (탭 콘텐츠) 와 #home-view 두 가지만 swap.
   function showHome() {
@@ -153,7 +171,7 @@
         const fgPct = v.per != null ? (v.per * 100).toFixed(1) + '%' : '-';
         const sign = v.per != null && v.per >= 0 ? '+' : '';
         return `
-          <div class="sv-name">${v.sector_name} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
+          <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
           <div class="sv-cell" style="background:${fgCol};">${sign}${fgPct}</div>`;
       }).join('');
       const sourceLine = data.as_of_date
@@ -190,7 +208,7 @@
       const colorOf = v => v == null ? '#9ca3af' : v >= 0 ? '#10b981' : '#ef4444';
       const rows = data.momentum.map(m => `
         <tr>
-          <td>${escapeHtml(m.sector_name)}<br><span style="color:#9ca3af;font-size:10px;">${m.ticker}</span></td>
+          <td>${escapeHtml(krSector(m.ticker, m.sector_name))}<br><span style="color:#9ca3af;font-size:10px;">${m.ticker}</span></td>
           <td class="num" style="color:${colorOf(m.return_1w)};">${fmt(m.return_1w)}</td>
           <td class="num" style="color:${colorOf(m.return_1m)};">${fmt(m.return_1m)}</td>
           <td class="num"><strong>${m.rank ?? '-'}</strong></td>

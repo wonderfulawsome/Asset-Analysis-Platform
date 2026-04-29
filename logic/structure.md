@@ -417,11 +417,11 @@ Step 9: ★ 부동산 — re_ym = 전월
 API 응답(camelCase, 값=str) → DB 스키마(snake_case, typed) 변환:
 
 ```python
-_re_norm_trades(items, sgg_cd, deal_ym)       # dedupe (apt_seq, deal_date, floor, exclu_use_ar)
-_re_norm_rents(items, sgg_cd, deal_ym)        # + (deposit, monthly_rent)
-_re_norm_population(items, stats_ym)
-_re_norm_household(items, stats_ym)            # hhNmprCnt7~10 합산 → hh_7plus, solo_rate 계산
-_re_norm_mapping(pairs)
+_re_norm_trades(items, sgg_cd, deal_ym)       # MOLIT 매매 raw → DB 스키마 dict + UNIQUE 4키 기준 in-batch dedupe
+_re_norm_rents(items, sgg_cd, deal_ym)        # MOLIT 전월세 raw → DB 스키마 dict + UNIQUE 6키(매매4 + deposit/monthly_rent) dedupe
+_re_norm_population(items, stats_ym)          # MOIS 인구 raw → mois_population 행 (stdg_cd, 인구·세대수·성비 typed)
+_re_norm_household(items, stats_ym)           # MOIS 세대원수 raw → 행정동별 hhNmprCnt7~10 합산해 hh_7plus, solo_rate 산출
+_re_norm_mapping(pairs)                       # lv=4 reverse-extract pair → stdg_admm_mapping 행 정규화
 ```
 
 각 함수 내부 dedupe 외에 호출자(Step 9) 측에서도 누적 dedupe 필요 (특히 household — MOIS가 상위 admm 호출 시 하위까지 포함 반환).
@@ -655,4 +655,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-04-29 (섹터 모멘텀 단순화 — 1·3·6M → 1주·1개월 일별 수익률 + 1주 기준 랭킹 (3컬럼). phase 비교/expected_rank/rank_diff 전부 제거. processor + home.js + market_summary LLM 입력 + tile subtitle 업데이트. update.py [53])
+마지막 갱신 시점: 2026-04-29 (섹터 이름 한국어 표시 — home.js 에 SECTOR_KR ticker→한국어 매핑 + krSector() 헬퍼 추가, 섹터 밸류/모멘텀 두 탭 표시 단에서만 번역. DB·API·LLM 입력은 영어 그대로 유지. update.py [55])
