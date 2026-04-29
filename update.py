@@ -4680,6 +4680,30 @@ except Exception as e:
 # 도 동일 어투 일관성 적용 검토.
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [52] 2026-04-29 (UTC) — OG 썸네일 이미지 교체 (Passive 대시보드 캡처)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 기존 og-image.png 가 512×512 단순 로고였음. SNS·메신저 링크 미리보기에서
+# 사이트의 실제 가치(다양한 위젯·차트가 한 화면에 보이는 대시보드)가 전달되지
+# 않았음. 사용자가 실제 대시보드 스크린샷(1672×941, 1.78:1)으로 교체 요청.
+
+# [수정 파일]
+# - static/og-image.png : 512×512 로고 → 1672×941 대시보드 캡처 (1.3MB)
+# - templates/stocks.html : 메타태그 4종 추가/갱신
+#   1) og:image URL 에 ?v=2 캐시 버스트 (X·페이스북·디스코드는 OG 이미지를
+#      aggressively 캐시 — URL 자체가 바뀌어야 갱신)
+#   2) og:image:width 1672, og:image:height 941 명시
+#   3) og:image:alt 추가 (스크린리더·접근성)
+#   4) twitter:image 명시 (twitter:card=summary_large_image 와 짝)
+
+# [검증]
+# 배포 후:
+# 1) Twitter Card Validator: https://cards-dev.twitter.com/validator
+# 2) Facebook Debugger: https://developers.facebook.com/tools/debug/
+#    → 두 도구에서 dinsightlab.com 입력 → "Scrape Again" 으로 강제 리프레시
+
+
 
 
 
