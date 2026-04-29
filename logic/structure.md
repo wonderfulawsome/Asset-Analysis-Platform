@@ -73,7 +73,7 @@ Passive-Financial-Data-Analysis/
 │   ├─ feature4_chart_predict.py 앙상블 ETF 예측
 │   ├─ feature5_real_estate.py ★ 매핑 + 지역 집계
 │   ├─ feature6_buy_signal.py  ★ 매수/관망/주의 시그널
-│   └─ feature7_sector_momentum.py ★ 섹터 1·3·6M 누적수익률 + phase별 예상순위
+│   └─ feature7_sector_momentum.py ★ 섹터 1주·1개월 일별 누적수익률 + 1주 기준 랭킹
 ├─ database/
 │   ├─ supabase_client.py      threading.local() 싱글톤
 │   └─ repositories.py         ★ 모든 테이블 upsert/fetch (단일 파일)
@@ -215,15 +215,15 @@ Passive-Financial-Data-Analysis/
 
 ```python
 # collector/real_estate_trade.py 정의
-_fetch_page(url, params)        # 1페이지 HTTP GET + 타임아웃 + 재시도
-_fetch_all(url, base_params)    # numOfRows/pageNo 루프로 전량 수집
-_parse_molit_response(xml)      # XML→dict + resultCode "000" 검증, "003"=NODATA → 빈 결과
-_normalize_items(items_raw)     # xmltodict 단/복수 함정 흡수 → 항상 list[dict]
+_fetch_page(url, params)        # MOLIT 1페이지 HTTP GET (타임아웃·재시도 포함, XML text 반환)
+_fetch_all(url, base_params)    # numOfRows/pageNo 루프로 MOLIT 전체 페이지를 누적 수집
+_parse_molit_response(xml)      # MOLIT XML→dict 파싱 + resultCode "000" 검증, "003"=NODATA는 빈 결과로 흡수
+_normalize_items(items_raw)     # xmltodict 단/복수 함정(item이 1개면 dict, 다수면 list) 흡수 → 항상 list[dict]
 
 # collector/real_estate_population.py 정의 (MOIS 변형, 동일 4단)
-_fetch_page_mois(url, params)        # 1페이지 HTTP GET + 타임아웃 + 재시도
-_fetch_all_mois(url, base_params)    # numOfRows/pageNo 루프로 전량 수집
-_parse_mois_response(xml)            # XML→dict + resultCode "0" 검증, "3"=NODATA → 빈 결과
+_fetch_page_mois(url, params)        # MOIS 1페이지 HTTP GET (타임아웃·재시도)
+_fetch_all_mois(url, base_params)    # numOfRows/pageNo 루프로 MOIS 전체 페이지 수집
+_parse_mois_response(xml)            # MOIS XML→dict + resultCode "0" 검증, "3"=NODATA → 빈 결과
 _normalize_items(items_raw)          # xmltodict 단/복수 함정 흡수 → 항상 list[dict]
 ```
 
@@ -242,23 +242,23 @@ fetch_trades(sgg_cd, ym)
 
 ### 5.1 `collector/real_estate_trade.py`
 ```python
-fetch_trades(sgg_cd: str, deal_ym: str) -> list[dict]
-fetch_rents(sgg_cd: str, deal_ym: str) -> list[dict]
+fetch_trades(sgg_cd: str, deal_ym: str) -> list[dict]   # 시군구·월 단위 MOLIT 매매 실거래가 전건 fetch
+fetch_rents(sgg_cd: str, deal_ym: str) -> list[dict]    # 시군구·월 단위 MOLIT 전월세 실거래가 전건 fetch
 # 응답: camelCase dict 리스트 (aptNm, aptSeq, dealAmount, excluUseAr, ...)
 ```
 
 ### 5.2 `collector/real_estate_population.py`
 ```python
-fetch_population(stdg_cd: str, ym: str) -> list[dict]      # lv=3
-fetch_household_by_size(admm_cd: str, ym: str) -> list[dict]
-fetch_mapping_pairs(stdg_cd: str, ym: str) -> list[dict]   # lv=4 reverse extract
-fetch_all_sgg_codes(ym: str) -> list[str]                  # lv=1→lv=2 전국 시군구 5자리
+fetch_population(stdg_cd: str, ym: str) -> list[dict]          # 시군구(lv=3) 인구·세대수·성비 월별 fetch
+fetch_household_by_size(admm_cd: str, ym: str) -> list[dict]   # 행정동(lv=4) 1~10인 세대원수 분포 fetch
+fetch_mapping_pairs(stdg_cd: str, ym: str) -> list[dict]       # 인구 API에 lv=4 호출해 admmCd 부산물로 법정동↔행정동 매핑 추출
+fetch_all_sgg_codes(ym: str) -> list[str]                      # lv=1→lv=2 두 단계 호출로 전국 시군구 5자리 코드 수집
 ```
 
 ### 5.3 `collector/real_estate_geocode.py`
 ```python
-geocode(address: str) -> dict | None
-batch_geocode(addresses: list[str]) -> list[dict | None]
+geocode(address: str) -> dict | None                        # Kakao 로컬 API로 주소 1건을 (lat, lng)으로 변환 (실패 시 None)
+batch_geocode(addresses: list[str]) -> list[dict | None]    # 주소 리스트를 순차 지오코딩 (rate-limit·실패 None 흡수)
 ```
 
 ### 5.4 `collector/ecos_macro.py`
@@ -268,14 +268,13 @@ SPECS = {
   "mortgage_rate":    {"table": "121Y006", "item": "BECBLA0302", "cycle": "M"},
   "mortgage_balance": {"table": "151Y005", "item": "11110A0",    "cycle": "M"},
 }
-fetch_ecos_series(metric: str, from_ym: str, to_ym: str) -> list[dict]
-fetch_macro_rate_kr(months: int = 24) -> list[dict]   # 3지표 wide rollup
+fetch_ecos_series(metric: str, from_ym: str, to_ym: str) -> list[dict]   # SPECS의 단일 지표(table+item)를 ECOS REST path로 호출 → 시계열 list 반환
+fetch_macro_rate_kr(months: int = 24) -> list[dict]                       # 3지표를 fetch_ecos_series로 받아 date 기준 wide-format으로 합쳐 반환
 ```
 
 ### 5.5 `collector/kosis_migration.py`
 ```python
-fetch_kosis_migration(sgg_cds: list[str], months: int = 12) -> list[dict]
-# 한 호출당 40,000셀 한도 → 100구씩 chunk
+fetch_kosis_migration(sgg_cds: list[str], months: int = 12) -> list[dict]   # KOSIS DT_1B26001 시군구 전입·전출·순이동 fetch (40,000셀 한도 회피용 100구씩 chunk)
 ```
 
 ---
@@ -284,17 +283,17 @@ fetch_kosis_migration(sgg_cds: list[str], months: int = 12) -> list[dict]
 
 ### 6.1 `processor/feature5_real_estate.py`
 ```python
-build_mapping(sgg_cd: str, ref_ym: str) -> list[dict]
+build_mapping(sgg_cd: str, ref_ym: str) -> list[dict]   # 시군구의 법정동↔행정동 매핑 한 벌을 MOIS lv=3·lv=4 호출로 구축
 # lv=3으로 시군구→법정동 목록 → 각 stdgCd에 lv=4 매핑 호출 (reverse extract)
 
-compute_region_summary(trades, rents, population, mapping, household, sgg_cd, stats_ym) -> list[dict]
+compute_region_summary(trades, rents, population, mapping, household, sgg_cd, stats_ym) -> list[dict]   # raw 입력 5종을 받아 법정동 단위 region_summary 행 리스트 산출
 # 매매 평단가·중위 계산 → 법정동별 그룹핑
 # 1인가구 비율: 행정동 세대원수 → 매핑으로 법정동 가중합
 ```
 
 ### 6.2 `processor/feature6_buy_signal.py`
 ```python
-compute_buy_signal(ts: list[dict], rate_ts=None, flow_ts=None) -> dict | None
+compute_buy_signal(ts: list[dict], rate_ts=None, flow_ts=None) -> dict | None   # 시군구 시계열·금리·인구이동을 합쳐 매수/관망/주의 시그널 dict 산출
 # ts: region_summary 시계열 (ym, trade_count, median_price_per_py, population)
 # 점수화:
 #   trade_score = clamp(trade_chg * 100, -30, 30)
@@ -312,30 +311,38 @@ compute_buy_signal(ts: list[dict], rate_ts=None, flow_ts=None) -> dict | None
 부동산 관련 (~20개):
 ```python
 # 원천
-upsert_re_trades(records)            fetch_re_trades(sgg_cd, ym)
-upsert_re_rents(records)             fetch_re_rents(sgg_cd, ym)
-upsert_mois_population(records)      fetch_mois_population(sgg_cd, ym)
-upsert_mois_household(records)       fetch_mois_household(sgg_cd, ym)
-upsert_stdg_admm_mapping(records)    fetch_stdg_admm_mapping(sgg_cd, ref_ym)
-upsert_geo_stdg(records)             fetch_geo_stdg(sgg_cd)
+upsert_re_trades(records)            # MOLIT 매매 정규화 행을 real_estate_trade_raw에 batch upsert (UNIQUE 4키 충돌 시 갱신)
+fetch_re_trades(sgg_cd, ym)          # 시군구·월의 매매 raw 행 전건 조회
+upsert_re_rents(records)             # MOLIT 전월세 정규화 행을 real_estate_rent_raw에 upsert (deposit·monthly_rent 추가 키)
+fetch_re_rents(sgg_cd, ym)           # 시군구·월의 전월세 raw 행 전건 조회
+upsert_mois_population(records)      # MOIS 인구·세대수 행을 mois_population에 upsert
+fetch_mois_population(sgg_cd, ym)    # 시군구의 해당 월 법정동 인구 행 조회
+upsert_mois_household(records)       # MOIS 행정동 1~10인 세대원수 행을 mois_household_by_size에 upsert
+fetch_mois_household(sgg_cd, ym)     # 시군구의 해당 월 행정동 세대원수 행 조회
+upsert_stdg_admm_mapping(records)    # 법정동↔행정동 매핑(+선택적 좌표) 캐시 upsert
+fetch_stdg_admm_mapping(sgg_cd, ref_ym)   # 시군구·기준월의 매핑 행 조회
+upsert_geo_stdg(records)             # 법정동 카카오 지오코딩 결과(lat·lng) upsert
+fetch_geo_stdg(sgg_cd)               # 시군구 내 모든 법정동 좌표 조회
 
 # 가공
-upsert_region_summary(records)
-fetch_region_summary(sgg_cd, ym)              # 시군구의 법정동 리스트
-fetch_region_timeseries(sgg_cd)               # 시군구 시계열
-fetch_region_by_stdg_cd(stdg_cd, ym)          # 단일 법정동 1행
-fetch_region_timeseries_by_stdg(stdg_cd, months=12)
-fetch_complex_summary_by_stdg(stdg_cd, ym, top=10)  # apt_seq 그룹핑
-fetch_complex_compare(apt_seqs, months=12)          # 단지 비교 (전세가율 포함)
+upsert_region_summary(records)                     # 법정동 단위 월별 집계 행 batch upsert (UNIQUE: stdg_cd+stats_ym)
+fetch_region_summary(sgg_cd, ym)                   # 시군구의 해당 월 법정동 집계 리스트
+fetch_region_timeseries(sgg_cd)                    # 시군구 단위 12M 시계열 (월별 합산/평균)
+fetch_region_by_stdg_cd(stdg_cd, ym)               # 단일 법정동·월의 region_summary 1행
+fetch_region_timeseries_by_stdg(stdg_cd, months=12)   # 단일 법정동의 최근 N개월 시계열
+fetch_complex_summary_by_stdg(stdg_cd, ym, top=10)    # 법정동 내 apt_seq별 거래 그룹 TOP-N (단지 카드용)
+fetch_complex_compare(apt_seqs, months=12)            # 여러 단지의 평단가·거래량·전세가율 시계열 묶음 (비교 화면용)
 
 # 시그널
-upsert_buy_signal(record)
-fetch_buy_signal(sgg_cd, ym=None)
-fetch_buy_signal_history(sgg_cd)
+upsert_buy_signal(record)             # 시군구·월의 매수 시그널 1행 upsert (점수·narrative 포함)
+fetch_buy_signal(sgg_cd, ym=None)     # 시군구의 특정 월(또는 최신) 시그널 1행 조회
+fetch_buy_signal_history(sgg_cd)      # 시군구의 시그널 시계열 (ym 오름차순)
 
 # 거시
-upsert_macro_rate_kr(records)        fetch_macro_rate_kr(months=24)
-upsert_region_migration(records)     fetch_region_migration(sgg_cd)
+upsert_macro_rate_kr(records)        # ECOS 3지표 wide rollup 일/월 행 upsert (UNIQUE: date)
+fetch_macro_rate_kr(months=24)       # 최근 N개월 거시 금리 시계열 조회
+upsert_region_migration(records)     # KOSIS 시군구 인구이동(전입·전출·순이동) 월별 upsert
+fetch_region_migration(sgg_cd)       # 시군구의 인구이동 시계열 조회
 ```
 
 ---
@@ -471,9 +478,9 @@ _re_norm_mapping(pairs)
 
 ### 11.4 공용 유틸 (src/lib/color.ts)
 ```typescript
-changePctColor(pct: number | null): string  // 5단계 색
-changePctTextColor(pct): string              // text-red-300 / text-blue-300 / text-gray-400
-formatPrice(man: number | null): string      // ≥10000만 → "X.X억", 아니면 "X,XXX만"
+changePctColor(pct: number | null): string   // 변화율(%)을 5단계 빨강↔파랑 폴리곤 fill 컬러로 매핑 (null=회색)
+changePctTextColor(pct): string              // 변화율 부호별 텍스트 색 클래스 반환 (양수 red / 음수 blue / null gray)
+formatPrice(man: number | null): string      // 만원 단위 정수를 "X.X억"(≥10000만) 또는 "X,XXX만" 라벨로 포맷
 ```
 
 ### 11.5 데이터 흐름
@@ -648,4 +655,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-04-29 (시장 밸류 분해 표 일반어 리네이밍 — home.js mv-formula/decompose/interpretation 한글 풀이 + zPhrase() 자동 평어 변환 + cache bust ?v=18. update.py [47])
+마지막 갱신 시점: 2026-04-29 (섹터 모멘텀 단순화 — 1·3·6M → 1주·1개월 일별 수익률 + 1주 기준 랭킹 (3컬럼). phase 비교/expected_rank/rank_diff 전부 제거. processor + home.js + market_summary LLM 입력 + tile subtitle 업데이트. update.py [53])

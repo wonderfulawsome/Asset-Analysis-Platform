@@ -635,32 +635,28 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
         from processor.feature7_sector_momentum import compute_sector_momentum
         m = compute_sector_momentum()
         if m and m.get('momentum'):
-            phase = m.get('phase_name')
-            if phase:
-                lines.append(f"{'Cycle' if is_en else '현재 국면'}: {phase}")
             mom = m['momentum']
-            # 현재 모멘텀 상위 3 (3M 수익률)
-            top_cur = sorted(
-                [x for x in mom if x.get('return_3m') is not None],
-                key=lambda x: x['return_3m'], reverse=True
+            # 1주일 수익률 기준 랭킹 상위 3 (rank ASC = 1위부터)
+            top = sorted(
+                [x for x in mom if x.get('rank') is not None],
+                key=lambda x: x['rank']
             )[:3]
-            if top_cur:
-                lines.append(("Top momentum (3M):" if is_en else "모멘텀 상위 (3M):"))
-                for x in top_cur:
-                    r3 = x['return_3m']
-                    lines.append(f"  {x['ticker']} ({x['sector_name']}): {r3:+.1f}%, rank={x.get('current_rank')}")
-            # rank_diff 절대값 큰 것 (오버퍼폼/언더퍼폼)
-            with_diff = [x for x in mom if x.get('rank_diff') is not None]
-            outperf = sorted(with_diff, key=lambda x: x['rank_diff'])[:2]
-            underperf = sorted(with_diff, key=lambda x: x['rank_diff'], reverse=True)[:2]
-            if outperf:
-                lines.append(("Outperformers (vs expected):" if is_en else "오버퍼폼 (예상 대비):"))
-                for x in outperf:
-                    lines.append(f"  {x['ticker']} ({x['sector_name']}): cur={x.get('current_rank')}, exp={x.get('expected_rank')}, diff={x['rank_diff']:+d}")
-            if underperf:
-                lines.append(("Underperformers (vs expected):" if is_en else "언더퍼폼 (예상 대비):"))
-                for x in underperf:
-                    lines.append(f"  {x['ticker']} ({x['sector_name']}): cur={x.get('current_rank')}, exp={x.get('expected_rank')}, diff={x['rank_diff']:+d}")
+            bot = sorted(
+                [x for x in mom if x.get('rank') is not None],
+                key=lambda x: x['rank'], reverse=True
+            )[:3]
+            if top:
+                lines.append(("Top momentum (1W):" if is_en else "모멘텀 상위 (1주일):"))
+                for x in top:
+                    r1w = x.get('return_1w')
+                    r1m = x.get('return_1m')
+                    lines.append(f"  rank {x['rank']}: {x['ticker']} ({x['sector_name']}): 1W {r1w:+.1f}%, 1M {r1m:+.1f}%")
+            if bot:
+                lines.append(("Bottom momentum (1W):" if is_en else "모멘텀 하위 (1주일):"))
+                for x in bot:
+                    r1w = x.get('return_1w')
+                    r1m = x.get('return_1m')
+                    lines.append(f"  rank {x['rank']}: {x['ticker']} ({x['sector_name']}): 1W {r1w:+.1f}%, 1M {r1m:+.1f}%")
 
     elif tab == 'sector':                                    # ── 섹터 탭 ──
         sc = fetch_sector_cycle_latest()                     # 경기국면 조회

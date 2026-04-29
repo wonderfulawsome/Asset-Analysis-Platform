@@ -179,43 +179,29 @@
     return 'rgba(156, 163, 175, 0.2)';
   }
 
-  // 섹터 모멘텀 랭킹 테이블
+  // 섹터 모멘텀 랭킹 테이블 (1주일 수익률 기준 랭킹)
   async function loadSectorMomentum() {
     const target = document.getElementById('sector-mom-content');
     target.innerHTML = '<div class="loading-placeholder"><div class="loading-spinner sm"></div></div>';
     try {
       const r = await fetch('/api/sector-cycle/momentum');
       const data = await r.json();
-      const phaseLine = data.phase_name
-        ? `<div class="sv-phase">현재 국면: <strong>${data.phase_name}</strong> · 예상 순위 = 과거 ${data.phase_name} 국면 평균 수익률 기준</div>` : '';
-      const rows = data.momentum.map(m => {
-        const r1 = m.return_1m != null ? m.return_1m.toFixed(1) + '%' : '-';
-        const r3 = m.return_3m != null ? m.return_3m.toFixed(1) + '%' : '-';
-        const r6 = m.return_6m != null ? m.return_6m.toFixed(1) + '%' : '-';
-        let chip = '<span class="sm-chip flat">-</span>';
-        if (m.rank_diff != null) {
-          if (m.rank_diff > 0)  chip = `<span class="sm-chip over">+${m.rank_diff}</span>`;
-          else if (m.rank_diff < 0) chip = `<span class="sm-chip under">${m.rank_diff}</span>`;
-          else chip = '<span class="sm-chip flat">0</span>';
-        }
-        return `<tr>
-          <td>${m.sector_name}<br><span style="color:#9ca3af;font-size:10px;">${m.ticker}</span></td>
-          <td class="num">${r1}</td>
-          <td class="num">${r3}</td>
-          <td class="num">${r6}</td>
-          <td class="num">${m.current_rank ?? '-'}</td>
-          <td class="num">${m.expected_rank ?? '-'}</td>
-          <td class="num">${chip}</td>
-        </tr>`;
-      }).join('');
-      target.innerHTML = phaseLine + `
+      const fmt = v => (v != null ? (v > 0 ? '+' : '') + v.toFixed(2) + '%' : '-');
+      const colorOf = v => v == null ? '#9ca3af' : v >= 0 ? '#10b981' : '#ef4444';
+      const rows = data.momentum.map(m => `
+        <tr>
+          <td>${escapeHtml(m.sector_name)}<br><span style="color:#9ca3af;font-size:10px;">${m.ticker}</span></td>
+          <td class="num" style="color:${colorOf(m.return_1w)};">${fmt(m.return_1w)}</td>
+          <td class="num" style="color:${colorOf(m.return_1m)};">${fmt(m.return_1m)}</td>
+          <td class="num"><strong>${m.rank ?? '-'}</strong></td>
+        </tr>`).join('');
+      target.innerHTML = `
         <table class="sm-table">
-          <thead><tr><th>섹터</th><th class="num">1M</th><th class="num">3M</th><th class="num">6M</th><th class="num">현재</th><th class="num">예상</th><th class="num">괴리</th></tr></thead>
+          <thead><tr><th>섹터</th><th class="num">1주일</th><th class="num">1개월</th><th class="num">랭킹</th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         <div style="margin-top:12px;font-size:11px;color:#9ca3af;line-height:1.5;">
-          <strong style="color:#60a5fa;">파란 칩</strong> = 예상보다 잘 가는 섹터 (오버퍼폼) /
-          <strong style="color:#f87171;">빨간 칩</strong> = 예상보다 못 가는 섹터 (언더퍼폼)
+          랭킹은 <strong>1주일 수익률</strong> 기준 (큰 게 1위). 단기 모멘텀 추적용.
         </div>`;
     } catch (e) {
       target.innerHTML = '<div style="color:#ef4444;">로드 실패: ' + e + '</div>';

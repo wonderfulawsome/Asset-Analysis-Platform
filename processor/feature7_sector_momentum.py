@@ -1,21 +1,27 @@
-"""섹터 모멘텀 랭킹 — 11개 섹터 ETF 의 1M·3M·6M 누적 수익률 + 현재 phase 의 예상 순위 비교.
+"""섹터 모멘텀 랭킹 — 11개 섹터 ETF 의 1주일·1개월 누적 수익률 + 1주일 기준 랭킹.
 
 데이터 소스: index_price_raw 의 일별 종가 (이미 매일 수집됨, yfinance 호출 0회)
-phase 별 예상 순위: sector_cycle_result.phase_holding_perf JSON 의 현재 phase 평균 수익률
+- 1주일 = 5 거래일 (월~금 한 주)
+- 1개월 = 21 거래일 (월평균 거래일 수)
+- 랭킹: 1주일 수익률 내림차순 (큰 게 1위) — 단기 모멘텀 추적용
 """
 from __future__ import annotations
 
 from datetime import date
 
 from collector.sector_valuation import SECTOR_VALUATION_ETFS
-from database.repositories import get_client, fetch_sector_cycle_latest
+from database.repositories import get_client
 
 
-def _cum_return(prices: list[float], months: int) -> float | None:
-    """월말 종가 기준 N개월 누적 수익률. 데이터 부족하면 None."""
-    if len(prices) < months + 1:
+_TRADING_DAYS_1W = 5
+_TRADING_DAYS_1M = 21
+
+
+def _cum_return_days(prices: list[float], days: int) -> float | None:
+    """일별 종가 기준 N 거래일 누적 수익률. 데이터 부족하면 None."""
+    if len(prices) < days + 1:
         return None
-    return prices[-1] / prices[-months - 1] - 1
+    return prices[-1] / prices[-days - 1] - 1
 
 
 def _rank_dict(d: dict[str, float], reverse: bool = True) -> dict[str, int]:
@@ -25,20 +31,17 @@ def _rank_dict(d: dict[str, float], reverse: bool = True) -> dict[str, int]:
 
 
 def compute_sector_momentum() -> dict:
-    """11개 섹터의 1M·3M·6M 수익률 + 현재 phase 예상 순위 vs 실제 순위.
+    """11개 섹터의 1W·1M 수익률 + 1W 기준 랭킹.
 
     반환:
       {
-        phase_name: str,
         as_of_date: str,
         momentum: [
-          {ticker, sector_name, return_1m, return_3m, return_6m,
-           current_rank, expected_rank, rank_diff}, ...11
+          {ticker, sector_name, return_1w, return_1m, rank}, ...11
         ]
       }
     """
     client = get_client()
-    # 13개 섹터 ETF 일별 종가 — 최근 1년치. Supabase 기본 1000행 한계 회피 위해 페이지네이션.
     rows: list[dict] = []
     PAGE = 1000
     offset = 0
@@ -58,68 +61,45 @@ def compute_sector_momentum() -> dict:
             break
         offset += PAGE
     if not rows:
-        return {"phase_name": None, "as_of_date": None, "momentum": []}
+        return {"as_of_date": None, "momentum": []}
 
-    # ticker → 월말 종가 시계열 (date ASC)
+    # ticker → 일별 종가 시계열 (date ASC)
     by_ticker: dict[str, list[tuple[str, float]]] = {}
     for r in rows:
         by_ticker.setdefault(r["ticker"], []).append((r["date"], r.get("close") or 0))
 
-    # 월말 추출 — 같은 YYYYMM 의 마지막 거래일만
-    month_close: dict[str, list[float]] = {}
-    for ticker, series in by_ticker.items():
-        month_to_close: dict[str, float] = {}
-        for d, c in series:
-            month_to_close[d[:7]] = c  # YYYY-MM key, 마지막 행이 덮어쓰는 게 월말
-        # 정렬된 월별 종가
-        month_close[ticker] = [month_to_close[m] for m in sorted(month_to_close)]
+    # 일별 종가 list (date 정렬 — query 가 이미 ASC, 안전망으로 한 번 더)
+    daily_close: dict[str, list[float]] = {
+        t: [c for _, c in sorted(s)] for t, s in by_ticker.items()
+    }
 
-    # 누적 수익률
+    # 1주일·1개월 누적 수익률
+    returns_1w: dict[str, float] = {}
     returns_1m: dict[str, float] = {}
-    returns_3m: dict[str, float] = {}
-    returns_6m: dict[str, float] = {}
-    for ticker, prices in month_close.items():
-        for n, dest in [(1, returns_1m), (3, returns_3m), (6, returns_6m)]:
-            r = _cum_return(prices, n)
-            if r is not None:
-                dest[ticker] = r
+    for ticker, prices in daily_close.items():
+        r1w = _cum_return_days(prices, _TRADING_DAYS_1W)
+        r1m = _cum_return_days(prices, _TRADING_DAYS_1M)
+        if r1w is not None:
+            returns_1w[ticker] = r1w
+        if r1m is not None:
+            returns_1m[ticker] = r1m
 
-    # 현재 순위 (3M 기준)
-    current_rank = _rank_dict(returns_3m)
-
-    # 예상 순위 — phase_holding_perf 의 현재 phase 섹터 평균 수익률 활용
-    cycle = fetch_sector_cycle_latest()
-    phase_name = cycle.get("phase_name") if cycle else None
-    expected_rank: dict[str, int] = {}
-    if cycle:
-        # phase_sector_perf: {'회복': {'XLK': 1.23, ...}, ...} 형식 (sector_cycle.py 출력)
-        ps = cycle.get("phase_sector_perf") or {}
-        cur_phase_perf = ps.get(phase_name, {}) if phase_name else {}
-        # SECTOR_VALUATION_ETFS 의 11 ticker 만 필터
-        filt = {t: v for t, v in cur_phase_perf.items() if t in SECTOR_VALUATION_ETFS}
-        if filt:
-            expected_rank = _rank_dict(filt)
+    # 랭킹: 1주일 수익률 기준 (큰 게 1위)
+    rank_by_1w = _rank_dict(returns_1w)
 
     out = []
     for ticker, sector_name in SECTOR_VALUATION_ETFS.items():
-        cur = current_rank.get(ticker)
-        exp = expected_rank.get(ticker)
         out.append({
             "ticker": ticker,
             "sector_name": sector_name,
+            "return_1w": round(returns_1w.get(ticker) * 100, 2) if ticker in returns_1w else None,
             "return_1m": round(returns_1m.get(ticker) * 100, 2) if ticker in returns_1m else None,
-            "return_3m": round(returns_3m.get(ticker) * 100, 2) if ticker in returns_3m else None,
-            "return_6m": round(returns_6m.get(ticker) * 100, 2) if ticker in returns_6m else None,
-            "current_rank": cur,
-            "expected_rank": exp,
-            # rank_diff 양수 = 예상보다 낮은 순위 (언더퍼폼) / 음수 = 오버퍼폼
-            "rank_diff": (exp - cur) if (cur and exp) else None,
+            "rank": rank_by_1w.get(ticker),
         })
-    # 3M 수익률 기준 정렬
-    out.sort(key=lambda x: x["return_3m"] if x["return_3m"] is not None else -999, reverse=True)
+    # 랭킹 오름차순 (1위부터 위로)
+    out.sort(key=lambda x: x["rank"] if x["rank"] is not None else 999)
 
     return {
-        "phase_name": phase_name,
         "as_of_date": date.today().isoformat(),
         "momentum": out,
     }

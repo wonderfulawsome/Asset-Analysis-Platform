@@ -4704,6 +4704,61 @@ except Exception as e:
 #    → 두 도구에서 dinsightlab.com 입력 → "Scrape Again" 으로 강제 리프레시
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [53] 2026-04-29 (UTC) — 섹터 모멘텀 단순화 (1·3·6M → 1주·1개월 + 1주 랭킹)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 사용자 요청: 섹터 모멘텀 탭 7컬럼(1M·3M·6M·현재·예상·괴리) 너무 복잡 →
+# 3컬럼만 (1주일 수익률 / 1개월 수익률 / 랭킹). 랭킹은 1주일 수익률 기준.
+# Phase 비교(과거 같은 국면 평균과 비교한 expected_rank/rank_diff) 전부 제거.
+# 단기 모멘텀 추적이 본 탭의 더 본질적 가치라는 판단.
+
+# [수정 파일]
+# - processor/feature7_sector_momentum.py : 전면 리팩토링
+#   * 월별 종가 추출 → 일별 종가 직접 사용
+#   * _cum_return(months) → _cum_return_days(days)
+#   * 상수: _TRADING_DAYS_1W = 5, _TRADING_DAYS_1M = 21
+#   * fetch_sector_cycle_latest() 의존성 제거 (phase 비교 안 함)
+#   * 반환 필드: ticker, sector_name, return_1w, return_1m, rank
+#   * 정렬: rank ASC (1위가 위)
+# - static/js/home.js : loadSectorMomentum 3컬럼 테이블로 단순화
+#   * 색상: 양수 초록 / 음수 빨강 / null 회색
+#   * 칩(over/under/flat) 제거, 범례도 "1주일 기준 랭킹" 한 줄로 단순화
+# - templates/stocks.html : tile subtitle "1·3·6M 랭킹" → "1주·1개월 수익률 랭킹"
+#   home.js?v=21 → ?v=22
+# - api/routers/market_summary.py : 'sector-mom' 브랜치 신필드 대응
+#   * phase 라인 제거, top/bottom (1주 랭킹 기준 상·하위 3) 출력으로 변경
+#   * outperf/underperf (rank_diff 기반) 섹션 제거
+
+# [핵심 코드]
+def compute_sector_momentum() -> dict:
+    # ... daily prices fetch (페이지네이션) ...
+    daily_close = {t: [c for _, c in sorted(s)] for t, s in by_ticker.items()}
+    returns_1w = {t: r for t, p in daily_close.items()
+                  if (r := _cum_return_days(p, 5)) is not None}
+    returns_1m = {t: r for t, p in daily_close.items()
+                  if (r := _cum_return_days(p, 21)) is not None}
+    rank_by_1w = _rank_dict(returns_1w)        # 1주 수익률 큰 게 1위
+    out = [{
+        'ticker': t, 'sector_name': name,
+        'return_1w': round(returns_1w.get(t)*100, 2) if t in returns_1w else None,
+        'return_1m': round(returns_1m.get(t)*100, 2) if t in returns_1m else None,
+        'rank': rank_by_1w.get(t),
+    } for t, name in SECTOR_VALUATION_ETFS.items()]
+    out.sort(key=lambda x: x['rank'] or 999)
+    return {'as_of_date': date.today().isoformat(), 'momentum': out}
+
+# [거래일 수 결정 근거 (직접 결정)]
+# 1주 = 5 거래일 (월~금 한 주). 7 캘린더 일이 아닌 5 사용 — 주말 비거래.
+# 1개월 = 21 거래일 (US 시장 평균 월 거래일 ~21). 22 도 가능하나 21이 보편.
+
+# [API 응답 변경]
+# 기존: {phase_name, as_of_date, momentum: [{return_1m, return_3m, return_6m,
+#       current_rank, expected_rank, rank_diff}, ...]}
+# 신규: {as_of_date, momentum: [{return_1w, return_1m, rank}, ...]}
+# phase_name 필드 제거 — 응답 더 작고 의미 명확.
+
+
 
 
 
