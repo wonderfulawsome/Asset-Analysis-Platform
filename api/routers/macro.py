@@ -125,30 +125,29 @@ def get_fear_greed():
 # ─────────────────────────────────────────────────────────
 import time as _time
 _VAL_SIG_PROMPT = """/no_think
-너는 한국어 금융 해설가다. 주어진 시장 평가 점수를 **일반 투자자**가 이해하도록
-2~3문장으로 부드럽게 풀어 설명하라.
+너는 한국어 금융 해설가다. 시장 평가 점수와 그 분해 데이터를 받아, **왜 이런
+결과가 나왔는지 원인까지** 일반 투자자에게 풀어 설명한다.
 
 배경:
-- 종합 점수 = 주식 매력도(40%) + 공포 점수(30%) + 하락 충격 점수(30%) 의 가중합.
-  비교 기준은 "최근 5년 평균"
-- 점수 > +1.0 = 명확한 저평가 (매수 기회) / 0 ~ +1.0 = 다소 저평가
-- -1.0 ~ 0 = 다소 고평가 / -1.0 미만 = 명확한 고평가 (조심)
-- 세 점수 모두 양수면 매수 기회 신호, 음수면 비싼 구간 신호
+- 종합 점수 = 주식 매력도(40%) + 공포 점수(30%) + 하락 충격 점수(30%) 의 가중합
+- 모든 점수의 비교 기준은 "최근 5년 평균"
+- 종합 점수 > +1.0 명확한 저평가 / 0~+1.0 다소 저평가 / -1.0~0 다소 고평가 / -1.0 미만 명확한 고평가
 
-각 점수 의미:
-- "주식 매력도 점수": 양수면 평소보다 쌈, 음수면 평소보다 비쌈
-- "공포 점수": 양수면 평소보다 시장이 불안 (역설적으로 매수 기회 가능)
-- "하락 충격 점수": 양수면 평소보다 큰 낙폭 (역시 매수 기회 가능)
+각 점수가 만들어지는 원인:
+- "주식 매력도 점수" ← 주가수익비율(PER, 낮을수록 쌈) + 10년 국채금리(높을수록 안전자산 매력↑)
+- "공포 점수"        ← 공포지수 VIX (높을수록 시장 불안)
+- "하락 충격 점수"   ← 최근 60일 고점 대비 하락폭 (깊을수록 큰 낙폭)
 
-설명할 내용:
-1. 현재 종합 점수가 어느 영역인지 + 어느 하위 점수가 가장 영향 크게 줬는지
-   (예: "주식 매력도 점수가 깎여 종합이 낮아짐")
-2. 투자자에게 한 줄 액션 (관망 / 분할 매수 / 채권 비중 늘리기 등)
+응답 구성 (정확히 3문장, 총 200자 이내):
+1. 한 줄: 종합 점수 X.XX점 + 어느 라벨 영역인지
+2. 한 줄: **왜 그런지 원인 분석** — input 의 "_가장_영향_큰_점수" 가 무엇인지 보고,
+   그 점수의 원인을 raw 값(PER, 국채금리, VIX, 하락폭)과 5년 평균을 비교해 한 문장
+   (예: "주가수익비율 28배로 평소보다 비싸고 국채금리도 4.35%로 높아 주식 매력도가 깎였어요")
+3. 한 줄: 보조 요인 한마디 + 가벼운 액션 제안 (관망 / 분할 매수 / 방어)
 
 규칙:
-- 2~3문장, 총 160자 이내
-- 친근하지만 구체적인 어투. 공식·약어(z, σ, ERP, VIX) **금지**
-- 한 번은 "종합 점수 X.XX점" 처럼 점수 수치 언급
+- 친근하지만 구체적인 어투
+- 공식·영문 약어(z, σ, ERP, composite) 금지. PER·VIX 정도는 한글 풀이 후 사용 가능
 - 마크다운·이모지 금지"""
 
 _val_sig_cache = {'data': None, 'ts': 0}
@@ -221,10 +220,17 @@ def get_valuation_signal():
 
     z_comp_now = today.get('z_comp') or 0.0
 
-    # LLM 해설 (Groq) — 평어 키로 입력 데이터 정제 (LLM 이 자연스럽게 평어로 답하도록)
+    # LLM 해설 (Groq) — 평어 키 + dominant component 사전 계산
     ze = today.get('z_erp')   or 0.0
     zv = today.get('z_vix')   or 0.0
     zd = today.get('z_dd')    or 0.0
+    contribs = {
+        '주식 매력도 점수': ze * 0.4,
+        '공포 점수':        zv * 0.3,
+        '하락 충격 점수':   zd * 0.3,
+    }
+    # 종합 점수의 부호와 같은 방향(가장 큰 기여) 을 dominant 로 — 음수면 가장 음수, 양수면 가장 양수
+    dom_name = (min if z_comp_now < 0 else max)(contribs, key=contribs.get)
     try:
         from api.routers.market_summary import _groq_call
         import json as _json
@@ -232,50 +238,55 @@ def get_valuation_signal():
             '오늘': {
                 '종합_점수':           round(z_comp_now, 2),
                 '라벨':                today.get('label'),
+                '_가장_영향_큰_점수':  dom_name,
                 '주식_매력도_점수':    round(ze, 2),
                 '공포_점수':           round(zv, 2),
                 '하락_충격_점수':      round(zd, 2),
-                '주식_매력도_원본_pct': round((today.get('erp') or 0) * 100, 2),
-                '공포지수_VIX':        today.get('vix'),
-                '60일_하락폭_pct':     round((today.get('dd_60d') or 0) * 100, 2),
+            },
+            '오늘_raw_값': {
+                '주가수익비율_PER':   today.get('spy_per'),
+                '국채금리_pct':       round((today.get('tnx_yield') or 0) * 100, 2),
+                '주식_매력도_pct':    round((today.get('erp') or 0) * 100, 2),
+                '공포지수_VIX':       today.get('vix'),
+                '60일_하락폭_pct':    round((today.get('dd_60d') or 0) * 100, 2),
             },
             '최근_5년_평균': {
                 '주식_매력도_pct': round(baselines['erp']['mean'] * 100, 2),
                 '공포지수':        round(baselines['vix']['mean'], 2),
                 '60일_하락폭_pct': round(baselines['dd']['mean']  * 100, 2),
             },
-            '60일_종합점수_범위': {
-                '최저': round(min((h.get('z_comp') or 0) for h in history), 2) if history else None,
-                '최고': round(max((h.get('z_comp') or 0) for h in history), 2) if history else None,
-            },
         }, ensure_ascii=False, indent=2)
-        interpretation = _groq_call(_VAL_SIG_PROMPT, user_text, max_tokens=240)
+        interpretation = _groq_call(_VAL_SIG_PROMPT, user_text, max_tokens=320)
     except Exception as e:
         print(f'[valuation_signal] LLM 실패: {e}')
         interpretation = None
 
     if not interpretation:
-        # 평어 fallback
+        # 평어 fallback — dominant 점수의 raw 원인을 함께 언급
         label = today.get('label', '')
-        # 어느 component 가 가장 dominant 한지 자동 판별
-        contribs = {
-            '주식 매력도': abs(ze * 0.4),
-            '공포':        abs(zv * 0.3),
-            '하락 충격':   abs(zd * 0.3),
-        }
-        dom = max(contribs, key=contribs.get)
-        if '명확한 저평가' in label:
-            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 5년 평균보다 매력적인 구간이에요. "
-                              f"{dom} 점수가 가장 크게 긍정 기여. 분할 매수를 고려해 보세요.")
-        elif '다소 저평가' in label:
-            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 평균보다 살짝 매력적입니다. "
-                              f"{dom} 점수가 주로 끌어올렸어요. 큰 베팅보다 관심 종목을 조금씩 담아보는 정도가 적절합니다.")
-        elif '명확한 고평가' in label:
-            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 5년 평균 대비 비싼 구간입니다. "
-                              f"{dom} 점수가 깎여 종합이 낮아졌어요. 현금이나 채권 비중을 늘리는 방어 전략을 고려하세요.")
+        per   = today.get('spy_per') or 0
+        tnx_p = (today.get('tnx_yield') or 0) * 100
+        vix_v = today.get('vix') or 0
+        dd_p  = (today.get('dd_60d') or 0) * 100
+        m_per = baselines['erp']['mean'] * 100        # ERP 평균
+        m_vix = baselines['vix']['mean']
+        m_dd  = baselines['dd']['mean'] * 100
+
+        if dom_name == '주식 매력도 점수':
+            cause = f"주가수익비율(PER) {per:.1f}배 + 국채금리 {tnx_p:.2f}% 조합으로 주식 매력도가 5년 평균보다 깎였어요"
+        elif dom_name == '공포 점수':
+            cause = f"공포지수(VIX) {vix_v:.1f}로 5년 평균 {m_vix:.1f} 와 비교해 시장 분위기가 한쪽으로 치우쳐 있어요"
         else:
-            interpretation = (f"종합 점수 {z_comp_now:+.2f}점 — 다소 고평가된 상황이에요. "
-                              f"{dom} 점수가 주된 원인입니다. 관망하거나 방어적인 포지션을 고려해 보세요.")
+            cause = f"최근 60일 하락폭 {dd_p:+.2f}% 가 5년 평균 {m_dd:+.2f}% 와 비교해 두드러진 영향을 줬어요"
+
+        if '명확한 저평가' in label:
+            interpretation = f"종합 점수 {z_comp_now:+.2f}점, 5년 평균보다 매력적인 구간이에요. {cause}. 분할 매수를 고려할 만합니다."
+        elif '다소 저평가' in label:
+            interpretation = f"종합 점수 {z_comp_now:+.2f}점, 평균보다 살짝 매력적입니다. {cause}. 관심 종목을 조금씩 담아보는 정도가 적절합니다."
+        elif '명확한 고평가' in label:
+            interpretation = f"종합 점수 {z_comp_now:+.2f}점, 5년 평균 대비 비싼 구간입니다. {cause}. 현금·채권 비중을 늘리는 방어 전략을 고려하세요."
+        else:
+            interpretation = f"종합 점수 {z_comp_now:+.2f}점, 다소 고평가된 상황이에요. {cause}. 관망하거나 방어적인 포지션이 무난합니다."
 
     response = {
         'today': today,
