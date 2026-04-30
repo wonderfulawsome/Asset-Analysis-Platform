@@ -320,3 +320,152 @@ def get_stdg_detail(
         'complexes': complexes,
         'signal': signal or None,
     }
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GET /market-summary — 오늘의 부동산 시장 LLM 요약 (24h 캐시)
+# ─────────────────────────────────────────────────────────────────────
+# 25구 buy_signal + region_summary + macro_rate 종합 → Groq LLM → 한 단락 요약.
+# 캐시 24h (compute 최소화 메모리 룰: LLM 호출 30/월).
+import time as _time
+_market_summary_cache = {'data': None, 'ts': 0}
+_MARKET_SUMMARY_TTL = 24 * 3600  # 24시간
+
+
+def _build_market_summary_data():
+    """LLM 입력용 부동산 시장 종합 데이터 dict + 표시용 분포."""
+    target_ym = _default_ym()
+
+    # 시그널 분포
+    signal_dist = {'매수': 0, '관망': 0, '주의': 0}
+    sgg_signals = []
+    for sgg_cd in [
+        '11110','11140','11170','11200','11215','11230','11260','11290','11305','11320',
+        '11350','11380','11410','11440','11470','11500','11530','11545','11560','11590',
+        '11620','11650','11680','11710','11740',
+    ]:
+        s = fetch_buy_signal(sgg_cd, target_ym)
+        if not s:
+            continue
+        sig = s.get('signal')
+        if sig in signal_dist:
+            signal_dist[sig] += 1
+        sgg_signals.append({
+            'sgg_cd': sgg_cd,
+            'signal': sig,
+            'score': s.get('score'),
+            'trade_chg_pct': (s.get('feature_breakdown') or {}).get('trade_chg_pct'),
+            'price_mom_pct': (s.get('feature_breakdown') or {}).get('price_mom_pct'),
+        })
+
+    # 가격 변화 top 3 / bottom 3 (sgg-overview 활용)
+    overview = get_sgg_overview('')
+    overview_sorted = sorted(
+        [r for r in overview if r.get('change_pct_3m') is not None],
+        key=lambda r: r['change_pct_3m'], reverse=True,
+    )
+    top_up = overview_sorted[:3]
+    top_down = overview_sorted[-3:][::-1]
+
+    # 매크로
+    macro = fetch_macro_rate_kr(months=12) or []
+    latest_macro = macro[-1] if macro else None
+    earliest_macro = macro[0] if macro else None
+    base_drop = None
+    if latest_macro and earliest_macro:
+        b1 = latest_macro.get('base_rate')
+        b0 = earliest_macro.get('base_rate')
+        if b1 is not None and b0 is not None:
+            base_drop = round(b1 - b0, 2)
+
+    return {
+        'target_ym': target_ym,
+        'signal_distribution': signal_dist,
+        'sgg_signals': sgg_signals,
+        'top_up': [{'sgg_cd': r['sgg_cd'], 'change_pct_3m': r['change_pct_3m'], 'top_stdg_nm': r.get('top_stdg_nm')} for r in top_up],
+        'top_down': [{'sgg_cd': r['sgg_cd'], 'change_pct_3m': r['change_pct_3m'], 'top_stdg_nm': r.get('top_stdg_nm')} for r in top_down],
+        'base_rate_latest': latest_macro.get('base_rate') if latest_macro else None,
+        'base_rate_drop_12m': base_drop,
+        'mortgage_rate_latest': latest_macro.get('mortgage_rate') if latest_macro else None,
+    }
+
+
+_MARKET_SUMMARY_PROMPT = """/no_think
+너는 한국어 부동산 시장 분석가다. 주어진 서울 25구 부동산 시장 데이터를 일반 투자자가 이해하도록 한 단락(3~4문장)으로 요약하라.
+
+배경 지식:
+- "매수/관망/주의" 는 25구별 매수 시그널 분포
+- "가격 상승/하락 top" 은 3개월 평단가 변화율 기준
+- 기준금리는 한국은행 기준금리
+
+설명할 내용:
+1. 25구 시그널 분포 (매수 N개, 관망 M개, 주의 K개) 의 의미
+2. 가격이 가장 많이 상승/하락한 구 1~2개와 변화율
+3. 금리 환경 (기준금리 + 12개월 변화)
+4. 이 모든 신호가 의미하는 오늘의 매수 환경 한 마디
+
+규칙:
+- 3~4문장, 총 250자 이내
+- 부드러운 어투
+- 마크다운/불릿 금지
+- 줄바꿈 가능"""
+
+
+@router.get('/market-summary')
+def get_market_summary():
+    """오늘의 서울 부동산 시장 LLM 요약 (24h 캐시).
+
+    응답:
+      {
+        "summary": "...한 단락 LLM 요약...",
+        "signal_distribution": {"매수": N, "관망": M, "주의": K},
+        "top_up": [...],
+        "top_down": [...],
+        "base_rate_latest": ...,
+        "as_of": "YYYY-MM-DD HH:MM",
+        "cached": true|false
+      }
+    """
+    now = _time.time()
+    cached = _market_summary_cache['data']
+    if cached and (now - _market_summary_cache['ts']) < _MARKET_SUMMARY_TTL:
+        return {**cached, 'cached': True}
+
+    data = _build_market_summary_data()
+
+    # LLM 호출 — 부동산 sites 측 helper 부재 → market_summary._groq_call 재사용
+    try:
+        from api.routers.market_summary import _groq_call
+        import json as _json
+        user_text = _json.dumps(data, ensure_ascii=False, indent=2)
+        summary_text = _groq_call(_MARKET_SUMMARY_PROMPT, user_text, max_tokens=350)
+    except Exception as e:
+        print(f'[real_estate.market_summary] LLM 실패: {e}')
+        summary_text = None
+
+    if not summary_text:
+        # Fallback — 룰베이스 한 줄
+        sd = data['signal_distribution']
+        summary_text = (
+            f"오늘의 서울 부동산 시그널 분포: 매수 {sd['매수']}구, "
+            f"관망 {sd['관망']}구, 주의 {sd['주의']}구. "
+            f"기준금리 {data.get('base_rate_latest', '-')}% (12개월 변화 "
+            f"{data.get('base_rate_drop_12m', '-')}%p)."
+        )
+
+    from datetime import datetime, timezone, timedelta
+    as_of = datetime.now(timezone(timedelta(hours=9))).strftime('%Y-%m-%d %H:%M')
+
+    response = {
+        'summary': summary_text,
+        'signal_distribution': data['signal_distribution'],
+        'top_up': data['top_up'],
+        'top_down': data['top_down'],
+        'base_rate_latest': data['base_rate_latest'],
+        'base_rate_drop_12m': data['base_rate_drop_12m'],
+        'as_of': as_of,
+        'cached': False,
+    }
+    _market_summary_cache['data'] = response
+    _market_summary_cache['ts'] = now
+    return response

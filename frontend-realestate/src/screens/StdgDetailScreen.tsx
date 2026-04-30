@@ -1,39 +1,17 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import NavBar from "../components/NavBar";
-import AiInsightCard from "../components/AiInsightCard";
-import TimeSeriesChart from "../components/TimeSeriesChart";
 import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 import { changePctColor, formatPriceMan } from "../lib/color";
 import type { StdgDetail } from "../types/api";
 
-// 첨부 이미지 디자인 매칭:
-//  헤더(시군구 + 법정동) → AI 카드 → 메트릭 4칸 → 12M 차트 → 단지 리스트.
+// "HOMELENS · DAILY" 신문 스타일 — 첨부 이미지 매칭.
+// 기존 컴포넌트 (NavBar, AiInsightCard, MetricGrid 등) 사용 X — serif 신문 layout 직접 작성.
 export default function StdgDetailScreen() {
   const { stdgCd } = useParams<{ stdgCd: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<StdgDetail | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  // 비교 모드: true면 단지 카드에 체크박스 노출. 선택된 apt_seq Set.
-  const [compareMode, setCompareMode] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-
-  function togglePick(seq: string) {
-    setPicked((prev) => {
-      const next = new Set(prev);
-      if (next.has(seq)) next.delete(seq);
-      else if (next.size < 4) next.add(seq);  // 최대 4개
-      return next;
-    });
-  }
-
-  function startCompare() {
-    if (picked.size < 2) return;
-    const seqs = Array.from(picked).join(",");
-    const sgg = data?.summary?.sgg_cd ?? stdgCd?.slice(0, 5) ?? "";
-    navigate(`/compare?seqs=${seqs}&sgg=${sgg}`);
-  }
 
   useEffect(() => {
     if (!stdgCd) return;
@@ -50,8 +28,8 @@ export default function StdgDetailScreen() {
   const s = data.summary;
   if (!s) {
     return (
-      <div className="min-h-full bg-gray-900">
-        <NavBar title={`법정동 ${stdgCd}`} />
+      <div className="min-h-full bg-black text-gray-100 font-serif">
+        <DailyHeader stdgCd={stdgCd ?? ""} ym={null} sggCd={null} />
         <div className="p-10 text-center text-gray-500 text-sm">
           이번 달 집계된 데이터가 없습니다.
         </div>
@@ -59,173 +37,293 @@ export default function StdgDetailScreen() {
     );
   }
 
-  // 헤더 배지: 변화율 + 시그널 조합
-  const badge = signalBadge(data.signal?.signal, s.change_pct_3m);
+  const headline = buildHeadline(s, data.signal);
+  const subhead = buildSubhead(s, data.signal);
+  const body = buildBody(s, data.signal);
+  const editorNote = buildEditorNote(s, data.signal);
+  const ymLabel = formatYm(s.stats_ym);
+  const issueNo = ymToIssueNo(s.stats_ym);
 
   return (
-    <div className="min-h-full bg-gray-900">
-      <NavBar
-        title={s.stdg_nm ?? stdgCd ?? ""}
-        subtitle={`${s.stats_ym?.slice(0, 4)}.${s.stats_ym?.slice(4)} 업데이트`}
-      />
+    <div className="min-h-full bg-black text-gray-100 font-serif pb-24">
+      <DailyHeader stdgCd={stdgCd ?? ""} ym={ymLabel} sggCd={s.sgg_cd ?? null} issueNo={issueNo} />
 
-      <section className="p-3 space-y-3">
-        {/* 헤더 라인 — 큰 동명 + 배지 */}
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-tight">
-            <span className="text-gray-400 text-base mr-1">
-              {/* sgg_nm 은 region_summary 에 없어서 표시 생략 */}
-            </span>
-            {s.stdg_nm}
-          </h1>
-          <span
-            className="text-xs font-semibold px-3 py-1 rounded-full"
-            style={{ backgroundColor: badge.bg, color: badge.fg }}
-          >
-            {badge.label}
-          </span>
-        </div>
-
-        {/* AI 카드 */}
-        <AiInsightCard signal={data.signal} changePct={s.change_pct_3m} />
-
-        {/* 메트릭 4칸 (2x2) */}
-        <div className="grid grid-cols-2 gap-2">
-          <Metric
-            label="평균 매매가"
-            value={formatPriceMan(s.median_price_per_py)}
-            sub={s.change_pct_3m != null ? `3M ${pct(s.change_pct_3m)}` : undefined}
-            subColor={s.change_pct_3m}
-          />
-          <Metric
-            label="거래량 3M"
-            value={`${(s.trade_count_3m ?? 0).toLocaleString()}건`}
-          />
-          <Metric
-            label="전세가율"
-            value={s.jeonse_rate != null ? `${(s.jeonse_rate * 100).toFixed(1)}%` : "-"}
-          />
-          <Metric
-            label="순이동(시군구)"
-            value={s.net_flow != null ? `${s.net_flow >= 0 ? "+" : ""}${s.net_flow.toLocaleString()}명` : "-"}
-          />
-        </div>
-
-        {/* 12M 매매가 추이 */}
-        <TimeSeriesChart
-          label="매매가 추이 12M"
-          data={data.timeseries.map((p) => ({
-            date: p.stats_ym,
-            value: p.median_price_per_py,
-          }))}
-          format={(n) => `${Math.round(n).toLocaleString()}만`}
-          color="#3b82f6"
-        />
-
-        {/* 단지 리스트 */}
-        <div>
-          <div className="flex items-baseline justify-between px-1 my-2">
-            <h2 className="text-xs text-gray-400">동 내 주요 단지 (평단가 순)</h2>
-            <button
-              onClick={() => { setCompareMode((v) => !v); setPicked(new Set()); }}
-              className={`text-[11px] font-semibold px-2 py-1 rounded-md transition
-                          ${compareMode ? "bg-blue-500 text-white" : "bg-gray-700 text-gray-300"}`}
-            >
-              {compareMode ? "비교 취소" : "비교"}
-            </button>
-          </div>
-          {data.complexes.length === 0 ? (
-            <div className="rounded-xl bg-gray-800/40 p-6 text-center text-xs text-gray-500">
-              최근 거래된 단지가 없습니다.
-            </div>
-          ) : (
-            <ul className="space-y-2">
-              {data.complexes.map((c) => {
-                const isPicked = picked.has(c.apt_seq);
-                return (
-                  <li
-                    key={c.apt_seq}
-                    onClick={() => {
-                      if (compareMode) togglePick(c.apt_seq);
-                      else navigate(`/complex/${c.apt_seq}?sgg_cd=${(s.sgg_cd ?? stdgCd?.slice(0, 5)) ?? ""}`);
-                    }}
-                    className={`rounded-xl p-4 flex justify-between items-center transition cursor-pointer
-                                ${compareMode && isPicked
-                                  ? "bg-blue-500/20 ring-2 ring-blue-500"
-                                  : "bg-gray-800/80 active:bg-gray-700"}`}
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      {compareMode && (
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
-                                           ${isPicked ? "bg-blue-500 text-white" : "border border-gray-600 text-gray-500"}`}>
-                          {isPicked ? "✓" : ""}
-                        </span>
-                      )}
-                      <div className="min-w-0">
-                        <div className="font-semibold truncate">{c.apt_nm ?? c.apt_seq}</div>
-                        <div className="text-[11px] text-gray-400">
-                          {c.build_year ? `${c.build_year}년 · ` : ""}거래 {c.trade_count}건
-                        </div>
-                      </div>
-                    </div>
-                    <div className="font-mono text-base font-semibold ml-2 shrink-0">
-                      {Math.round(c.median_price_per_py).toLocaleString()}만/평
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-
-        {/* 비교 시작 플로팅 버튼 — 비교 모드 + 2개 이상 선택 시 노출 */}
-        {compareMode && picked.size >= 2 && (
-          <button
-            onClick={startCompare}
-            className="fixed bottom-[calc(80px+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2
-                       z-30 px-6 py-3 rounded-full bg-blue-500 text-white font-semibold shadow-2xl
-                       active:bg-blue-600"
-          >
-            {picked.size}개 단지 비교 →
-          </button>
-        )}
+      {/* 큰 제목 + 부제 */}
+      <section className="px-5 mt-6">
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-tight text-white">
+          {headline}
+        </h1>
+        <p className="text-[14px] italic text-gray-400 mt-3 leading-relaxed">
+          {subhead}
+        </p>
       </section>
-    </div>
-  );
-}
 
-function Metric({
-  label, value, sub, subColor,
-}: { label: string; value: string; sub?: string; subColor?: number | null }) {
-  return (
-    <div className="rounded-xl bg-gray-800/80 p-3">
-      <div className="text-[10px] text-gray-400">{label}</div>
-      <div className="font-mono text-base font-semibold mt-0.5">{value}</div>
-      {sub && (
-        <div
-          className="text-[10px] mt-0.5"
-          style={{ color: subColor != null ? changePctColor(subColor) : "#6b7280" }}
-        >
-          {sub}
+      {/* 본문 — 2단 컬럼 (신문 스타일) */}
+      <section className="px-5 mt-6">
+        <p className="text-[13px] leading-[1.7] text-gray-300 columns-2 gap-4">
+          {body}
+        </p>
+      </section>
+
+      {/* TABLE 01 — 핵심 지표 */}
+      <section className="px-5 mt-8">
+        <div className="border-t border-b border-gray-700 py-2 mb-2">
+          <div className="text-[10px] tracking-[0.2em] text-gray-500 font-bold">
+            TABLE 01 · 핵심 지표
+          </div>
         </div>
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-[10px] tracking-wider text-gray-500 uppercase border-b border-gray-800">
+              <th className="text-left py-2 font-normal">METRIC</th>
+              <th className="text-right py-2 font-normal">VALUE</th>
+              <th className="text-right py-2 font-normal w-16">Δ 3M</th>
+            </tr>
+          </thead>
+          <tbody>
+            <Row
+              label="평균 매매가"
+              value={formatPriceMan(s.median_price ?? s.median_price_per_py)}
+              delta={s.change_pct_3m}
+            />
+            <Row
+              label="거래량"
+              value={`${(s.trade_count_3m ?? s.trade_count ?? 0).toLocaleString()}건`}
+              delta={data.signal?.feature_breakdown?.trade_chg_pct ?? null}
+            />
+            <Row
+              label="전세가율"
+              value={s.jeonse_rate != null ? `${(s.jeonse_rate * 100).toFixed(1)}%` : "-"}
+              delta={null}
+            />
+            <Row
+              label="순이동"
+              value={s.net_flow != null
+                ? `${s.net_flow >= 0 ? "+" : ""}${s.net_flow.toLocaleString()}명`
+                : "-"}
+              delta={data.signal?.flow_score ?? null}
+              deltaIsRaw={true}
+            />
+            <Row
+              label="평단가"
+              value={s.median_price_per_py != null
+                ? `${Math.round(s.median_price_per_py).toLocaleString()}만`
+                : "-"}
+              delta={s.change_pct_3m}
+            />
+          </tbody>
+        </table>
+      </section>
+
+      {/* EDITOR'S NOTE */}
+      <section className="px-5 mt-8">
+        <div className="border-t-2 border-orange-500/60 pt-3">
+          <div className="text-[10px] tracking-[0.2em] text-orange-400 font-bold mb-2">
+            EDITOR'S NOTE
+          </div>
+          <p className="text-[13px] italic text-gray-200 leading-relaxed">
+            "{editorNote}"
+          </p>
+        </div>
+      </section>
+
+      {/* 단지 리스트 (작게) */}
+      {data.complexes.length > 0 && (
+        <section className="px-5 mt-8">
+          <div className="border-t border-b border-gray-700 py-2 mb-3">
+            <div className="text-[10px] tracking-[0.2em] text-gray-500 font-bold">
+              TABLE 02 · 주요 단지
+            </div>
+          </div>
+          <ul className="divide-y divide-gray-800">
+            {data.complexes.slice(0, 5).map((c) => (
+              <li
+                key={c.apt_seq}
+                onClick={() =>
+                  navigate(`/complex/${c.apt_seq}?sgg_cd=${(s.sgg_cd ?? stdgCd?.slice(0, 5)) ?? ""}`)
+                }
+                className="flex justify-between items-center py-3 cursor-pointer active:bg-gray-900"
+              >
+                <div className="min-w-0">
+                  <div className="text-[13px] font-semibold truncate text-gray-100">{c.apt_nm ?? c.apt_seq}</div>
+                  <div className="text-[10px] text-gray-500">
+                    {c.build_year ? `${c.build_year}년` : ""}{c.build_year ? " · " : ""}거래 {c.trade_count}건
+                  </div>
+                </div>
+                <div className="text-[13px] font-mono font-semibold text-gray-100 shrink-0 ml-3">
+                  {Math.round(c.median_price_per_py).toLocaleString()}만/평
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
+
+      <p className="text-[10px] text-gray-600 text-center mt-10 italic">
+        ⚠️ 본 분석은 참고용이며 투자 권유가 아닙니다.
+      </p>
     </div>
   );
 }
 
-function signalBadge(
-  signal: "매수" | "관망" | "주의" | undefined,
-  changePct: number | null,
-): { label: string; bg: string; fg: string } {
-  if (signal === "매수" || (changePct != null && changePct >= 1)) {
-    return { label: "↑ 상승", bg: "#dc262633", fg: "#fca5a5" };
-  }
-  if (signal === "주의" || (changePct != null && changePct <= -1)) {
-    return { label: "↓ 하락", bg: "#2563eb33", fg: "#93c5fd" };
-  }
-  return { label: "→ 보합", bg: "#6b728033", fg: "#d1d5db" };
+// ─────────────────────────────────────────────────────────────────────
+// 헤더 (HOMELENS · DAILY)
+// ─────────────────────────────────────────────────────────────────────
+function DailyHeader({
+  ym, sggCd, issueNo,
+}: { stdgCd: string; ym: string | null; sggCd: string | null; issueNo?: string }) {
+  const navigate = useNavigate();
+  const dayLabel = ym ? toDayLabel(ym) : "";
+  const sggLabel = sggCd ? sggCdToName(sggCd) : "";
+  return (
+    <header className="px-5 pt-3 border-b border-gray-700">
+      <div className="flex items-center justify-between">
+        <button onClick={() => navigate(-1)} className="text-gray-400 text-base">‹</button>
+        <div className="text-gray-300">♡</div>
+      </div>
+      <div className="text-center mt-2">
+        <div className="text-[10px] tracking-[0.4em] text-gray-500 font-bold">
+          HOMELENS · DAILY
+        </div>
+        <div className="text-[10px] tracking-[0.2em] text-gray-500 mt-1">
+          {dayLabel}{issueNo ? ` · ${issueNo}` : ""}{sggLabel ? ` · ${sggLabel.toUpperCase()}` : ""}
+        </div>
+      </div>
+      <div className="h-2" />
+    </header>
+  );
 }
 
-function pct(n: number): string {
-  return `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+function Row({
+  label, value, delta, deltaIsRaw,
+}: { label: string; value: string; delta: number | null; deltaIsRaw?: boolean }) {
+  let deltaStr = "-";
+  let deltaColor = "#6b7280";
+  if (delta != null) {
+    if (deltaIsRaw) {
+      deltaStr = `${delta >= 0 ? "+" : ""}${Math.round(delta)}`;
+      deltaColor = delta > 0 ? "#fca5a5" : delta < 0 ? "#93c5fd" : "#9ca3af";
+    } else {
+      deltaStr = `${delta >= 0 ? "+" : ""}${delta.toFixed(1)}%`;
+      deltaColor = changePctColor(delta);
+    }
+  }
+  return (
+    <tr className="border-b border-gray-900">
+      <td className="py-2.5 text-gray-300">{label}</td>
+      <td className="py-2.5 text-right font-mono text-gray-100 font-semibold">{value}</td>
+      <td className="py-2.5 text-right font-mono text-[12px]" style={{ color: deltaColor }}>
+        {deltaStr}
+      </td>
+    </tr>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 룰베이스 카피 생성 (LLM narrative 들어오면 대체)
+// ─────────────────────────────────────────────────────────────────────
+function buildHeadline(s: StdgDetail["summary"], signal: StdgDetail["signal"]) {
+  if (!s) return "";
+  const tradeChg = signal?.feature_breakdown?.trade_chg_pct;
+  const priceMom = signal?.feature_breakdown?.price_mom_pct;
+  const stdgNm = s.stdg_nm ?? "";
+  if (tradeChg != null && priceMom != null) {
+    if (tradeChg < 0 && priceMom > 0) return `${stdgNm}, 거래 줄어도 가격 반등`;
+    if (tradeChg > 0 && priceMom > 0) return `${stdgNm}, 거래·가격 동반 상승`;
+    if (tradeChg < 0 && priceMom < 0) return `${stdgNm}, 거래·가격 동반 위축`;
+    if (tradeChg > 0 && priceMom < 0) return `${stdgNm}, 거래 늘어도 가격 약세`;
+  }
+  return `${stdgNm} 시장 동향`;
+}
+
+function buildSubhead(s: StdgDetail["summary"], signal: StdgDetail["signal"]) {
+  if (!s) return "";
+  const py = s.median_price_per_py != null ? `${Math.round(s.median_price_per_py).toLocaleString()}만` : "-";
+  const chg = s.change_pct_3m != null ? `${s.change_pct_3m >= 0 ? "+" : ""}${s.change_pct_3m.toFixed(1)}%` : "-";
+  const sigLabel = signal?.signal === "매수" ? "매수 우호 구간 진입"
+                 : signal?.signal === "주의" ? "매수 심리 약한 구간"
+                 : "관망 구간 유지";
+  return `평단가 ${py} 원, 3M ${chg} — ${sigLabel}.`;
+}
+
+function buildBody(s: StdgDetail["summary"], signal: StdgDetail["signal"]) {
+  if (!s) return "";
+  const fb = signal?.feature_breakdown;
+  const stdgNm = s.stdg_nm ?? "이 동";
+  const py = s.median_price_per_py != null ? `${Math.round(s.median_price_per_py).toLocaleString()}` : "-";
+  const tradeChg = fb?.trade_chg_pct;
+  const priceMom = fb?.price_mom_pct;
+  const popChg = fb?.pop_chg_pct;
+  const tradeChgStr = tradeChg != null ? `${tradeChg >= 0 ? "+" : ""}${tradeChg.toFixed(1)}%` : "변동 없음";
+  const priceMomStr = priceMom != null ? `${priceMom >= 0 ? "+" : ""}${priceMom.toFixed(1)}%` : "변동 없음";
+  const tradeCnt = s.trade_count_3m ?? s.trade_count ?? 0;
+
+  let body = `${stdgNm}의 3M 거래량은 직전 분기 대비 ${tradeChgStr} 변화했고, 평균 매매가는 ${py}만 원으로 ${priceMomStr} 움직였다. `;
+  if (popChg != null) {
+    body += `순이동은 ${popChg >= 0 ? "유입" : "유출"} ${Math.abs(popChg).toFixed(1)}% 흐름이 관찰됐고, `;
+  }
+  body += `전체 거래는 ${tradeCnt}건으로 집계됐다. `;
+  if (s.jeonse_rate != null) {
+    body += `전세가율은 ${(s.jeonse_rate * 100).toFixed(1)}%로 서울 평균과 비교된다. `;
+  }
+  if (signal?.signal) {
+    const remark = signal.signal === "매수" ? "신호 점수는 매수 우위로 기록됐다."
+                 : signal.signal === "주의" ? "신호 점수는 매수 심리 약화 구간으로 분류됐다."
+                 : "신호 점수는 관망 구간으로 분류됐다.";
+    body += remark;
+  }
+  return body;
+}
+
+function buildEditorNote(s: StdgDetail["summary"], signal: StdgDetail["signal"]) {
+  if (!signal?.feature_breakdown) {
+    return s?.stdg_nm ? `${s.stdg_nm} — 데이터 누적 중` : "데이터 누적 중";
+  }
+  const fb = signal.feature_breakdown;
+  const trade = fb.trade_chg_pct != null ? `${fb.trade_chg_pct >= 0 ? "+" : ""}${fb.trade_chg_pct.toFixed(1)}%` : "-";
+  const price = fb.price_mom_pct != null ? `${fb.price_mom_pct >= 0 ? "+" : ""}${fb.price_mom_pct.toFixed(1)}%` : "-";
+  const pop = fb.pop_chg_pct != null ? `${fb.pop_chg_pct >= 0 ? "+" : ""}${fb.pop_chg_pct.toFixed(0)}` : "-";
+  const sigLabel = signal.signal === "매수" ? "매수 우호 구간"
+                 : signal.signal === "주의" ? "매수 주의 구간"
+                 : "관망 구간";
+  return `거래량 ${trade}, 가격 ${price} MoM, 인구 ${pop}명 → ${sigLabel}.`;
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 헬퍼
+// ─────────────────────────────────────────────────────────────────────
+function formatYm(ym?: string | null): string | null {
+  if (!ym || ym.length < 6) return null;
+  return `${ym.slice(0, 4)}.${ym.slice(4, 6)}.01`;
+}
+
+function toDayLabel(ymd: string): string {
+  // "2026.03.01" → "FRI · 2026.03.01"
+  try {
+    const [y, m, d] = ymd.split(".").map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dow = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][dt.getDay()];
+    return `${dow} · ${ymd}`;
+  } catch {
+    return ymd;
+  }
+}
+
+function ymToIssueNo(ym?: string | null): string {
+  if (!ym || ym.length < 6) return "VOL.01";
+  const m = parseInt(ym.slice(4, 6), 10);
+  return `VOL.${String(m).padStart(2, "0")} · NO.${ym.slice(2)}`;
+}
+
+function sggCdToName(sggCd: string): string {
+  const map: Record<string, string> = {
+    "11290": "SEONGBUK", "11680": "GANGNAM", "11710": "SONGPA", "11650": "SEOCHO",
+    "11440": "MAPO", "11380": "EUNPYEONG", "11470": "YANGCHEON", "11500": "GANGSEO",
+    "11530": "GURO", "11560": "YEONGDEUNGPO", "11200": "SEONGDONG", "11215": "GWANGJIN",
+    "11230": "DONGDAEMUN", "11260": "JUNGNANG", "11305": "GANGBUK", "11320": "DOBONG",
+    "11350": "NOWON", "11410": "SEODAEMUN", "11545": "GEUMCHEON", "11590": "DONGJAK",
+    "11620": "GWANAK", "11740": "GANGDONG", "11110": "JONGNO", "11140": "JUNG",
+    "11170": "YONGSAN",
+  };
+  return map[sggCd] ?? sggCd;
 }
