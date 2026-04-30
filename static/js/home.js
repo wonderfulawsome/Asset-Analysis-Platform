@@ -55,8 +55,8 @@
     if (sw) sw.style.display = '';
     document.getElementById('back-to-home').hidden = false;
     document.body.classList.add('with-back');
-    // main.js switchTab 은 TAB_IDS 5개만 토글하므로 sector-val/mom 은 직접 hide
-    ['tab-sector-val', 'tab-sector-mom'].forEach(id => {
+    // main.js switchTab 은 TAB_IDS 5개만 토글하므로 sector-val/mom/market-valuation 은 직접 hide
+    ['tab-sector-val', 'tab-sector-mom', 'tab-market-valuation'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });

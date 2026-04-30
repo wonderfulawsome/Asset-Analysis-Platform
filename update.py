@@ -5150,4 +5150,25 @@ const SECTOR_KR = {
 # - python ast.parse OK
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [62] 2026-04-30 (UTC) — 탭 전환 시 시장 밸류 섹션 잔존 버그 수정
+# ════════════════════════════════════════════════════════════════════════════
+
+# [원인]
+# static/js/home.js 의 showTab(idx) — main.js 메인 5탭으로 전환할 때 sector-tab
+# 들을 직접 숨기는 목록에 'tab-market-valuation' 누락:
+#   ['tab-sector-val', 'tab-sector-mom']  ← market-valuation 빠짐
+# 결과: 시장 밸류 탭 한 번 열고 다른 탭 클릭하면 시장 밸류 섹션이 잔존하여
+# 두 탭 콘텐츠가 겹쳐 보임.
+
+# [수정]
+# - static/js/home.js: showTab() hide 목록에 'tab-market-valuation' 추가
+# - templates/stocks.html: home.js?v=24 → ?v=25
+
+# [반대 방향 (다른 탭 → 시장 밸류)]
+# showSectorTab 이 .scroll-wrap > main.content 전부 숨긴 뒤 target 만 표시 →
+# 이미 정상.
+
+
+
 
