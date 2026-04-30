@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-04-30 (시장 이성 점수 — 표시단 부호 반전 아키텍처. DB(noise_regime.noise_score)는 OLD 컨벤션(+감정/-이성) 영속, repository._flip_noise_record() 가 fetch 시 부호 뒤집어 클라이언트에 NEW(+이성/-감정) 노출. compute_noise_score / score_to_regime_name / contributions 모두 OLD 로 복원. LLM 프롬프트·JS 게이지·라벨은 NEW 그대로 — repo 단에서 일관되게 NEW 받음. 이전 [56] 의 "DB=NEW" 가정은 Railway 백필이 옛 코드로 덮어써서 깨짐. update.py [58])
+마지막 갱신 시점: 2026-04-30 (홈 헤드라인 — 첫 문장 4-슬롯 고정 템플릿화. "시장이 {라벨} 상태{이지만/이며} 시장 이성 점수가 {부호}{수치}점으로, {합리적/비합리적}인 밸류를 가지고 있습니다." 라벨×이성점수 부호 일치 여부로 연결어 자동 선택(반전/강화). 둘째 문장(선택): F&G·RSI·gap·VIX 극단값 또는 |이성|≥2 강조. update.py [61])

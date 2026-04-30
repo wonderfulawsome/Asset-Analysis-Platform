@@ -105,17 +105,14 @@
 
   // 5개 지수는 컨베이어(.feed-section) 가 main.js loadFeed() 로 채움 — 별도 정적 카드 불필요
 
-  // AI 종합판단 카드
+  // AI 종합판단 카드 — 4개 탭 지표 중 가장 중요한 신호 1문장 (LLM 직접 선정)
   async function loadAiCard() {
     try {
-      const r = await fetch('/api/market-summary/ai-summary');
+      const r = await fetch('/api/market-summary/home-headline');
       const data = await r.json();
       const body = document.getElementById('home-ai-body');
       if (data.summary) {
-        // 핵심 헤드라인 1줄만 (대시·콜론으로 끊어서 첫 의미 단위)
-        const lines = data.summary.split('\n').filter(l => l.trim());
-        const headline = (lines[0] || '').replace(/^[^\w가-힣]*/, '').slice(0, 60);
-        body.textContent = headline;
+        body.textContent = data.summary;
       }
     } catch (e) { console.error('[home] AI 카드 로드 실패', e); }
 
