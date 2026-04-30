@@ -122,7 +122,7 @@ def main() -> int:
                 upsert_stdg_admm_mapping(mapping)
 
                 household: list[dict] = []
-                if ym in yms[-args.hh_months:]:
+                if args.hh_months > 0 and ym in yms[-args.hh_months:]:
                     hh_seen: set[tuple] = set()
                     admm_cds = list({m["admm_cd"] for m in mapping if m.get("admm_cd")})
                     for admm in admm_cds:
@@ -154,8 +154,11 @@ def main() -> int:
                 upsert_region_summary(summary_dedup)
                 print(f"   [{ym}] trades={len(trades)} rents={len(rents)} pop={len(pop)} hh={len(household)} sum={len(summary_dedup)}", flush=True)
             except Exception as e:
-                print(f"   [{ym}] !! 실패 (60s 대기 후 다음 ym): {e}")
-                time.sleep(60)
+                # 401(quota throttle) 일 때만 60s 회복 대기, 일반 timeout/네트워크 오류는 5s
+                msg = str(e).lower()
+                wait = 60 if ("401" in msg or "quota" in msg or "throttle" in msg) else 5
+                print(f"   [{ym}] !! 실패 ({wait}s 대기 후 다음 ym): {e}", flush=True)
+                time.sleep(wait)
 
         # 시군구별 backfill 끝 → 매수 시그널 재계산 (compute_buy_signal 은 시계열 보고 산출)
         try:
