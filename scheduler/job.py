@@ -160,10 +160,15 @@ def _re_norm_population(items: list[dict], stats_ym: str) -> list[dict]:
     #   "hh_nmpr": 1.78, "male_nmpr_cnt": 33465, "feml_nmpr_cnt": 36628,
     #   "male_feml_rate": 0.91}
     result = []
+    seen_pop: set[tuple] = set()         # 같은 (stats_ym, stdg_cd) batch 중복 방지 (UNIQUE 충돌 → ON CONFLICT 21000)
     for it in items:
         stdg_cd = it.get("stdgCd")
         if not stdg_cd:
             continue
+        key = (stats_ym, stdg_cd)
+        if key in seen_pop:
+            continue
+        seen_pop.add(key)
         result.append({
             "stats_ym": stats_ym,
             "stdg_cd": stdg_cd,
@@ -239,19 +244,29 @@ def _re_norm_mapping(pairs: list[dict]) -> list[dict]:
     #   "ref_ym": "202603", "stdg_cd": "1168010100", "stdg_nm": "역삼동",
     #   "admm_cd": "1168053000", "admm_nm": "역삼1동",
     #   "ctpv_nm": "서울특별시", "sgg_nm": "강남구"}
-    return [
-        {
+    # build_mapping 이 내부 dedupe 한다고 주석에 나와있으나, 호출자 누적 단계에서
+     # 중복이 새로 생길 수 있으므로 안전망으로 (ref_ym, stdg_cd, admm_cd) 기준 dedupe.
+    seen_map: set[tuple] = set()
+    out = []
+    for p in pairs:
+        stdg = p.get("stdgCd")
+        admm = p.get("admmCd")
+        if not stdg or not admm:
+            continue
+        key = (p.get("ref_ym"), stdg, admm)
+        if key in seen_map:
+            continue
+        seen_map.add(key)
+        out.append({
             "ref_ym": p.get("ref_ym"),
-            "stdg_cd": p.get("stdgCd"),
+            "stdg_cd": stdg,
             "stdg_nm": p.get("stdgNm"),
-            "admm_cd": p.get("admmCd"),
+            "admm_cd": admm,
             "admm_nm": p.get("admmNm"),
             "ctpv_nm": p.get("ctpvNm"),
             "sgg_nm": p.get("sggNm"),
-        }
-        for p in pairs
-        if p.get("stdgCd") and p.get("admmCd")
-    ]
+        })
+    return out
 
 
 def run_pipeline(light: bool = False) -> None:
@@ -415,6 +430,32 @@ def run_pipeline(light: bool = False) -> None:
                 print('  [CrashSurge-Light] 저장된 모델 없음, 건너뜀 (전체 파이프라인에서 학습 필요)')
         except Exception as e:
             print(f'  [CrashSurge-Light] 실시간 예측 실패: {e}')
+            traceback.print_exc()
+
+        # Step 5d: ERP (Fed Model) 일일 갱신 — DB 가드 (오늘 row 있으면 skip)
+        print('\n[Step 5d] ERP 시그널 갱신...')
+        try:
+            from collector.valuation_signal import fetch_valuation_signal_today, backfill_valuation_signal
+            from database.repositories import (
+                fetch_valuation_signal_latest, upsert_valuation_signal, upsert_valuation_signal_bulk,
+            )
+            import datetime as _dt
+            latest = fetch_valuation_signal_latest()
+            today_str = _dt.date.today().isoformat()
+            if not latest or latest.get('date') != today_str:
+                # 처음이면 30일 backfill, 이후엔 오늘 1행만
+                if not latest:
+                    rows = backfill_valuation_signal(days=60)
+                    if rows:
+                        upsert_valuation_signal_bulk(rows)
+                rec = fetch_valuation_signal_today()
+                if rec:
+                    upsert_valuation_signal(rec)
+                    print(f'  [ERP] {rec["date"]} ERP={rec["erp"]:+.4f} ({rec["label"]})')
+            else:
+                print('  [ERP] 오늘 이미 갱신됨, 건너뜀')
+        except Exception as e:
+            print(f'  [ERP] 실패: {e}')
             traceback.print_exc()
 
         # Step 5c: 경량 모드 Noise HMM 실시간 예측 (기존 모델 사용, 학습 없음)

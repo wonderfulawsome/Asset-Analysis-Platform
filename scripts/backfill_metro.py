@@ -102,7 +102,7 @@ def main() -> int:
                 continue
         sgg_10 = sgg + "00000"
         elapsed = time.time() - t0
-        print(f"\n[{i}/{len(METRO_NEW_LAWD_CDS)}] LAWD_CD {sgg} ({elapsed:.0f}s 경과)")
+        print(f"\n[{i}/{len(METRO_NEW_LAWD_CDS)}] LAWD_CD {sgg} ({elapsed:.0f}s 경과)", flush=True)
 
         for ym in yms:
             try:
@@ -142,8 +142,17 @@ def main() -> int:
                     trades=trades, rents=rents, population=pop, mapping=mapping,
                     household=household or None, sgg_cd=sgg, stats_ym=ym,
                 )
-                upsert_region_summary(summary)
-                print(f"   [{ym}] trades={len(trades)} rents={len(rents)} pop={len(pop)} hh={len(household)}")
+                # 안전망: 동일 batch 안 (stdg_cd, stats_ym) 중복 시 ON CONFLICT 21000 발생 → 1차 dedupe
+                seen_sum: set[tuple] = set()
+                summary_dedup = []
+                for row in summary or []:
+                    key = (row.get("stdg_cd"), row.get("stats_ym"))
+                    if key in seen_sum:
+                        continue
+                    seen_sum.add(key)
+                    summary_dedup.append(row)
+                upsert_region_summary(summary_dedup)
+                print(f"   [{ym}] trades={len(trades)} rents={len(rents)} pop={len(pop)} hh={len(household)} sum={len(summary_dedup)}", flush=True)
             except Exception as e:
                 print(f"   [{ym}] !! 실패 (60s 대기 후 다음 ym): {e}")
                 time.sleep(60)

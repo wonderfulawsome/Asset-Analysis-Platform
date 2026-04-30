@@ -5170,5 +5170,45 @@ const SECTOR_KR = {
 # 이미 정상.
 
 
+# ════════════════════════════════════════════════════════════════════════════
+# [63] 2026-04-30 (UTC) — backfill dedupe 패치 + 재시작 (-u flush)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# Phase 2 backfill (PID 6194) 실행 중 ON CONFLICT 21000 다발:
+#   "ON CONFLICT DO UPDATE command cannot affect row a second time"
+# 매 ym 실패 시 60s 대기 → 7시간 51분 누적 진행 ~17%, buy_signal_result 0건
+# (한 sgg 도 24개월 모두 통과 X). 추정 잔여 30시간+. kill 후 dedupe 패치 + 재시작.
 
+# [원인]
+# 같은 batch upsert 안에 동일 UNIQUE 키 row 중복 → Postgres 21000.
+# dedupe 누락된 곳:
+#   - _re_norm_population (UNIQUE: stats_ym, stdg_cd) — 없었음
+#   - _re_norm_mapping    (UNIQUE: ref_ym, stdg_cd, admm_cd) — 없었음
+#   - _re_norm_household  (UNIQUE: stats_ym, admm_cd) — 이미 있음 (정상)
+# MOIS lv=3 응답이 같은 stdg_cd 를 페이지 경계에서 중복 반환할 가능성.
+
+# [수정 파일]
+# - scheduler/job.py
+#   1) _re_norm_population: seen_pop set + (stats_ym, stdg_cd) dedupe
+#   2) _re_norm_mapping: seen_map set + (ref_ym, stdg_cd, admm_cd) dedupe
+#      (build_mapping 내부 dedupe 외 호출자 누적 단계 안전망)
+# - scripts/backfill_metro.py
+#   1) compute_region_summary 결과 upsert 직전 (stdg_cd, stats_ym) 안전망 dedupe
+#   2) print(..., flush=True) — stdout 버퍼링 해소 (python -u 와 함께 사용)
+
+# [재시작]
+# nohup python -u scripts/backfill_metro.py --months 24 --hh-months 3 --sleep 0.4 ...
+# python -u 로 stdout/stderr 버퍼링 비활성화 → tail -f 실시간 진행 가능. PID 3429.
+
+# [예상 효과]
+# - ON CONFLICT 에러 → 0
+# - 60s 대기 비용 → 0
+# - sgg 당 처리 시간 47분 → ~5~10분 (정상 페이스)
+# - 52 sgg 총 ~5~8시간 완료 예상
+
+# [기존 데이터]
+# Backfill kill 시점 누적: region_summary 3158, trade 103,648, rent 279,657,
+# population 7661, buy_signal 72 (서울만). 모두 idempotent upsert 라 재시작 시
+# 같은 row 는 update 만 일어나 안전. buy_signal 은 sgg 끝나야 산출되므로 새
+# 패치된 backfill 이 sgg 단위 완성하면 +1씩 증가 시작.
 
