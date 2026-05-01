@@ -5395,3 +5395,35 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 # [효과]
 # - 사용자 직관성 ↑ (영문 약어 사라짐, 부호 한 축만 보면 됨)
 # - 시장 이성 점수 수치도 함께 표시 (이전엔 라벨로만 추정)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [69] 2026-05-02 (UTC) — 추이 그래프 기간 일괄 확대 (1개월·2개월 → 3개월)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 펀더멘털 탭(Noise 30일) + 신호 탭(Crash/Surge 30일) + 시장 밸류 탭(60일)
+# 추이 그래프를 모두 90일(3개월) 로 통일.
+
+# [수정 파일]
+# - static/js/main.js
+#     /api/regime/history?days=30 → 90
+#     /api/crash-surge/history?days=30 → 90
+# - static/js/i18n.js
+#     section.nrChart KO "(30일)" → "(3개월)" / EN "(30d)" → "(3M)"
+#     section.csChart 동일
+# - api/routers/macro.py
+#     fetch_valuation_signal_history(days=60) → 90
+# - static/js/home.js
+#     렌더 차트 라벨 "2개월 전" → "3개월 전"
+# - templates/stocks.html
+#     "(30일)" 두 곳 + "2개월 추이" → "3개월"
+#     캐시 버스트: i18n.js?v=3→4, main.js?v=115→116, home.js?v=25→26
+
+# [DB 추가]
+# valuation_signal 90일 보장 — backfill_valuation_signal(days=90) 1회 실행
+# (62 → 90 row 적재).
+
+# [검증]
+# /api/macro/valuation-signal: history 90 row (2025-12-22 ~ 2026-05-01)
+# /api/regime/history?days=90: 90 row
+# /api/crash-surge/history?days=90: 90 row

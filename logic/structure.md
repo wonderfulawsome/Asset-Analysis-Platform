@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-01 (부동산 sgg-overview 11.6s → 1s — generic app_cache 테이블 + scheduler [Step 5e] 가 compute_sgg_overview 결과를 매일 적재 + endpoint cache select. update.py [66])
+마지막 갱신 시점: 2026-05-02 (추이 그래프 기간 일괄 확대 — 펀더멘털·신호·시장밸류 3 탭 모두 90일(3개월)로 통일. valuation_signal DB 90일 backfill. update.py [69])

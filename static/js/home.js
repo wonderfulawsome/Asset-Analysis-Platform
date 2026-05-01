@@ -442,7 +442,7 @@
         <path d="M${areaPts}" fill="${fillColor}" stroke="none"/>
         <path d="M${linePts}" fill="none" stroke="${lineColor}" stroke-width="1.5" stroke-linejoin="round"/>
         <circle cx="${lastX}" cy="${lastY}" r="3" fill="${lineColor}"/>
-        <text x="${pad.l}" y="${H - 3}" font-size="9" fill="#6b7280">2개월 전</text>
+        <text x="${pad.l}" y="${H - 3}" font-size="9" fill="#6b7280">3개월 전</text>
         <text x="${pad.l + innerW}" y="${H - 3}" text-anchor="end" font-size="9" fill="#6b7280">오늘</text>
       </svg>`;
   }

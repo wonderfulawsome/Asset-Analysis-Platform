@@ -1371,7 +1371,7 @@ function renderLineChart(containerId, points, options = {}) {
 // ── Crash/Surge 이중 그래프 (하락 가능성 vs 상승 가능성) ──
 async function loadCrashSurgeChart() {
   try {
-    const res = await fetch('/api/crash-surge/history?days=30');
+    const res = await fetch('/api/crash-surge/history?days=90');
     const list = await res.json();
     if (!Array.isArray(list) || list.length < 2) return;
 
@@ -1510,10 +1510,10 @@ function renderDualLineChart(containerId, labels, crashVals, surgeVals) {
   svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });
 }
 
-// ── Noise Score 30일 그래프 ──
+// ── Noise Score 90일(3개월) 그래프 ──
 async function loadNoiseChart() {
   try {
-    const res = await fetch('/api/regime/history?days=30');         // 30일 국면 히스토리 요청
+    const res = await fetch('/api/regime/history?days=90');         // 90일(3개월) 국면 히스토리 요청
     const list = await res.json();                                  // JSON 파싱
     if (!Array.isArray(list) || list.length < 2) return;            // 데이터 부족 시 종료
 

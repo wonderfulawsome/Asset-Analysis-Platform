@@ -261,7 +261,7 @@ def get_valuation_signal():
 
     try:
         today = fetch_valuation_signal_latest()
-        history = fetch_valuation_signal_history(days=60)
+        history = fetch_valuation_signal_history(days=90)
     except Exception as e:
         print(f'[valuation_signal] DB fetch 실패: {e}')
         return {'error': f'DB fetch failed: {type(e).__name__}: {str(e)[:200]}'}

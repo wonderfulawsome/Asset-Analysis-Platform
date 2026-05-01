@@ -60,9 +60,9 @@ const I18N = {
     'nr.badge.danger': '위험',                    // 위험 뱃지
 
     // ── 섹션 라벨 ──
-    'section.nrChart': '시장 이성 점수 추이 (30일)', // NR 차트 라벨
+    'section.nrChart': '시장 이성 점수 추이 (3개월)', // NR 차트 라벨
     'section.myHoldings': 'My Holdings',           // 보유종목 섹션
-    'section.csChart': '방향성 예측 추이 (30일)',    // CS 차트 라벨
+    'section.csChart': '방향성 예측 추이 (3개월)',    // CS 차트 라벨
 
     // ── VIX 등급 ──
     'vix.low': '낮음',                            // VIX 낮음
@@ -467,9 +467,9 @@ const I18N = {
     'nr.badge.danger': 'Danger',
 
     // ── Section Labels ──
-    'section.nrChart': 'Market Rationality Trend (30d)',
+    'section.nrChart': 'Market Rationality Trend (3M)',
     'section.myHoldings': 'My Holdings',
-    'section.csChart': 'Directional Forecast Trend (30d)',
+    'section.csChart': 'Directional Forecast Trend (3M)',
 
     // ── VIX Levels ──
     'vix.low': 'Low',

@@ -279,9 +279,9 @@
         <div id="regime-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
-      <!-- Noise Score 30일 추이 그래프 -->
+      <!-- Noise Score 90일(3개월) 추이 그래프 -->
       <div class="fade-target">
-        <div class="section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (30일)</div>
+        <div class="section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (3개월)</div>
         <div id="nr-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
@@ -356,9 +356,9 @@
         <div id="cs-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
-      <!-- Crash/Surge 30일 추이 그래프 -->
+      <!-- Crash/Surge 90일(3개월) 추이 그래프 -->
       <div class="fade-target">
-        <div class="section-label" data-i18n="section.csChart">방향성 예측 추이 (30일)</div>
+        <div class="section-label" data-i18n="section.csChart">방향성 예측 추이 (3개월)</div>
         <div id="cs-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
@@ -481,7 +481,7 @@
       <div id="market-valuation-gauge" class="mv-gauge"></div>
       <div class="mv-section-label">분해</div>
       <div id="market-valuation-decompose" class="mv-decompose"></div>
-      <div class="mv-section-label">2개월 추이</div>
+      <div class="mv-section-label">3개월 추이</div>
       <div id="market-valuation-history" class="mv-history"></div>
 
       <!-- AI 해설 (다른 탭과 동일 구조) -->
@@ -508,7 +508,7 @@
     <div id="detail-body" class="detail-body"></div>
   </div>
 
-  <script src="/static/js/i18n.js?v=3"></script>
+  <script src="/static/js/i18n.js?v=4"></script>
   <script>
     // ── 다크모드 토글 (헤더 + setup 화면 동기화) ──
     var _sunSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
@@ -545,8 +545,8 @@
     document.getElementById('setup-lang').addEventListener('click', switchLang);
   </script>
   <script src="/static/js/chart.js?v=24"></script>
-  <script src="/static/js/main.js?v=115"></script>
+  <script src="/static/js/main.js?v=116"></script>
   <script src="/static/js/sector.js?v=5"></script>
-  <script src="/static/js/home.js?v=25"></script>
+  <script src="/static/js/home.js?v=26"></script>
 </body>
 </html>
