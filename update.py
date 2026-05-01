@@ -5212,3 +5212,47 @@ const SECTOR_KR = {
 # 같은 row 는 update 만 일어나 안전. buy_signal 은 sgg 끝나야 산출되므로 새
 # 패치된 backfill 이 sgg 단위 완성하면 +1씩 증가 시작.
 
+
+# ════════════════════════════════════════════════════════════════════════════
+# [64] 2026-05-01 (UTC) — 부동산 수도권 backfill 완료 (Phase 2)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 어제 dedupe 패치 후 24개월 backfill 시도 → MOIS quota 도달 + sgg 당 30분
+# 페이스로 25시간 예상. 5시간 한계 위해 (1) compute_buy_signal 최소 요건 2개월
+# 검증 → 24개월 → **3개월** 단축, (2) --max-minutes 120 분할 batch 도입.
+# 2회 batch (각 ~120분) 로 52 sgg 모두 처리. buy_signal stats_ym NULL 버그
+# 발견 → setdefault 가 아닌 무조건 set 으로 수정 + 일괄 재산출 스크립트 작성.
+
+# [신규 파일]
+# - scripts/recompute_metro_signals.py
+#     수도권 신규 52 LAWD_CD 의 buy_signal 만 일괄 재산출.
+#     DB 시계열만 사용 (외부 API 0회), ~18s 소요.
+#     compute_buy_signal 가 stats_ym 을 None 으로 set 하는 버그 회피 — 결과 dict 의
+#     stats_ym 을 ts[-1].ym 으로 강제 덮어씀.
+
+# [수정 파일]
+# - scripts/backfill_metro.py
+#     1) --max-minutes N 옵션 추가 (분할 batch). 매 sgg 시작 직전 elapsed 체크,
+#        도달 시 다음 회차 안내(--start-from XXXXX)와 함께 종료.
+#     2) signal_rec.setdefault("stats_ym", ...) → 무조건 assignment.
+
+# [실측 결과 (2회 batch + recompute)]
+# Batch 1 (28110~41590, 28 sgg, 2:16) — 1차 시도, signal 모두 fail
+# Batch 2 (41610~41465, 24 sgg, 1:59) — 2차 시도, signal 여전히 fail (setdefault 결함)
+# recompute_metro_signals.py — 18초 만에 50/52 sgg 의 signal 산출
+#                              (28720 옹진군 + 41590 화성시 = ts 부족 skip)
+#
+# 최종 누적 (어제 시작 vs 오늘 완료):
+#   region_summary       1,049 → 4,650  (+3,601)
+#   real_estate_trade    24,223 → 136,617 (+112,394)
+#   real_estate_rent     ≈    → 342,549 (대량)
+#   mois_population      1,912 → 12,289 (+10,377)
+#   buy_signal_result      72 →   122   (+50, 서울 72 + 인천 9 + 경기 41)
+#
+# signal 분포: 매수 53 / 관망 36 / 주의 33
+
+# [다음 작업]
+# (a) 24개월 backfill — 별도 batch (시간 여유 있을 때, 시그널은 충분히 산출됨)
+# (b) scheduler/job.py 의 Step 9 sleep 누락 패치 (전국 cron 정상화)
+# (c) 28720 옹진군 / 41590 화성시 ts 부족 원인 조사 (실제 거래 X 거나 데이터 문제)
+# (d) 월 1회 부동산 backfill cron 분리 등록 (CronTrigger(day=1, hour=3))

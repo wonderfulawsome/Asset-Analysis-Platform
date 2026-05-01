@@ -63,6 +63,7 @@ def main() -> int:
     ap.add_argument("--sleep", type=float, default=0.4, help="호출 간 대기 (초)")
     ap.add_argument("--dry-run", action="store_true", help="대상만 출력, fetch/upsert 안 함")
     ap.add_argument("--start-from", default=None, help="특정 LAWD_CD 부터 재개 (예: 41271)")
+    ap.add_argument("--max-minutes", type=int, default=0, help="0=무제한. N분 경과 시 현재 sgg 끝내고 종료 (분할 실행용)")
     args = ap.parse_args()
 
     yms = list_yms(args.months)
@@ -100,8 +101,13 @@ def main() -> int:
                 started = True
             else:
                 continue
-        sgg_10 = sgg + "00000"
+        # 시간 제한 체크 (매 sgg 시작 전 — 진행 중 sgg 는 안 끊고 다음 sgg 부터 stop)
         elapsed = time.time() - t0
+        if args.max_minutes > 0 and elapsed >= args.max_minutes * 60:
+            print(f"\n[--max-minutes {args.max_minutes} 도달, {elapsed:.0f}s 경과] "
+                  f"다음 회차 명령: --start-from {sgg}", flush=True)
+            return 0
+        sgg_10 = sgg + "00000"
         print(f"\n[{i}/{len(METRO_NEW_LAWD_CDS)}] LAWD_CD {sgg} ({elapsed:.0f}s 경과)", flush=True)
 
         for ym in yms:
@@ -167,6 +173,8 @@ def main() -> int:
             signal_rec = compute_buy_signal(ts, rate_ts=rate_ts, flow_ts=flow_ts)
             if signal_rec:
                 signal_rec["sgg_cd"] = sgg
+                # compute_buy_signal 가 stats_ym 을 None 으로 set 하는 경우 있음 → 무조건 덮어쓰기
+                signal_rec["stats_ym"] = yms[-1]
                 upsert_buy_signal(signal_rec)
                 print(f"   ✓ signal: {signal_rec.get('signal')} (score={signal_rec.get('score')})")
         except Exception as e:

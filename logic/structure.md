@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-04-30 (탭 전환 버그 수정 — home.js showTab() 의 sector-tab 숨김 목록에 'tab-market-valuation' 누락으로 시장 밸류 탭 한 번 열고 다른 탭 가면 두 탭 콘텐츠가 겹쳐 보이던 문제 해결. update.py [62])
+마지막 갱신 시점: 2026-05-01 (부동산 수도권 backfill 완료 — 3개월 × 52 LAWD_CD, 2회 batch 분할 + buy_signal 일괄 재산출. 최종 buy_signal_result 122행 (서울 72 + 인천 9 + 경기 41), region_summary 1049→4650. scripts/recompute_metro_signals.py 신규. update.py [64])
