@@ -200,13 +200,26 @@ def get_migration(sgg_cd: str = Query(..., description='시군구 코드 5자리
 def get_sgg_overview(ym: str = Query(default='', description='YYYYMM, 미지정 시 최신')):
     """서울 시군구별 매매가 + 3개월 변화율 + 대표 법정동."""
     target_ym = ym or _default_ym()
-    # 모든 행 한 번에 가져와 Python 측에서 그룹핑 (region_summary는 작아 비용 낮음)
+    # 모든 행 페이지네이션으로 가져와 Python 측에서 그룹핑.
+    # 수도권 확장 후 region_summary 4000+ 행 → Supabase 기본 1000 limit 회피 위해 chunk fetch.
     from database.supabase_client import get_client
     client = get_client()
-    response = client.table('region_summary').select(
-        'sgg_cd,stdg_cd,stdg_nm,stats_ym,median_price_per_py,trade_count'
-    ).execute()
-    rows = response.data
+    PAGE = 1000
+    offset = 0
+    rows: list[dict] = []
+    while True:
+        chunk_resp = (
+            client.table('region_summary')
+            .select('sgg_cd,stdg_cd,stdg_nm,stats_ym,median_price_per_py,trade_count')
+            .order('id', desc=False)
+            .range(offset, offset + PAGE - 1)
+            .execute()
+        )
+        chunk = chunk_resp.data or []
+        rows.extend(chunk)
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
     # 시군구·월별로 평균 평단가 + 거래수 합 계산
     by_sm: dict[tuple, dict] = {}
     for r in rows:
