@@ -30,6 +30,7 @@ interface Props {
   onPolygonClick?: (sggCd: string) => void;
   center?: { lat: number; lng: number };
   level?: number;
+  maxLevel?: number;  // 최대 줌아웃 제한 — 작을수록 축소 못 함 (수도권만 보이도록 11~12 권장)
 }
 
 let sdkPromise: Promise<void> | null = null;
@@ -55,6 +56,7 @@ export default function KakaoMap({
   onPolygonClick,
   center = { lat: 37.5665, lng: 126.978 },
   level = 9,
+  maxLevel,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
@@ -76,6 +78,10 @@ export default function KakaoMap({
           center: new kakao.maps.LatLng(center.lat, center.lng),
           level,
         });
+        // 줌아웃 제한 — maxLevel 지정 시 사용자가 그 이상 축소 못 함 (수도권만 보이도록)
+        if (maxLevel != null) {
+          mapRef.current.setMaxLevel(maxLevel);
+        }
         setReady(true);
       } catch (e: any) {
         if (!cancelled) setError(e.message ?? String(e));
