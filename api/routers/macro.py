@@ -164,83 +164,34 @@ _val_sig_cache = {'data': None, 'ts': 0}
 _VAL_SIG_TTL = 24 * 3600
 
 
-@router.get('/valuation-signal')
-def get_valuation_signal():
-    """오늘 composite z + 60일 history + LLM 해설 (24h 캐시).
+def build_baseline_snapshot(baselines: dict) -> dict:
+    """API 응답에서 baselines_5y 형태로 그대로 쓰는 dict — 스냅샷용."""
+    return {
+        'erp':     baselines.get('erp', {}),
+        'vix':     baselines.get('vix', {}),
+        'dd':      baselines.get('dd',  {}),
+        'weights': baselines.get('weights', {'erp': 0.4, 'vix': 0.3, 'dd': 0.3}),
+    }
 
-    안전망: DB 스키마 미마이그레이션·yfinance 차단 등 예상 가능한 환경 차이로
-    인한 실패는 500 대신 `{'error': '...'}` JSON 으로 반환.
+
+def build_valuation_interpretation(today: dict, baselines: dict) -> str:
+    """Groq LLM 호출 + 룰베이스 fallback. today + baselines 입력으로 해설 1문단 반환.
+
+    스케줄러가 매일 1회 호출해 valuation_signal.interpretation 컬럼에 저장 → endpoint 는
+    DB select 만으로 즉시 응답. endpoint 호출 시점에는 외부 LLM 호출 0회.
     """
-    now = _time.time()
-    cached = _val_sig_cache['data']
-    if cached and (now - _val_sig_cache['ts']) < _VAL_SIG_TTL:
-        return {**cached, 'cached': True}
-
-    try:
-        today = fetch_valuation_signal_latest()
-        history = fetch_valuation_signal_history(days=60)
-    except Exception as e:
-        print(f'[valuation_signal] DB fetch 실패: {e}')
-        return {'error': f'DB fetch failed: {type(e).__name__}: {str(e)[:200]}'}
-
-    # composite z 가 비어있는 (legacy) 행이 있으면 backfill 강제
-    needs_backfill = (
-        not today
-        or len(history) < 60
-        or today.get('z_comp') is None
-        or any(h.get('z_comp') is None for h in history)
-    )
-    if needs_backfill:
-        try:
-            from collector.valuation_signal import (
-                fetch_valuation_signal_today, backfill_valuation_signal,
-            )
-            backfill = backfill_valuation_signal(days=60)
-            if backfill:
-                try:
-                    upsert_valuation_signal_bulk(backfill)
-                except Exception as e:
-                    # DB 컬럼 부재 등 마이그레이션 미완료 가능성
-                    print(f'[valuation_signal] bulk upsert 실패 (DDL 미실행 의심): {e}')
-                    return {
-                        'error': 'schema_outdated',
-                        'detail': f'DB 컬럼 누락 추정. supabase_tables.sql 의 ALTER TABLE 6컬럼 실행 필요. ({type(e).__name__}: {str(e)[:200]})',
-                    }
-            rec_today = fetch_valuation_signal_today()
-            if rec_today:
-                try:
-                    upsert_valuation_signal(rec_today)
-                except Exception as e:
-                    print(f'[valuation_signal] today upsert 실패: {e}')
-                today = rec_today
-            history = fetch_valuation_signal_history(days=60)
-        except Exception as e:
-            print(f'[valuation_signal] backfill 실패: {e}')
-            return {'error': f'backfill failed: {type(e).__name__}: {str(e)[:200]}'}
-
-    if not today:
-        return {'error': 'no data'}
-
-    try:
-        from collector.valuation_signal import get_baselines
-        baselines = get_baselines()
-    except Exception as e:
-        print(f'[valuation_signal] baseline 실패: {e}')
-        return {'error': f'baseline failed: {type(e).__name__}: {str(e)[:200]}'}
-
     z_comp_now = today.get('z_comp') or 0.0
-
-    # LLM 해설 (Groq) — 평어 키 + dominant component 사전 계산
-    ze = today.get('z_erp')   or 0.0
-    zv = today.get('z_vix')   or 0.0
-    zd = today.get('z_dd')    or 0.0
+    ze = today.get('z_erp') or 0.0
+    zv = today.get('z_vix') or 0.0
+    zd = today.get('z_dd')  or 0.0
     contribs = {
         '주식 매력도 점수': ze * 0.4,
         '공포 점수':        zv * 0.3,
         '하락 충격 점수':   zd * 0.3,
     }
-    # 종합 점수의 부호와 같은 방향(가장 큰 기여) 을 dominant 로 — 음수면 가장 음수, 양수면 가장 양수
     dom_name = (min if z_comp_now < 0 else max)(contribs, key=contribs.get)
+
+    # 1) Groq LLM
     try:
         from api.routers.market_summary import _groq_call
         import json as _json
@@ -267,47 +218,78 @@ def get_valuation_signal():
             },
         }, ensure_ascii=False, indent=2)
         interpretation = _groq_call(_VAL_SIG_PROMPT, user_text, max_tokens=320)
+        if interpretation:
+            return interpretation
     except Exception as e:
         print(f'[valuation_signal] LLM 실패: {e}')
-        interpretation = None
 
-    if not interpretation:
-        # 평어 fallback — dominant 점수의 raw 원인을 함께 언급
-        label = today.get('label', '')
-        per   = today.get('spy_per') or 0
-        tnx_p = (today.get('tnx_yield') or 0) * 100
-        vix_v = today.get('vix') or 0
-        dd_p  = (today.get('dd_60d') or 0) * 100
-        m_per = baselines['erp']['mean'] * 100        # ERP 평균
-        m_vix = baselines['vix']['mean']
-        m_dd  = baselines['dd']['mean'] * 100
+    # 2) 룰베이스 fallback
+    label = today.get('label', '')
+    per   = today.get('spy_per') or 0
+    tnx_p = (today.get('tnx_yield') or 0) * 100
+    vix_v = today.get('vix') or 0
+    dd_p  = (today.get('dd_60d') or 0) * 100
+    m_vix = baselines['vix']['mean']
+    m_dd  = baselines['dd']['mean'] * 100
+    if dom_name == '주식 매력도 점수':
+        cause = f"주가수익비율(PER) {per:.1f}배 + 국채금리 {tnx_p:.2f}% 조합으로 주식 매력도 점수가 5년 평균 대비 낮은 수준"
+    elif dom_name == '공포 점수':
+        cause = f"공포지수(VIX) {vix_v:.1f}, 5년 평균 {m_vix:.1f} 대비 시장 분위기가 한쪽으로 치우친 상태"
+    else:
+        cause = f"최근 60일 하락폭 {dd_p:+.2f}%, 5년 평균 {m_dd:+.2f}% 대비 영향이 두드러지는 수준"
+    if '명확한 저평가' in label:
+        return f"종합 점수 {z_comp_now:+.2f}점, '명확한 저평가' 영역. {cause}. 분할 매수 검토 여지 있음."
+    if '다소 저평가' in label:
+        return f"종합 점수 {z_comp_now:+.2f}점, '다소 저평가' 영역. {cause}. 관심 종목 점진 매수 검토 여지."
+    if '명확한 고평가' in label:
+        return f"종합 점수 {z_comp_now:+.2f}점, '명확한 고평가' 영역. {cause}. 현금·채권 비중 확대 검토 권장."
+    return f"종합 점수 {z_comp_now:+.2f}점, '다소 고평가' 영역. {cause}. 관망 또는 방어 비중 확대 검토 여지."
 
-        if dom_name == '주식 매력도 점수':
-            cause = f"주가수익비율(PER) {per:.1f}배 + 국채금리 {tnx_p:.2f}% 조합으로 주식 매력도 점수가 5년 평균 대비 낮은 수준"
-        elif dom_name == '공포 점수':
-            cause = f"공포지수(VIX) {vix_v:.1f}, 5년 평균 {m_vix:.1f} 대비 시장 분위기가 한쪽으로 치우친 상태"
-        else:
-            cause = f"최근 60일 하락폭 {dd_p:+.2f}%, 5년 평균 {m_dd:+.2f}% 대비 영향이 두드러지는 수준"
 
-        if '명확한 저평가' in label:
-            interpretation = f"종합 점수 {z_comp_now:+.2f}점, '명확한 저평가' 영역. {cause}. 분할 매수 검토 여지 있음."
-        elif '다소 저평가' in label:
-            interpretation = f"종합 점수 {z_comp_now:+.2f}점, '다소 저평가' 영역. {cause}. 관심 종목 점진 매수 검토 여지."
-        elif '명확한 고평가' in label:
-            interpretation = f"종합 점수 {z_comp_now:+.2f}점, '명확한 고평가' 영역. {cause}. 현금·채권 비중 확대 검토 권장."
-        else:
-            interpretation = f"종합 점수 {z_comp_now:+.2f}점, '다소 고평가' 영역. {cause}. 관망 또는 방어 비중 확대 검토 여지."
+@router.get('/valuation-signal')
+def get_valuation_signal():
+    """DB 만 select 하는 fast-path. 스케줄러 [Step 5d] 가 매일 raw·점수·LLM 해설·
+    baseline 스냅샷 모두 미리 적재 → endpoint 는 단순 select. 외부 호출 0회.
+
+    레거시 (interpretation/baseline_snapshot 미적재 행) 안전망:
+    - on-the-fly 산출 후 응답 (단 그 결과는 DB 에 다시 적재 안 함 — scheduler 책임)
+    """
+    now = _time.time()
+    cached = _val_sig_cache['data']
+    if cached and (now - _val_sig_cache['ts']) < _VAL_SIG_TTL:
+        return {**cached, 'cached': True}
+
+    try:
+        today = fetch_valuation_signal_latest()
+        history = fetch_valuation_signal_history(days=60)
+    except Exception as e:
+        print(f'[valuation_signal] DB fetch 실패: {e}')
+        return {'error': f'DB fetch failed: {type(e).__name__}: {str(e)[:200]}'}
+
+    if not today:
+        return {'error': 'no data'}
+
+    # DB 에 사전 적재된 값 우선
+    interpretation = today.get('interpretation')
+    baseline_snapshot = today.get('baseline_snapshot')
+
+    # 안전망: 사전 적재 안 됐으면 on-the-fly (느림 — 스케줄러 정상 동작 시 도달 X)
+    if not interpretation or not baseline_snapshot:
+        try:
+            from collector.valuation_signal import get_baselines
+            baselines = get_baselines()
+            if not baseline_snapshot:
+                baseline_snapshot = build_baseline_snapshot(baselines)
+            if not interpretation:
+                interpretation = build_valuation_interpretation(today, baselines)
+        except Exception as e:
+            print(f'[valuation_signal] fallback 실패: {e}')
 
     response = {
         'today': today,
         'history': history,
         'interpretation': interpretation,
-        'baselines_5y': {
-            'erp':     baselines['erp'],
-            'vix':     baselines['vix'],
-            'dd':      baselines['dd'],
-            'weights': baselines.get('weights', {'erp': 0.4, 'vix': 0.3, 'dd': 0.3}),
-        },
+        'baselines_5y': baseline_snapshot,
         'cached': False,
     }
     _val_sig_cache['data'] = response

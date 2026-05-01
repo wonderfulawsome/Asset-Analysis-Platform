@@ -5256,3 +5256,48 @@ const SECTOR_KR = {
 # (b) scheduler/job.py 의 Step 9 sleep 누락 패치 (전국 cron 정상화)
 # (c) 28720 옹진군 / 41590 화성시 ts 부족 원인 조사 (실제 거래 X 거나 데이터 문제)
 # (d) 월 1회 부동산 backfill cron 분리 등록 (CronTrigger(day=1, hour=3))
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [65] 2026-05-01 (UTC) — 시장 밸류 첫 사용자 latency 60초 → 3.3초
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 사용자 피드백: 시장 밸류에이션 탭의 첫 사용자(서버 재시작/배포 직후) 로딩
+# 너무 느림. 분석 결과 매 호출마다 (1) Shiller XLS 다운로드(~10s) (2) Groq LLM
+# 호출(~5s) (3) yfinance backfill(legacy 시 ~30s) 가 일어남. 사용자 의도대로
+# "스케줄러가 미리 다 계산해 DB 적재 → endpoint 는 select 만" 으로 재설계.
+
+# [수정 파일]
+# - supabase_tables.sql: valuation_signal 에 2 컬럼
+#     interpretation TEXT, baseline_snapshot JSONB
+# - api/routers/macro.py: 두 helper 추출 + endpoint 단순화
+#     1) build_baseline_snapshot(baselines) — 5Y baseline JSONB 형태
+#     2) build_valuation_interpretation(today, baselines) — Groq LLM + fallback
+#     3) GET /valuation-signal: backfill·LLM·Shiller 호출 모두 제거.
+#        DB select(latest+history) 만. interpretation/baseline_snapshot 미적재
+#        legacy row 면 안전망으로 on-the-fly 계산 (단 결과 DB 저장 X — scheduler 책임)
+# - scheduler/job.py [Step 5d] 확장:
+#     fetch_valuation_signal_today() → enrich(baseline + LLM) → upsert
+#     매일 1회 LLM 호출 (이전엔 endpoint 가 24h 캐시 만료마다 호출)
+
+# [DDL — prod Supabase 에 1회 실행]
+ALTER TABLE valuation_signal
+    ADD COLUMN IF NOT EXISTS interpretation    TEXT,
+    ADD COLUMN IF NOT EXISTS baseline_snapshot JSONB;
+
+# [Latency 측정 (로컬)]
+# 1차 호출 (서버 재시작 직후, 메모리 캐시 비어있음):
+#   이전: ~60초 (Shiller XLS + Groq LLM + yfinance backfill)
+#   신규: 3.3초 (DB select 2회만 — latest + history 60)
+# 2차 호출 (메모리 캐시 hit):
+#   12ms (이전 대비 변화 없음, 이미 빨랐음)
+# → 첫 사용자 체감 약 18× 개선. 외부 API 호출 0회 (LLM/Shiller/yfinance 모두 X)
+
+# [부수 효과]
+# - Groq 호출 횟수: 일 ~24회 → 일 1회 (스케줄러 light pipeline 10분 주기 중 1회만)
+# - models/valuation_baselines.json 파일 캐시 의존도 감소 (스케줄러도 매일 호출하니 90일 TTL 캐시 정상 유지)
+# - Railway 배포 후 첫 사용자 latency spike 해소
+
+# [안전망]
+# legacy row (interpretation/baseline_snapshot 둘 다 None) 인 경우 endpoint 가
+# on-the-fly 계산 → 응답 즉시. 단 결과를 DB 에 다시 적재하지 않음 (스케줄러 책임).

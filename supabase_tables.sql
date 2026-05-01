@@ -396,9 +396,12 @@ ALTER TABLE valuation_signal DISABLE ROW LEVEL SECURITY;
 
 -- ── 마이그레이션 (기존 테이블이 이미 있으면 컬럼 추가) ──
 ALTER TABLE valuation_signal
-    ADD COLUMN IF NOT EXISTS vix     DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS dd_60d  DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS z_erp   DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS z_vix   DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS z_dd    DOUBLE PRECISION,
-    ADD COLUMN IF NOT EXISTS z_comp  DOUBLE PRECISION;
+    ADD COLUMN IF NOT EXISTS vix               DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS dd_60d            DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_erp             DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_vix             DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_dd              DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS z_comp            DOUBLE PRECISION,
+    -- 사전 계산 캐시 (스케줄러가 매일 채움 → endpoint 는 DB 만 select)
+    ADD COLUMN IF NOT EXISTS interpretation    TEXT,    -- LLM 해설 1문단
+    ADD COLUMN IF NOT EXISTS baseline_snapshot JSONB;   -- {erp, vix, dd, weights} 5Y 평균

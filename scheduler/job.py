@@ -450,6 +450,19 @@ def run_pipeline(light: bool = False) -> None:
                         upsert_valuation_signal_bulk(rows)
                 rec = fetch_valuation_signal_today()
                 if rec:
+                    # 미리 baseline 스냅샷 + LLM 해설 산출 → DB 적재
+                    # endpoint 는 select 만 하면 즉시 응답 가능
+                    try:
+                        from collector.valuation_signal import get_baselines as _get_b
+                        from api.routers.macro import (
+                            build_baseline_snapshot as _build_snap,
+                            build_valuation_interpretation as _build_interp,
+                        )
+                        _baselines = _get_b()
+                        rec['baseline_snapshot'] = _build_snap(_baselines)
+                        rec['interpretation'] = _build_interp(rec, _baselines)
+                    except Exception as _ee:
+                        print(f'  [ERP] enrich 실패 (raw 만 저장): {_ee}')
                     upsert_valuation_signal(rec)
                     print(f'  [ERP] {rec["date"]} ERP={rec["erp"]:+.4f} ({rec["label"]})')
             else:
