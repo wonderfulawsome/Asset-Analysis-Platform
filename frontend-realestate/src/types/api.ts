@@ -141,12 +141,16 @@ export interface BuySignal {
     trade_chg_pct: number;
     price_mom_pct: number;
     pop_chg_pct: number;
-    // Step B (ECOS) — 시그널이 rate_ts 받아 계산됐을 때만 채워짐
+    // 지속성 (FeatureCard 요약 문장용)
+    price_consec_months?: number;          // +N 연속 상승 / -N 연속 하락
+    trade_consec_months?: number;
+    trade_vs_long_ratio?: number | null;   // t-1 거래량 / 직전 12개월 평균 (1.0=동등)
+    // Step B (ECOS)
     base_rate?: number | null;
     base_rate_drop_pct?: number;
     mortgage_rate?: number | null;
     mortgage_rate_mom_pct?: number;
-    // Step C (KOSIS) — flow_ts 있을 때만
+    // Step C (KOSIS)
     in_count?: number | null;
     out_count?: number | null;
     net_flow?: number;

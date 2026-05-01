@@ -5495,3 +5495,50 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 # [검증]
 # /api/realestate/summary?sgg_cd=11680: 13 row, ym=202603 ✓
 # /api/realestate/sgg-overview: 75개, 74 row stats_ym=202603 ✓
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [72] 2026-05-02 (UTC) — 부동산 지속성 + 랭킹 신규 (5+6번 기능)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 사용자 요청 두 기능 추가:
+#   5) 가격·거래량 N개월 연속 추이 → FeatureCard 요약 문장에 편입
+#   6) 수도권 시군구 랭킹 카드 (거래량 회복 + 가격 상승 TOP5) → 새 탭
+
+# [신규 / 수정 — 5)]
+# - processor/feature6_buy_signal.py
+#   · _consecutive_trend(values, end_idx) helper — N개월 연속 동일 부호 카운트
+#   · feature_breakdown 에 3 필드 추가:
+#       price_consec_months   (+N 연속 상승 / -N 연속 하락)
+#       trade_consec_months
+#       trade_vs_long_ratio   (t-1 거래량 / 직전 12개월 평균)
+# - frontend-realestate/src/components/FeatureCard.tsx
+#   · buildSummary 재작성 — "매매가는 3개월 연속 상승 중" / "거래량은 12개월
+#     평균보다 낮은 수준" 식 명사형 문장 조합
+# - frontend-realestate/src/types/api.ts
+#   · BuySignal.feature_breakdown 에 신 3 필드 추가
+
+# [신규 — 6)]
+# - api/routers/real_estate.py
+#   · _SGG_KO_NAMES dict (수도권 75 시군구 한국어 이름 매핑)
+#   · compute_ranking() — buy_signal_result + sgg_overview 캐시 fetch 후
+#     trade_vs_long_ratio 내림차순 TOP 5 + change_pct_3m 내림차순 TOP 5
+#   · GET /ranking — app_cache 'ranking' 에서 select, miss 시 fallback 적재
+# - scheduler/job.py [Step 5f] 신설
+#   · 매 light pipeline 에서 compute_ranking() → app_cache upsert
+# - frontend-realestate/src/screens/RankingScreen.tsx (신규)
+#   · 거래량 회복 + 가격 상승 두 섹션, 시군구 클릭 → /region/:sggCd 이동
+# - frontend-realestate/src/components/MobileLayout.tsx
+#   · 4번째 탭 "메뉴" 자리 → "랭킹" (🏆 아이콘, /ranking 경로)
+# - frontend-realestate/src/App.tsx
+#   · /ranking 라우트 추가
+# - frontend-realestate/src/api/endpoints.ts
+#   · ENDPOINTS.ranking 추가
+
+# [실측 결과 (2026-05-02)]
+# 거래량 회복: 고양 일산동구(1.66배), 포천(1.55), 안성(1.54), 김포(1.5), 구리(1.5)
+# 가격 상승: 강북구(+14.58%), 강동구(+14.34%), 동작구(+11.27%), 구리시(+11.24%), 광진구(+10.48%)
+
+# [한계]
+# - region_summary 시계열이 3~4개월만 있어 price_consec_months 최대값이 1~2.
+#   24개월 backfill 추가 시 "3개월 연속" 같은 더 강한 신호 노출 가능.

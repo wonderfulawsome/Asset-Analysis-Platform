@@ -11,7 +11,7 @@ const TABS: Tab[] = [
   { id: "map",      label: "지도",   icon: "🗺️", path: "/" },
   { id: "search",   label: "검색",   icon: "🔍", path: "/search" },
   { id: "favorite", label: "찜",     icon: "❤", path: "/favorite" },
-  { id: "menu",     label: "메뉴",   icon: "☰", path: "/menu" },
+  { id: "ranking",  label: "랭킹",   icon: "🏆", path: "/ranking" },
 ];
 
 // 폰 프레임 래퍼. 데스크톱에서는 가운데 정렬된 428px 컨테이너,
@@ -23,7 +23,7 @@ export default function MobileLayout({ children }: Props) {
     pathname === "/" ? "map"
     : pathname.startsWith("/search") ? "search"
     : pathname.startsWith("/favorite") ? "favorite"
-    : pathname.startsWith("/menu") ? "menu"
+    : pathname.startsWith("/ranking") ? "ranking"
     : "map"; // /region, /complex 는 지도 탭의 하위 화면으로 간주
 
   return (

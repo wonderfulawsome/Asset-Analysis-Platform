@@ -485,6 +485,20 @@ def run_pipeline(light: bool = False) -> None:
         except Exception as e:
             print(f'  [Cache] sgg_overview 갱신 실패, 건너뜀: {e}')
 
+        # Step 5f: 부동산 ranking 캐시 갱신 (수도권 거래량 회복·가격 상승 TOP5)
+        print('\n[Step 5f] 부동산 ranking 캐시 갱신...')
+        try:
+            from api.routers.real_estate import compute_ranking, RANKING_CACHE_KEY
+            from database.supabase_client import get_client as _get_c2
+            ranking = compute_ranking()
+            _get_c2().table('app_cache').upsert(
+                {'cache_key': RANKING_CACHE_KEY, 'payload': ranking},
+                on_conflict='cache_key',
+            ).execute()
+            print(f'  [Cache] ranking trade_top {len(ranking.get("trade_recovery_top5", []))} / price_top {len(ranking.get("price_top5", []))}')
+        except Exception as e:
+            print(f'  [Cache] ranking 갱신 실패, 건너뜀: {e}')
+
         # Step 5c: 경량 모드 Noise HMM 실시간 예측 (기존 모델 사용, 학습 없음)
         print('\n[Step 5c] Noise HMM 실시간 예측...')
         try:

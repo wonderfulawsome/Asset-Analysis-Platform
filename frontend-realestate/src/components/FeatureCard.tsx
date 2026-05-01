@@ -138,40 +138,56 @@ function Metric({
   );
 }
 
-// 요약 문장 룰베이스 — narrative 가 LLM 으로 채워지면 그걸 쓰도록 변경
+// 요약 문장 룰베이스 — N개월 연속 + 장기평균 대비 직관적 문장 위주
 function buildSummary(
   selected: SelectedRegion,
   signal: BuySignal | null,
-  summary: RegionSummary | null
+  _summary: RegionSummary | null
 ): string {
   const change = selected.changePct;
-  const tradeChg = signal?.feature_breakdown?.trade_chg_pct;
-  const priceMom = signal?.feature_breakdown?.price_mom_pct;
+  const fb = signal?.feature_breakdown;
   const sigLabel = signal?.signal;
 
-  // narrative LLM 결과가 있으면 우선
-  // (현재 BuySignal 타입에 narrative 없으나, scheduler 가 채우면 추가 예정)
+  const sentences: string[] = [];
 
-  const parts: string[] = [];
-  if (tradeChg != null) {
-    const dir = tradeChg >= 0 ? "증가했고" : "위축됐지만";
-    parts.push(`거래량은 ${tradeChg >= 0 ? "+" : ""}${tradeChg.toFixed(1)}% ${dir}`);
-  }
-  if (priceMom != null) {
-    const dir = priceMom >= 0 ? "반등" : "하락";
-    parts.push(`가격은 ${priceMom >= 0 ? "+" : ""}${priceMom.toFixed(1)}% ${dir}`);
+  // ① 가격 지속성 (price_consec_months: +N 연속 상승 / -N 연속 하락)
+  const priceConsec = fb?.price_consec_months;
+  if (priceConsec && Math.abs(priceConsec) >= 2) {
+    const dir = priceConsec > 0 ? "상승" : "하락";
+    sentences.push(`매매가는 ${Math.abs(priceConsec)}개월 연속 ${dir} 중입니다`);
+  } else if (fb?.price_mom_pct != null) {
+    const dir = fb.price_mom_pct >= 0 ? "반등" : "하락";
+    sentences.push(`매매가는 평소 대비 ${fb.price_mom_pct >= 0 ? "+" : ""}${fb.price_mom_pct.toFixed(1)}% ${dir}`);
   } else if (change != null) {
     const dir = change >= 0 ? "상승" : "하락";
-    parts.push(`3M 변화율 ${change >= 0 ? "+" : ""}${change.toFixed(1)}% ${dir}`);
+    sentences.push(`3개월 가격 변화 ${change >= 0 ? "+" : ""}${change.toFixed(1)}% ${dir}`);
   }
+
+  // ② 거래량 — 장기평균 대비
+  const tradeRatio = fb?.trade_vs_long_ratio;
+  if (tradeRatio != null) {
+    if (tradeRatio < 0.85) {
+      sentences.push(`다만 거래량은 12개월 평균보다 낮은 수준`);
+    } else if (tradeRatio > 1.15) {
+      sentences.push(`거래량은 12개월 평균보다 높은 수준`);
+    } else {
+      sentences.push(`거래량은 12개월 평균과 비슷`);
+    }
+  } else if (fb?.trade_chg_pct != null) {
+    const dir = fb.trade_chg_pct >= 0 ? "증가" : "위축";
+    sentences.push(`거래량은 평소 대비 ${fb.trade_chg_pct >= 0 ? "+" : ""}${fb.trade_chg_pct.toFixed(1)}% ${dir}`);
+  }
+
+  // ③ 시그널
   if (sigLabel) {
     const meaning = sigLabel === "매수" ? "매수 우위 신호"
-                  : sigLabel === "주의" ? "매수 심리 약한 신호"
+                  : sigLabel === "주의" ? "매수 심리 약함"
                   : "관망 구간";
-    parts.push(meaning);
+    sentences.push(meaning);
   }
-  if (parts.length === 0) {
+
+  if (sentences.length === 0) {
     return "데이터 수집 중입니다. 잠시 후 다시 확인해 주세요.";
   }
-  return parts.join(", ") + ".";
+  return sentences.join(". ") + ".";
 }

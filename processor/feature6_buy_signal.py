@@ -14,6 +14,29 @@ from collections import defaultdict
 from statistics import mean
 
 
+def _consecutive_trend(values: list[float], end_idx: int) -> int:
+    """end_idx 시점 기준 거꾸로 같은 부호 변화가 몇 개월 연속됐는지.
+
+    +N = N개월 연속 상승 / -N = N개월 연속 하락 / 0 = 변화 없음 또는 데이터 부족.
+    예: values[0..end_idx] 가 [100, 105, 110, 108] 이고 end_idx=3 이면
+        diff = [+5, +5, -2] → end 부호가 음수, 1개월 연속 하락 → -1
+    """
+    if end_idx < 1:
+        return 0
+    last_diff = values[end_idx] - values[end_idx - 1]
+    if last_diff == 0:
+        return 0
+    sign = 1 if last_diff > 0 else -1
+    count = 0
+    for i in range(end_idx, 0, -1):
+        d = values[i] - values[i - 1]
+        if (d > 0 and sign > 0) or (d < 0 and sign < 0):
+            count += 1
+        else:
+            break
+    return sign * count
+
+
 def _group_ts_by_ym(ts: list[dict]) -> list[dict]:
     """stdg-월 매트릭스 → ym 단위 시군구 시계열 (과거 → 최신).
 
@@ -179,10 +202,25 @@ def compute_buy_signal(
     else:
         signal = "관망"
 
+    # 지속성 — t-1 시점 기준 가격·거래량 N개월 연속 추세 + 12개월 평균 대비
+    target_idx = len(ts) - 2  # t-1 (target)
+    price_series = [r.get("median_price_per_py") or 0 for r in ts]
+    trade_series = [r.get("trade_count") or 0 for r in ts]
+    price_consec = _consecutive_trend(price_series, target_idx)
+    trade_consec = _consecutive_trend(trade_series, target_idx)
+    # 거래량 12개월 평균 대비 비율 (1.0 = 같음, 0.5 = 절반, 1.5 = 1.5배)
+    long_window = trade_series[max(0, target_idx - 12):target_idx]   # t-1 직전 최대 12개월
+    long_avg_trade = mean(long_window) if long_window else 0
+    trade_vs_long_ratio = round(target.get("trade_count") / long_avg_trade, 2) if long_avg_trade else None
+
     breakdown = {
         "trade_chg_pct": round(trade_chg * 100, 2),
         "price_mom_pct": round(price_mom * 100, 2),
         "pop_chg_pct": round(pop_chg * 100, 2),
+        # 지속성 (FeatureCard summary 문장 조합용)
+        "price_consec_months": price_consec,        # +3 = 3개월 연속 상승, -2 = 2개월 연속 하락
+        "trade_consec_months": trade_consec,
+        "trade_vs_long_ratio": trade_vs_long_ratio, # t-1 거래량 / 직전 12개월 평균
     }
     breakdown.update(rate_brk)
     breakdown.update(flow_brk)

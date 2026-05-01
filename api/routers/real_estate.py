@@ -312,6 +312,135 @@ def get_sgg_overview(ym: str = Query(default='', description='YYYYMM, 미지정 
     return payload
 
 
+# ─────────────────────────────────────────────────────────
+# /ranking — 수도권 시군구 랭킹 카드 2종 (거래량 회복 + 가격 상승)
+# ─────────────────────────────────────────────────────────
+RANKING_CACHE_KEY = 'ranking'
+
+# 시군구 코드 → 한국어 표시명 (간단 매핑, 부족분은 '시군구' 라벨 그대로)
+_SGG_KO_NAMES: dict[str, str] = {
+    # 서울
+    '11110': '종로구', '11140': '중구', '11170': '용산구', '11200': '성동구',
+    '11215': '광진구', '11230': '동대문구', '11260': '중랑구', '11290': '성북구',
+    '11305': '강북구', '11320': '도봉구', '11350': '노원구', '11380': '은평구',
+    '11410': '서대문구', '11440': '마포구', '11470': '양천구', '11500': '강서구',
+    '11530': '구로구', '11545': '금천구', '11560': '영등포구', '11590': '동작구',
+    '11620': '관악구', '11650': '서초구', '11680': '강남구', '11710': '송파구',
+    '11740': '강동구',
+    # 인천
+    '28110': '중구(인천)', '28140': '동구(인천)', '28177': '미추홀구',
+    '28185': '연수구', '28200': '남동구', '28237': '부평구', '28245': '계양구',
+    '28260': '서구(인천)', '28710': '강화군', '28720': '옹진군',
+    # 경기 단일
+    '41150': '의정부시', '41194': '부천시', '41210': '광명시', '41220': '평택시',
+    '41250': '동두천시', '41290': '과천시', '41310': '구리시', '41360': '남양주시',
+    '41370': '오산시', '41390': '시흥시', '41410': '군포시', '41430': '의왕시',
+    '41450': '하남시', '41480': '파주시', '41500': '이천시', '41550': '안성시',
+    '41570': '김포시', '41590': '화성시', '41610': '광주시(경기)', '41630': '양주시',
+    '41650': '포천시', '41670': '여주시', '41800': '연천군', '41820': '가평군',
+    '41830': '양평군',
+    # 경기 일반구
+    '41111': '수원시 장안구', '41113': '수원시 권선구', '41115': '수원시 팔달구',
+    '41117': '수원시 영통구',
+    '41131': '성남시 수정구', '41133': '성남시 중원구', '41135': '성남시 분당구',
+    '41171': '안양시 만안구', '41173': '안양시 동안구',
+    '41271': '안산시 상록구', '41273': '안산시 단원구',
+    '41281': '고양시 덕양구', '41285': '고양시 일산동구', '41287': '고양시 일산서구',
+    '41461': '용인시 처인구', '41463': '용인시 기흥구', '41465': '용인시 수지구',
+}
+
+
+def compute_ranking() -> dict:
+    """수도권 시군구 랭킹 2종.
+
+    - trade_recovery_top: trade_vs_long_ratio 내림차순 TOP 5 (거래량 회복)
+    - price_top: change_pct_3m 내림차순 TOP 5 (가격 상승)
+    출처: buy_signal_result.feature_breakdown + sgg_overview cache.
+    """
+    from database.supabase_client import get_client
+    client = get_client()
+
+    # 1) buy_signal_result 의 최신 row per sgg
+    r = client.table('buy_signal_result').select('sgg_cd,stats_ym,signal,feature_breakdown').execute()
+    latest_per_sgg: dict[str, dict] = {}
+    for row in r.data or []:
+        sgg = row['sgg_cd']
+        if sgg not in latest_per_sgg or (row.get('stats_ym') or '') > (latest_per_sgg[sgg].get('stats_ym') or ''):
+            latest_per_sgg[sgg] = row
+
+    # 2) sgg_overview cache 의 change_pct_3m
+    r2 = client.table('app_cache').select('payload').eq('cache_key', SGG_OVERVIEW_CACHE_KEY).limit(1).execute()
+    overview = r2.data[0]['payload'] if r2.data else []
+    overview_by_sgg = {o['sgg_cd']: o for o in overview}
+
+    # 거래량 회복 — trade_vs_long_ratio 큰 순 (1.0 초과만)
+    trade_recovery = []
+    for sgg, rec in latest_per_sgg.items():
+        fb = rec.get('feature_breakdown') or {}
+        ratio = fb.get('trade_vs_long_ratio')
+        if ratio is None:
+            continue
+        trade_recovery.append({
+            'sgg_cd': sgg,
+            'sgg_nm': _SGG_KO_NAMES.get(sgg, sgg),
+            'trade_vs_long_ratio': ratio,
+            'trade_count': overview_by_sgg.get(sgg, {}).get('trade_count'),
+            'stats_ym': rec.get('stats_ym'),
+        })
+    trade_recovery.sort(key=lambda x: x['trade_vs_long_ratio'], reverse=True)
+
+    # 가격 상승 — change_pct_3m 큰 순
+    price_up = []
+    for sgg, ov in overview_by_sgg.items():
+        chg = ov.get('change_pct_3m')
+        if chg is None:
+            continue
+        price_up.append({
+            'sgg_cd': sgg,
+            'sgg_nm': _SGG_KO_NAMES.get(sgg, sgg),
+            'change_pct_3m': chg,
+            'median_price_per_py': ov.get('median_price_per_py'),
+            'stats_ym': ov.get('stats_ym'),
+        })
+    price_up.sort(key=lambda x: x['change_pct_3m'], reverse=True)
+
+    return {
+        'trade_recovery_top5': trade_recovery[:5],
+        'price_top5': price_up[:5],
+        'updated_at': date.today().isoformat(),
+    }
+
+
+@router.get('/ranking')
+def get_ranking():
+    """app_cache 에서 사전 계산된 랭킹 select. miss 시 직접 계산 + 적재."""
+    from database.supabase_client import get_client
+    client = get_client()
+    try:
+        r = (
+            client.table('app_cache')
+            .select('payload')
+            .eq('cache_key', RANKING_CACHE_KEY)
+            .limit(1)
+            .execute()
+        )
+        if r.data:
+            return r.data[0]['payload']
+    except Exception as e:
+        print(f'[ranking] cache read 실패: {e}')
+
+    payload = compute_ranking()
+    try:
+        client.table('app_cache').upsert(
+            {'cache_key': RANKING_CACHE_KEY, 'payload': payload},
+            on_conflict='cache_key',
+        ).execute()
+    except Exception as e:
+        print(f'[ranking] cache write 실패: {e}')
+    return payload
+
+
+
 # GET /complex-compare — 단지(apt_seq) 2~4개 나란히 비교용 12개월 시계열
 @router.get('/complex-compare')
 def get_complex_compare(

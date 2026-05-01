@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-02 (추이 그래프 기간 일괄 확대 — 펀더멘털·신호·시장밸류 3 탭 모두 90일(3개월)로 통일. valuation_signal DB 90일 backfill. update.py [69])
+마지막 갱신 시점: 2026-05-02 (부동산 지속성 + 랭킹 신규 — buy_signal feature_breakdown 에 price/trade_consec_months + trade_vs_long_ratio. RankingScreen 신규 + 4번째 탭 "랭킹" 등록. compute_ranking() + app_cache 'ranking' + scheduler [Step 5f]. update.py [72])

@@ -4,6 +4,7 @@ import RegionDetailScreen from "./screens/RegionDetailScreen";
 import ComplexDetailScreen from "./screens/ComplexDetailScreen";
 import StdgDetailScreen from "./screens/StdgDetailScreen";
 import ComplexCompareScreen from "./screens/ComplexCompareScreen";
+import RankingScreen from "./screens/RankingScreen";
 import MobileLayout from "./components/MobileLayout";
 
 // basename="/realestate" — 백엔드가 /realestate/* 로 서빙하므로 prefix 맞춤.
@@ -20,7 +21,7 @@ export default function App() {
           <Route path="/complex/:aptSeq" element={<ComplexDetailScreen />} />
           <Route path="/search" element={<Placeholder title="검색" />} />
           <Route path="/favorite" element={<Placeholder title="찜" />} />
-          <Route path="/menu" element={<Placeholder title="메뉴" />} />
+          <Route path="/ranking" element={<RankingScreen />} />
         </Routes>
       </MobileLayout>
     </BrowserRouter>
