@@ -5427,3 +5427,45 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 # /api/macro/valuation-signal: history 90 row (2025-12-22 ~ 2026-05-01)
 # /api/regime/history?days=90: 90 row
 # /api/crash-surge/history?days=90: 90 row
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [70] 2026-05-02 (UTC) — buy_signal 비교 기준 변경 + stdg-월 group by 버그 패치
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 사용자 발견 — FeatureCard 의 "거래량 -53.7% 위축, 가격 -36.8% 하락" 비교 기준
+# 모호 (거래량은 장기 평균, 가격은 MoM, 비대칭). 추가로 코드 분석 중 근본 버그
+# 발견: compute_buy_signal 가 받는 ts 가 stdg-월 매트릭스(같은 ym 에 여러 stdg
+# row) 인데 latest=ts[-1] 로 단일 row 만 사용 → 시군구 단위 시그널이 임의 한
+# 법정동 row 의 trade_count 만으로 산출됨. 두 가지 동시 패치.
+
+# [수정 파일]
+# - processor/feature6_buy_signal.py
+#     1) _group_ts_by_ym(ts) 신규 — stdg-월 매트릭스를 sgg-월 시계열로 정규화
+#        (trade_count·population sum / median_price_per_py 평균)
+#     2) compute_buy_signal 가 ts[0].stdg_cd 감지 시 자동 group by
+#     3) 비교 기준 변경:
+#        기존: latest=ts[-1] vs mean(ts[:-1])
+#        신규: target=ts[-2] (이전 달, t-1) vs mean(ts[:-2]) (그 이전 모든 달)
+#        ─ 이번 달(t) 데이터는 월 중 집계라 미완성/노이즈 가능, t-1 이 안정
+#     4) 가격도 MoM (단월 비교) → 평균 비교 통일 (price_mom_pct 의미는 같지만 base 변경)
+#     5) 인구는 t-1 vs t-2 단일 (인구 변동 작아 평균 의미 적음)
+#     6) target_ym = target.get('ym') (t-1 기준)
+# - scripts/backfill_metro.py
+#     signal_rec.stats_ym 강제 덮어쓰기 → setdefault (compute_buy_signal 가 정확히 set)
+
+# [DB 정리]
+# 옛 코드의 t (이번 달 = 202604) 기준 row 50개 삭제 → 신 코드의 t-1 (202603) 73 row 활성.
+# 잔존 분포: 202601 25 + 202602 25 + 202603 73 (서울 옛 + 신 합쳐 73 sgg).
+
+# [signal 분포 변화]
+# 이전 (122 row): 매수 53 / 관망 36 / 주의 33
+# 신규 (73 row, 옛 row 50 삭제 후 새로 산출): 매수 41 / 관망 24 / 주의 8
+# → "주의" 33→8 대폭 감소. 이전 단일 stdg row 노이즈 + 이번 달 미완성 데이터가
+#   부정 시그널 만들었던 영향 정상화.
+
+# [예시 — 남양주(41360)]
+# 이전 row (202604): trade_chg -53.73%, price_mom -36.84%, score -60 ('주의')
+#   ─ 임의 stdg row 의 4월 거래량(126건, 부분집계) 이 평균과 비교돼 노이즈
+# 신규 row (202603): trade +23.49%, price +1.18%, score 14.4 ('관망')
+#   ─ 시군구 합산(841건) 이 직전 평균(681건) 대비 23% 증가 = 정상 신호

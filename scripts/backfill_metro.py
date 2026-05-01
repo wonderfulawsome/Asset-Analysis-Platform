@@ -173,8 +173,10 @@ def main() -> int:
             signal_rec = compute_buy_signal(ts, rate_ts=rate_ts, flow_ts=flow_ts)
             if signal_rec:
                 signal_rec["sgg_cd"] = sgg
-                # compute_buy_signal 가 stats_ym 을 None 으로 set 하는 경우 있음 → 무조건 덮어쓰기
-                signal_rec["stats_ym"] = yms[-1]
+                # compute_buy_signal 가 t-1 기준 stats_ym 을 정확히 set 하므로 외부에서 안 덮음
+                # (값 누락 시에만 안전망으로 yms[-1] 사용)
+                if not signal_rec.get("stats_ym"):
+                    signal_rec["stats_ym"] = yms[-1]
                 upsert_buy_signal(signal_rec)
                 print(f"   ✓ signal: {signal_rec.get('signal')} (score={signal_rec.get('score')})")
         except Exception as e:

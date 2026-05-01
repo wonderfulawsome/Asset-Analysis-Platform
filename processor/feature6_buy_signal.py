@@ -1,14 +1,43 @@
 """매수 타이밍 시그널 (Step A+B+C) — 거래량·가격·인구·금리·인구이동 5변수 기반.
 
 입력:
-  - ts: fetch_region_timeseries(sgg_cd) 결과 (월별 시군구 rollup, 과거 → 최근)
+  - ts: fetch_region_timeseries(sgg_cd) 결과 (region_summary 의 stdg-월 매트릭스;
+        같은 stats_ym 에 여러 stdg row 존재 — 함수 내부에서 ym 단위로 group by)
   - rate_ts: fetch_macro_rate_kr() 결과 (선택, 없으면 rate_score=None)
   - flow_ts: fetch_region_migration(sgg_cd) 결과 (선택, 없으면 flow_score=None)
 
-향후 확장:
-  - Step D: narrative (Groq LLM 해설)
+비교 기준 (2026-05-02 변경):
+  이번 달(t) 데이터는 월 중 집계라 노이즈 → 이전 달(t-1) 을 비교 기준으로,
+  그 이전 모든 달(t-2 … t-N) 평균과 비교.
 """
+from collections import defaultdict
 from statistics import mean
+
+
+def _group_ts_by_ym(ts: list[dict]) -> list[dict]:
+    """stdg-월 매트릭스 → ym 단위 시군구 시계열 (과거 → 최신).
+
+    trade_count·population sum / median_price_per_py 평균 (법정동 가중 X — 단순 평균).
+    """
+    by_ym: dict[str, dict] = defaultdict(lambda: {'trade': 0, 'prices': [], 'pop': 0})
+    for r in ts:
+        ym = r.get('stats_ym')
+        if not ym:
+            continue
+        by_ym[ym]['trade'] += r.get('trade_count') or 0
+        if r.get('median_price_per_py'):
+            by_ym[ym]['prices'].append(r['median_price_per_py'])
+        by_ym[ym]['pop'] += r.get('population') or 0
+    out = []
+    for ym in sorted(by_ym):
+        d = by_ym[ym]
+        out.append({
+            'ym': ym,
+            'trade_count': d['trade'],
+            'median_price_per_py': mean(d['prices']) if d['prices'] else 0,
+            'population': d['pop'],
+        })
+    return out
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
@@ -95,29 +124,36 @@ def compute_buy_signal(
 
     Step A 변수만 있어도 동작. rate_ts/flow_ts 는 선택 — 있으면 점수에 합산.
     """
-    if not ts or len(ts) < 2:
+    # 이번 달 (t) 데이터는 월 중 집계라 미완성/노이즈 가능 → 이전 달(t-1) 기준으로 비교.
+    # 비교 대상 = 그 이전 모든 달(t-2 … t-N) 평균 (거래량·가격 통일).
+    # 입력이 stdg-월 매트릭스면 ym 단위로 group by 후 시계열로 변환.
+    if ts and ts[0].get('stdg_cd') is not None:
+        ts = _group_ts_by_ym(ts)
+    if not ts or len(ts) < 3:
         return None
 
-    latest = ts[-1]
-    prev = ts[-2]
+    target = ts[-2]            # 이전 달 (t-1) — 비교 기준
+    older = ts[:-2]            # 그 이전 모든 달 (t-2 … t-N)
 
-    # 거래량 변화율 — 최근월 vs 직전 평균
-    prev_trades = [p.get("trade_count") or 0 for p in ts[:-1]]
-    avg_prev_trade = mean(prev_trades) if prev_trades else 0
+    # 거래량 변화율 — 이전 달 vs 그 이전 평균
+    older_trades = [p.get("trade_count") or 0 for p in older]
+    avg_older_trade = mean(older_trades) if older_trades else 0
     trade_chg = _safe_div(
-        (latest.get("trade_count") or 0) - avg_prev_trade, avg_prev_trade
+        (target.get("trade_count") or 0) - avg_older_trade, avg_older_trade
     )
 
-    # 가격 MoM
+    # 가격 변화율 — 이전 달 vs 그 이전 평균 (MoM 아닌 long avg)
+    older_prices = [p.get("median_price_per_py") for p in older if p.get("median_price_per_py")]
+    avg_older_price = mean(older_prices) if older_prices else 0
     price_mom = _safe_div(
-        (latest.get("median_price_per_py") or 0) - (prev.get("median_price_per_py") or 0),
-        prev.get("median_price_per_py") or 0,
+        (target.get("median_price_per_py") or 0) - avg_older_price, avg_older_price
     )
 
-    # 인구 변화율
+    # 인구 변화율 — 이전 달 vs 그 직전 (단일 비교, 인구 변동 작아 평균 의미 적음)
+    earlier = ts[-3] if len(ts) >= 3 else target
     pop_chg = _safe_div(
-        (latest.get("population") or 0) - (prev.get("population") or 0),
-        prev.get("population") or 0,
+        (target.get("population") or 0) - (earlier.get("population") or 0),
+        earlier.get("population") or 0,
     )
 
     trade_score = _clamp(trade_chg * 100, -30, 30)
@@ -125,7 +161,7 @@ def compute_buy_signal(
     pop_score = _clamp(pop_chg * 500, -20, 20)
 
     # Step B / C — 외부 시계열이 들어오면 점수 추가
-    target_ym = latest.get("ym")
+    target_ym = target.get("ym")        # 이전 달(t-1) 기준으로 시그널 산출
     rate_score, rate_brk = _compute_rate_score(rate_ts, target_ym)
     flow_score, flow_brk = _compute_flow_score(flow_ts, target_ym)
 
