@@ -22,13 +22,15 @@ from database.repositories import (
 router = APIRouter()
 
 
-# 쿼리 ym 미지정 시 사용할 기본값(전월 YYYYMM) 생성
-# MOIS 인구통계가 당월엔 미집계(1~2개월 lag)라 스케줄러도 전월 기준이라
-# 프론트가 ym 생략 시 가장 최신 데이터를 받도록 맞춘다.
+# 쿼리 ym 미지정 시 사용할 기본값 — "직전 완성월" (= 오늘 기준 2개월 전).
+# 이유: 전월(t-1)도 ① MOIS 인구통계 미집계(1~2개월 lag) ② MOLIT 거래도 신고
+# 지연으로 부분 집계 → 노이즈. 전전월(t-2)부터 모든 지표 안정 적재 보장.
+# ex 5월 2일 → 202603 (3월), 5월 31일 → 202603, 6월 → 202604
 def _default_ym() -> str:
     today = date.today()
-    prev = today.replace(day=1) - timedelta(days=1)
-    return prev.strftime('%Y%m')
+    prev1 = today.replace(day=1) - timedelta(days=1)      # 전월 마지막일
+    prev2 = prev1.replace(day=1) - timedelta(days=1)      # 전전월 마지막일
+    return prev2.strftime('%Y%m')
 
 
 # GET /summary — 지도·카드 메인용: 시군구 단위 법정동별 집계 반환

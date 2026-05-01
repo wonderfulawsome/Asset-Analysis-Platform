@@ -5469,3 +5469,29 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 #   ─ 임의 stdg row 의 4월 거래량(126건, 부분집계) 이 평균과 비교돼 노이즈
 # 신규 row (202603): trade +23.49%, price +1.18%, score 14.4 ('관망')
 #   ─ 시군구 합산(841건) 이 직전 평균(681건) 대비 23% 증가 = 정상 신호
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [71] 2026-05-02 (UTC) — _default_ym 전월 → 전전월 (직전 완성월)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# buy_signal 비교 기준이 t-1 로 변경된 후 상세/요약 endpoint 도 "지난달" =
+# 직전 완성월 (전전월) 로 통일. 전월(t-1) 도 MOIS 인구통계 미집계 + MOLIT
+# 신고지연으로 부분 집계라 노이즈. 전전월(t-2)부터 안정.
+
+# [수정 파일]
+# - api/routers/real_estate.py
+#     _default_ym() 변경: today → 전월 last day → 전전월 last day → strftime
+#     ex 5월 2일 → 202604 (이전) → 202603 (신규)
+
+# [영향 endpoint]
+# /summary, /trades, /rents, /population, /household, /mapping, /sgg-overview,
+# /stdg-detail (모두 ym 미지정 시 _default_ym 사용)
+
+# [캐시 갱신]
+# app_cache sgg_overview 1회 재산출 — 75 sgg 중 74개 stats_ym=202603,
+# 1개만 (강화군 추정) 데이터 부족으로 202604.
+
+# [검증]
+# /api/realestate/summary?sgg_cd=11680: 13 row, ym=202603 ✓
+# /api/realestate/sgg-overview: 75개, 74 row stats_ym=202603 ✓
