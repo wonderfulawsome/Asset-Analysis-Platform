@@ -73,6 +73,7 @@ export default function MapScreen() {
   const [selected, setSelected] = useState<SelectedRegion | null>(null);
   const [signal, setSignal] = useState<BuySignal | null>(null);
   const [topStdgSummary, setTopStdgSummary] = useState<RegionSummary | null>(null);
+  const [loading, setLoading] = useState(false);    // FeatureCard fetch 진행 표시
 
   useEffect(() => {
     // 캐시 hit 면 fetch skip — detail 페이지에서 돌아왔을 때 즉시 표시
@@ -106,22 +107,29 @@ export default function MapScreen() {
       medianPricePerPy: ov?.median_price_per_py ?? null,
       changePct: ov?.change_pct_3m ?? null,
     });
-    // 시그널 + 대표 법정동 summary 병렬 fetch
+    // 시그널 + 대표 법정동 summary 병렬 fetch — 끝날 때까지 loading=true
     setSignal(null);
     setTopStdgSummary(null);
-    apiFetch<BuySignal | Record<string, never>>(ENDPOINTS.buySignal(sggCd))
-      .then((s) => {
-        if (s && (s as BuySignal).signal) setSignal(s as BuySignal);
-      })
-      .catch(() => {});
-    if (ov?.top_stdg_cd) {
-      apiFetch<RegionSummary[]>(ENDPOINTS.summary(sggCd))
-        .then((rows) => {
-          const match = rows.find((r) => r.stdg_cd === ov.top_stdg_cd) ?? rows[0] ?? null;
-          if (match) setTopStdgSummary(match);
+    setLoading(true);
+    const tasks: Promise<unknown>[] = [];
+    tasks.push(
+      apiFetch<BuySignal | Record<string, never>>(ENDPOINTS.buySignal(sggCd))
+        .then((s) => {
+          if (s && (s as BuySignal).signal) setSignal(s as BuySignal);
         })
-        .catch(() => {});
+        .catch(() => {})
+    );
+    if (ov?.top_stdg_cd) {
+      tasks.push(
+        apiFetch<RegionSummary[]>(ENDPOINTS.summary(sggCd))
+          .then((rows) => {
+            const match = rows.find((r) => r.stdg_cd === ov.top_stdg_cd) ?? rows[0] ?? null;
+            if (match) setTopStdgSummary(match);
+          })
+          .catch(() => {})
+      );
     }
+    Promise.all(tasks).finally(() => setLoading(false));
   }
 
   return (
@@ -166,6 +174,7 @@ export default function MapScreen() {
         selected={selected}
         signal={signal}
         topStdgSummary={topStdgSummary}
+        loading={loading}
         onTap={() => {
           if (selected?.topStdgCd) navigate(`/stdg/${selected.topStdgCd}`);
         }}

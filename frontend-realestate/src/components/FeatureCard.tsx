@@ -13,21 +13,31 @@ interface Props {
   selected: SelectedRegion | null;
   signal: BuySignal | null;
   topStdgSummary: RegionSummary | null;
+  loading?: boolean;       // fetch 진행 중이면 "-" 대신 스피너 표시
   onTap: () => void;
   onClose: () => void;
 }
 
-export default function FeatureCard({ selected, signal, topStdgSummary, onTap, onClose }: Props) {
+function Spinner() {
+  return (
+    <svg className="inline-block animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+      <circle cx="12" cy="12" r="9" stroke="#374151" strokeOpacity="0.4" />
+      <path d="M21 12a9 9 0 0 1-9 9" stroke="#9ca3af" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export default function FeatureCard({ selected, signal, topStdgSummary, loading, onTap, onClose }: Props) {
   if (!selected) return null;
 
   const change = selected.changePct;
-  const changeStr = change != null ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%` : "-";
+  const changeStr = change != null ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%` : null;
   const changeColor = change != null
     ? change > 0 ? "#ef4444" : change < 0 ? "#3b82f6" : "#9ca3af"
     : "#9ca3af";
 
   const tradeCount = topStdgSummary?.trade_count ?? null;
-  const signalLabel = signal?.signal ?? "-";
+  const signalLabel = signal?.signal ?? null;
   const signalColor = signalLabel === "매수" ? "#10b981"
                     : signalLabel === "주의" ? "#ef4444"
                     : "#9ca3af";
@@ -64,18 +74,31 @@ export default function FeatureCard({ selected, signal, topStdgSummary, onTap, o
 
           {/* 요약 문장 */}
           <p className="text-sm text-gray-300 leading-relaxed mb-4 min-h-[3em]">
-            {summary}
+            {loading && !signal && !topStdgSummary ? (
+              <span className="inline-flex items-center gap-2 text-gray-500"><Spinner /> 데이터 불러오는 중…</span>
+            ) : summary}
           </p>
 
           {/* 메트릭 3개 */}
           <div className="grid grid-cols-3 gap-3 mb-4">
             <Metric
               label="거래량"
-              value={tradeCount != null ? tradeCount.toLocaleString() : "-"}
+              value={tradeCount != null ? tradeCount.toLocaleString() : null}
               unit={tradeCount != null ? "건" : undefined}
+              loading={loading && tradeCount == null}
             />
-            <Metric label="3M 변화" value={changeStr} valueColor={changeColor} />
-            <Metric label="신호" value={signalLabel} valueColor={signalColor} />
+            <Metric
+              label="3M 변화"
+              value={changeStr}
+              valueColor={changeColor}
+              loading={loading && changeStr == null}
+            />
+            <Metric
+              label="신호"
+              value={signalLabel}
+              valueColor={signalColor}
+              loading={loading && signalLabel == null}
+            />
           </div>
 
           {/* CTA */}
@@ -96,18 +119,20 @@ function Metric({
   value,
   unit,
   valueColor,
+  loading,
 }: {
   label: string;
-  value: string;
+  value: string | null;
   unit?: string;
   valueColor?: string;
+  loading?: boolean;
 }) {
   return (
     <div>
       <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">{label}</div>
       <div className="text-base font-bold" style={{ color: valueColor ?? "#fff" }}>
-        {value}
-        {unit && <span className="text-[10px] text-gray-400 ml-0.5 font-normal">{unit}</span>}
+        {loading ? <Spinner /> : (value ?? "-")}
+        {unit && !loading && <span className="text-[10px] text-gray-400 ml-0.5 font-normal">{unit}</span>}
       </div>
     </div>
   );
