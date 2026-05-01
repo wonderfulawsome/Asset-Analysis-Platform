@@ -194,14 +194,16 @@ def get_migration(sgg_cd: str = Query(..., description='시군구 코드 5자리
     return fetch_region_migration(sgg_cd)
 
 
-# GET /sgg-overview — 지도 폴리곤 색칠용: 시군구 단위 rollup + 변화율
-# region_summary 가 법정동 단위라 시군구 합산이 필요. top_stdg_* 는 BottomBar 표기용.
-@router.get('/sgg-overview')
-def get_sgg_overview(ym: str = Query(default='', description='YYYYMM, 미지정 시 최신')):
-    """서울 시군구별 매매가 + 3개월 변화율 + 대표 법정동."""
+SGG_OVERVIEW_CACHE_KEY = 'sgg_overview'
+
+
+def compute_sgg_overview(ym: str = '') -> list[dict]:
+    """sgg-overview 본 계산 — region_summary 4000+ 행 페이지네이션 + 시군구 그룹핑.
+
+    스케줄러가 매일 호출해 app_cache 에 적재. endpoint 는 cache 만 select.
+    cache miss 안전망용으로 endpoint 도 직접 호출 가능 (첫 호출 ~12초).
+    """
     target_ym = ym or _default_ym()
-    # 모든 행 페이지네이션으로 가져와 Python 측에서 그룹핑.
-    # 수도권 확장 후 region_summary 4000+ 행 → Supabase 기본 1000 limit 회피 위해 chunk fetch.
     from database.supabase_client import get_client
     client = get_client()
     PAGE = 1000
@@ -269,6 +271,43 @@ def get_sgg_overview(ym: str = Query(default='', description='YYYYMM, 미지정 
             'top_stdg_nm': top_stdg.get('stdg_nm') if top_stdg else None,
         })
     return out
+
+
+@router.get('/sgg-overview')
+def get_sgg_overview(ym: str = Query(default='', description='YYYYMM, 미지정 시 최신')):
+    """app_cache 에서 사전 계산된 결과 select. miss 시 fallback 으로 직접 계산 + 적재.
+
+    cache_key 'sgg_overview' 는 ym 미지정 (= 최신) 결과만. ym 지정 시는 직접 계산.
+    """
+    # ym 지정된 경우는 ad-hoc 호출 — cache 안 씀
+    if ym:
+        return compute_sgg_overview(ym)
+
+    from database.supabase_client import get_client
+    client = get_client()
+    try:
+        r = (
+            client.table('app_cache')
+            .select('payload,updated_at')
+            .eq('cache_key', SGG_OVERVIEW_CACHE_KEY)
+            .limit(1)
+            .execute()
+        )
+        if r.data:
+            return r.data[0]['payload']
+    except Exception as e:
+        print(f'[sgg-overview] cache read 실패: {e}')
+
+    # cache miss 안전망 — 직접 계산 후 적재 (다음 호출부터 빠름)
+    payload = compute_sgg_overview('')
+    try:
+        client.table('app_cache').upsert(
+            {'cache_key': SGG_OVERVIEW_CACHE_KEY, 'payload': payload},
+            on_conflict='cache_key',
+        ).execute()
+    except Exception as e:
+        print(f'[sgg-overview] cache write 실패: {e}')
+    return payload
 
 
 # GET /complex-compare — 단지(apt_seq) 2~4개 나란히 비교용 12개월 시계열

@@ -471,6 +471,20 @@ def run_pipeline(light: bool = False) -> None:
             print(f'  [ERP] 실패: {e}')
             traceback.print_exc()
 
+        # Step 5e: 부동산 sgg-overview 캐시 갱신 (지도 폴리곤 색칠용 ~12s → ~50ms)
+        print('\n[Step 5e] 부동산 sgg-overview 캐시 갱신...')
+        try:
+            from api.routers.real_estate import compute_sgg_overview, SGG_OVERVIEW_CACHE_KEY
+            from database.supabase_client import get_client as _get_c
+            payload = compute_sgg_overview('')
+            _get_c().table('app_cache').upsert(
+                {'cache_key': SGG_OVERVIEW_CACHE_KEY, 'payload': payload},
+                on_conflict='cache_key',
+            ).execute()
+            print(f'  [Cache] sgg_overview {len(payload)}개 시군구 적재')
+        except Exception as e:
+            print(f'  [Cache] sgg_overview 갱신 실패, 건너뜀: {e}')
+
         # Step 5c: 경량 모드 Noise HMM 실시간 예측 (기존 모델 사용, 학습 없음)
         print('\n[Step 5c] Noise HMM 실시간 예측...')
         try:

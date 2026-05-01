@@ -405,3 +405,14 @@ ALTER TABLE valuation_signal
     -- 사전 계산 캐시 (스케줄러가 매일 채움 → endpoint 는 DB 만 select)
     ADD COLUMN IF NOT EXISTS interpretation    TEXT,    -- LLM 해설 1문단
     ADD COLUMN IF NOT EXISTS baseline_snapshot JSONB;   -- {erp, vix, dd, weights} 5Y 평균
+
+
+-- ── 범용 app_cache ──
+-- 무거운 endpoint 의 결과를 스케줄러가 미리 계산해 적재 → endpoint 는 select 1번
+-- 으로 즉시 응답. 첫 cache miss 일 땐 endpoint 가 fallback 으로 직접 계산 후 적재.
+CREATE TABLE IF NOT EXISTS app_cache (
+    cache_key  TEXT PRIMARY KEY,
+    payload    JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;

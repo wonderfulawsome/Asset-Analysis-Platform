@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-01 (시장 밸류 첫 사용자 latency 60s → 3.3s — valuation_signal 에 interpretation/baseline_snapshot 컬럼 + scheduler [Step 5d] 가 매일 LLM·baseline 적재 + endpoint DB-only fast-path. update.py [65])
+마지막 갱신 시점: 2026-05-01 (부동산 sgg-overview 11.6s → 1s — generic app_cache 테이블 + scheduler [Step 5e] 가 compute_sgg_overview 결과를 매일 적재 + endpoint cache select. update.py [66])

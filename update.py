@@ -5301,3 +5301,46 @@ ALTER TABLE valuation_signal
 # [안전망]
 # legacy row (interpretation/baseline_snapshot 둘 다 None) 인 경우 endpoint 가
 # on-the-fly 계산 → 응답 즉시. 단 결과를 DB 에 다시 적재하지 않음 (스케줄러 책임).
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [66] 2026-05-01 (UTC) — 부동산 sgg-overview 11.6s → 1s (app_cache 도입)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 부동산 지도 첫 로딩이 매우 느린 원인 — `/api/realestate/sgg-overview` 가
+# region_summary 4650행을 페이지네이션으로 fetch + Python 측에서 시군구별 그룹핑
+# = 매 호출마다 ~11.6초. 시장 밸류와 동일 패턴 (사전계산 → DB cache → endpoint
+# select) 으로 해결. 추후 다른 endpoint 도 같은 패턴 재사용 위해 generic
+# `app_cache` 테이블 신설.
+
+# [신규 테이블]
+CREATE TABLE IF NOT EXISTS app_cache (
+    cache_key  TEXT PRIMARY KEY,
+    payload    JSONB NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
+
+# [수정 파일]
+# - supabase_tables.sql: app_cache 신설 + DISABLE RLS
+# - api/routers/real_estate.py
+#     1) compute_sgg_overview(ym='') helper 로 본 계산 로직 추출
+#     2) GET /sgg-overview: ym 없으면 app_cache 에서 select(1번) → miss 시
+#        helper 호출 + cache 적재 (안전망). ym 지정 시는 ad-hoc 계산
+#     3) cache_key 상수 SGG_OVERVIEW_CACHE_KEY = 'sgg_overview'
+# - scheduler/job.py [Step 5e] 신설:
+#     매 light pipeline 마다 compute_sgg_overview('') → app_cache upsert
+#     (Step 5d ERP enrich 와 동일 패턴, 매일 자동 갱신)
+
+# [Latency (로컬 측정, prod Supabase egress 포함)]
+# 이전: 11.6초 (region_summary 4650행 페이지네이션 5번 + group by)
+# 신규: 평균 ~1초 (app_cache select 1번, payload 13KB)
+# → ~11배 개선. prod Railway 는 Supabase 와 같은 region 가능성 → 더 빠를 수도
+
+# [DDL — prod Supabase 1회 실행]
+# 위 CREATE TABLE 실행 (사용자 완료).
+
+# [확장 패턴]
+# app_cache 는 generic — 추후 무거운 endpoint (stdg-detail, signal/history 등)
+# 도 같은 패턴으로 캐시 추가 가능. 키 prefix 로 영역 구분 가능 (ex 'sgg_overview',
+# 'market_summary', ...).
