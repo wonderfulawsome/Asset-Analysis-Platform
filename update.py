@@ -5374,3 +5374,24 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 #   생성은 ~100~300ms 정도 (큰 부담 X).
 # - 진정한 zero-flash 는 MapScreen 을 항상 mount 시키고 detail 만 overlay
 #   구조 변경 필요 (App.tsx 라우팅 재설계). 추후 작업 후보.
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [68] 2026-05-02 (UTC) — 펀더멘털 인사이트 라벨 단순화 (5종 → 2종)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# 펀더멘털 탭의 "RATIONAL GREED" / "IRRATIONAL FEAR" 등 5종 영문 라벨이
+# 사용자에게 직관적이지 않음. 사용자 요청대로 noiseScore 부호만 사용해
+# "이성적 상태" / "감정적 상태" 2종으로 단순화.
+
+# [수정 파일]
+# - static/js/main.js : _buildFgNoiseInsight 재작성
+#     기존: SENTIMENT(공포/탐욕) × NOISE(이성/감정) 4 조합 + NEUTRAL = 5 라벨
+#     신규: noiseScore >= 0 → '이성적 상태', < 0 → '감정적 상태' 2 라벨
+#     공포탐욕 지수는 fgPart prefix 로 메시지에만 표시 (라벨 분기 X)
+#     "SENTIMENT × NOISE" 보조 문구 → "시장 이성 점수 ±X.X" 한글 + 숫자
+# - templates/stocks.html : main.js?v=114 → ?v=115 (캐시 버스트)
+
+# [효과]
+# - 사용자 직관성 ↑ (영문 약어 사라짐, 부호 한 축만 보면 됨)
+# - 시장 이성 점수 수치도 함께 표시 (이전엔 라벨로만 추정)

@@ -3,46 +3,28 @@ var _csData = null;
 var _nrData = null;
 var _fgData = null;  // 공포탐욕 데이터 캐시 (인사이트 연동용)
 
-// ── 공포탐욕 × 시장 이성 점수 인사이트 ──
-// 부호 컨벤션: 양수 = 이성적, 음수 = 감정적/괴리
+// ── 시장 이성 점수 인사이트 — 양수=이성적, 음수=감정적 (단순 2분할) ──
 function _buildFgNoiseInsight(noiseScore) {
-  if (!_fgData || noiseScore == null) return '';
-  const rating = _fgData.rating;
-  const score = _fgData.score;
-  const FEAR_SET = new Set(['공포', '극도 공포']);
-  const GREED_SET = new Set(['탐욕', '극도 탐욕']);
+  if (noiseScore == null) return '';
+  const fgPart = _fgData ? `심리 지수 ${_fgData.score} · ` : '';
 
-  let msg, color, tag, tagColor;
-  if (FEAR_SET.has(rating)) {
-    if (noiseScore < 0) {
-      tag = 'IRRATIONAL FEAR';
-      msg = `공포 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 공포가 감지됩니다`;
-      color = '#3B82F6'; tagColor = '#60A5FA';
-    } else {
-      tag = 'RATIONAL FEAR';
-      msg = `공포 지수 ${score} — 펀더멘털 약화가 확인된 구간으로, 현재 공포는 근거가 있습니다`;
-      color = '#EF4444'; tagColor = '#F87171';
-    }
-  } else if (GREED_SET.has(rating)) {
-    if (noiseScore < 0) {
-      tag = 'IRRATIONAL GREED';
-      msg = `탐욕 지수 ${score} — 펀더멘털 괴리 구간에서 과도한 낙관이 감지됩니다`;
-      color = '#EF4444'; tagColor = '#F87171';
-    } else {
-      tag = 'RATIONAL GREED';
-      msg = `탐욕 지수 ${score} — 펀더멘털이 뒷받침하는 상승 구간입니다`;
-      color = '#22C55E'; tagColor = '#4ADE80';
-    }
+  let tag, msg, color, tagColor;
+  if (noiseScore >= 0) {
+    tag = '이성적 상태';
+    msg = `${fgPart}펀더멘털과 주가 흐름이 잘 일치하는 구간`;
+    color = '#22C55E';
+    tagColor = '#4ADE80';
   } else {
-    tag = 'NEUTRAL';
-    msg = `심리 지수 ${score} — 시장 심리와 펀더멘털 간 뚜렷한 괴리 없음`;
-    color = '#F97316'; tagColor = '#FB923C';
+    tag = '감정적 상태';
+    msg = `${fgPart}펀더멘털과 주가 사이 괴리가 두드러진 구간`;
+    color = '#EF4444';
+    tagColor = '#F87171';
   }
 
   return `<div class="nr-insight" style="margin-top:12px;padding:10px 12px;border-radius:8px;background:${color}08;border-left:3px solid ${color}">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-      <span style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;letter-spacing:1px;color:${tagColor};padding:2px 6px;border:1px solid ${color}30;border-radius:3px">${tag}</span>
-      <span style="font-family:'SF Mono',Consolas,monospace;font-size:10px;color:var(--sub2)">SENTIMENT × NOISE</span>
+      <span style="font-size:11px;font-weight:700;color:${tagColor};padding:2px 8px;border:1px solid ${color}30;border-radius:3px">${tag}</span>
+      <span style="font-size:10px;color:var(--sub2)">시장 이성 점수 ${noiseScore >= 0 ? '+' : ''}${noiseScore.toFixed(1)}</span>
     </div>
     <div style="font-size:12px;color:var(--sub);line-height:1.5">${msg}</div>
   </div>`;
