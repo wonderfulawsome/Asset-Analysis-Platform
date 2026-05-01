@@ -145,6 +145,7 @@ export interface BuySignal {
     price_consec_months?: number;          // +N 연속 상승 / -N 연속 하락
     trade_consec_months?: number;
     trade_vs_long_ratio?: number | null;   // t-1 거래량 / 직전 12개월 평균 (1.0=동등)
+    compare_n_months?: number;             // older 평균 산출 시 사용된 개월 수 (라벨용)
     // Step B (ECOS)
     base_rate?: number | null;
     base_rate_drop_pct?: number;

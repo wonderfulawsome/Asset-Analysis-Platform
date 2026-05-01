@@ -217,6 +217,8 @@ def compute_buy_signal(
         "trade_chg_pct": round(trade_chg * 100, 2),
         "price_mom_pct": round(price_mom * 100, 2),
         "pop_chg_pct": round(pop_chg * 100, 2),
+        # 비교 기준 = older 의 실제 개월 수 ("최근 N개월 평균 대비" 라벨용)
+        "compare_n_months": len(older),
         # 지속성 (FeatureCard summary 문장 조합용)
         "price_consec_months": price_consec,        # +3 = 3개월 연속 상승, -2 = 2개월 연속 하락
         "trade_consec_months": trade_consec,

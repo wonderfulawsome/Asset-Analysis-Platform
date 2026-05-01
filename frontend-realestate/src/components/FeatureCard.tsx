@@ -149,6 +149,9 @@ function buildSummary(
   const sigLabel = signal?.signal;
 
   const sentences: string[] = [];
+  // 비교 기준 개월 수 — backfill 길이에 따라 가변. 1 일 때 "직전 1개월", 그 외 "최근 N개월 평균"
+  const cmpN = fb?.compare_n_months ?? 0;
+  const baseLabel = cmpN <= 1 ? "직전 1개월" : `최근 ${cmpN}개월 평균`;
 
   // ① 가격 지속성 (price_consec_months: +N 연속 상승 / -N 연속 하락)
   const priceConsec = fb?.price_consec_months;
@@ -157,13 +160,13 @@ function buildSummary(
     sentences.push(`매매가는 ${Math.abs(priceConsec)}개월 연속 ${dir} 중입니다`);
   } else if (fb?.price_mom_pct != null) {
     const dir = fb.price_mom_pct >= 0 ? "반등" : "하락";
-    sentences.push(`매매가는 평소 대비 ${fb.price_mom_pct >= 0 ? "+" : ""}${fb.price_mom_pct.toFixed(1)}% ${dir}`);
+    sentences.push(`매매가는 ${baseLabel} 대비 ${fb.price_mom_pct >= 0 ? "+" : ""}${fb.price_mom_pct.toFixed(1)}% ${dir}`);
   } else if (change != null) {
     const dir = change >= 0 ? "상승" : "하락";
     sentences.push(`3개월 가격 변화 ${change >= 0 ? "+" : ""}${change.toFixed(1)}% ${dir}`);
   }
 
-  // ② 거래량 — 장기평균 대비
+  // ② 거래량 — 12개월 평균 대비 (trade_vs_long_ratio 는 fix 12)
   const tradeRatio = fb?.trade_vs_long_ratio;
   if (tradeRatio != null) {
     if (tradeRatio < 0.85) {
@@ -175,7 +178,7 @@ function buildSummary(
     }
   } else if (fb?.trade_chg_pct != null) {
     const dir = fb.trade_chg_pct >= 0 ? "증가" : "위축";
-    sentences.push(`거래량은 평소 대비 ${fb.trade_chg_pct >= 0 ? "+" : ""}${fb.trade_chg_pct.toFixed(1)}% ${dir}`);
+    sentences.push(`거래량은 ${baseLabel} 대비 ${fb.trade_chg_pct >= 0 ? "+" : ""}${fb.trade_chg_pct.toFixed(1)}% ${dir}`);
   }
 
   // ③ 시그널
