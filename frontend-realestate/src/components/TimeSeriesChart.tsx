@@ -30,13 +30,18 @@ export default function TimeSeriesChart({
 
   const W = 340, H = 120, PAD_X = 6, PAD_Y = 18;
   const values = valid.map((d) => d.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = Math.max(max - min, Math.abs(max) * 0.05 || 1);  // 변화가 0이면 5% 여백
+  const dataMin = Math.min(...values);
+  const dataMax = Math.max(...values);
+  // 점이 차트 상하단에 닿지 않도록 데이터 범위의 15% 패딩 추가 (양쪽).
+  // 변화 0 일 때는 절대값의 5% 또는 1 을 최소 범위로.
+  const dataRange = Math.max(dataMax - dataMin, Math.abs(dataMax) * 0.05 || 1);
+  const padding = dataRange * 0.15;
+  const yMin = dataMin - padding;
+  const range = dataRange + padding * 2;
 
   const points = valid.map((d, i) => {
     const x = PAD_X + ((W - 2 * PAD_X) * i) / (valid.length - 1);
-    const y = H - PAD_Y - ((H - 2 * PAD_Y) * (d.value - min)) / range;
+    const y = H - PAD_Y - ((H - 2 * PAD_Y) * (d.value - yMin)) / range;
     return { x, y, ...d };
   });
   const path = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
@@ -62,11 +67,11 @@ export default function TimeSeriesChart({
         ))}
       </svg>
       <div className="flex justify-between text-[10px] text-gray-500 mt-1">
-        <span>최소 {format(min)}</span>
+        <span>최소 {format(dataMin)}</span>
         <span className="text-gray-300 font-semibold">
           최근 {format(values[values.length - 1])}
         </span>
-        <span>최대 {format(max)}</span>
+        <span>최대 {format(dataMax)}</span>
       </div>
     </div>
   );
