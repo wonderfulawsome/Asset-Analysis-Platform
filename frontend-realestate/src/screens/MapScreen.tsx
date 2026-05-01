@@ -178,6 +178,9 @@ export default function MapScreen() {
         onTap={() => {
           if (selected?.topStdgCd) navigate(`/stdg/${selected.topStdgCd}`);
         }}
+        onTapSgg={() => {
+          if (selected?.sggCd) navigate(`/region/${selected.sggCd}`);
+        }}
         onClose={() => {
           setSelected(null);
           setSignal(null);

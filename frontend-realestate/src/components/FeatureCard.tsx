@@ -13,8 +13,9 @@ interface Props {
   selected: SelectedRegion | null;
   signal: BuySignal | null;
   topStdgSummary: RegionSummary | null;
-  loading?: boolean;       // fetch 진행 중이면 "-" 대신 스피너 표시
-  onTap: () => void;
+  loading?: boolean;          // fetch 진행 중이면 "-" 대신 스피너 표시
+  onTap: () => void;          // 카드 본체 탭 → 법정동 상세
+  onTapSgg?: () => void;      // "구 전체" 보조 버튼 → 시군구 상세 (시계열 차트)
   onClose: () => void;
 }
 
@@ -27,7 +28,7 @@ function Spinner() {
   );
 }
 
-export default function FeatureCard({ selected, signal, topStdgSummary, loading, onTap, onClose }: Props) {
+export default function FeatureCard({ selected, signal, topStdgSummary, loading, onTap, onTapSgg, onClose }: Props) {
   if (!selected) return null;
 
   const change = selected.changePct;
@@ -101,9 +102,20 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
             />
           </div>
 
-          {/* CTA */}
-          <div className="border-t border-gray-800 pt-3 flex justify-between items-center">
-            <span className="text-sm text-gray-400">전체 분석 읽기</span>
+          {/* CTA — 카드 본체 = 법정동 상세 / "구 전체" = 시군구 시계열 차트 */}
+          <div className="border-t border-gray-800 pt-3 flex justify-between items-center gap-3">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTapSgg?.();
+              }}
+              disabled={!onTapSgg}
+              className="text-xs text-gray-300 px-3 py-1 rounded-md bg-gray-800 hover:bg-gray-700 disabled:opacity-40"
+            >
+              구 전체 추이 →
+            </button>
+            <span className="text-sm text-gray-400 ml-auto">전체 분석</span>
             <span className="text-orange-400 font-semibold text-sm tracking-wide">
               READ →
             </span>
