@@ -5344,3 +5344,33 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 # app_cache 는 generic — 추후 무거운 endpoint (stdg-detail, signal/history 등)
 # 도 같은 패턴으로 캐시 추가 가능. 키 prefix 로 영역 구분 가능 (ex 'sgg_overview',
 # 'market_summary', ...).
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [67] 2026-05-01 (UTC) — 부동산 SPA detail 복귀 시 지도 재로딩 회피 (frontend cache)
+# ════════════════════════════════════════════════════════════════════════════
+# [개요]
+# /realestate 에서 시군구 상세 → 뒤로가기로 지도 복귀 시 MapScreen 이 unmount
+# 됐다 재마운트 → useEffect 가 sgg-overview + GeoJSON 다시 fetch → 1~2초 빈
+# 지도 표시. SPA 라우팅 기본 동작.
+
+# [수정 파일]
+# - frontend-realestate/src/screens/MapScreen.tsx
+#     1) module-level 캐시 변수 3개:
+#        _cachedPolygons, _cachedOverviews, _cachedGeoJson
+#     2) initial state 가 캐시값 (있으면) 으로 즉시 채워짐 → 첫 paint 부터 표시
+#     3) useEffect 에서 캐시 hit 시 fetch skip (early return)
+#     4) loadPolygons 가 fetchGeoJson() 헬퍼로 GeoJSON 도 캐시
+# - static/realestate/{index.html, assets/} 재빌드 (npm run build)
+
+# [효과]
+# - 첫 진입: 기존과 동일 (~1초 sgg-overview + ~50ms GeoJSON)
+# - detail 복귀: 즉시 (캐시 hit, fetch 0회)
+# - 페이지 새로고침: 모듈 다시 로드되므로 캐시 초기화 (1회 fetch 필요)
+
+# [한계]
+# - 카카오맵 인스턴스는 매 mount 마다 재생성 (KakaoMap 컨테이너 ref 가 새로
+#   생성되므로 inevitable). SDK 자체는 sdkPromise 로 1회만 로드 → 인스턴스
+#   생성은 ~100~300ms 정도 (큰 부담 X).
+# - 진정한 zero-flash 는 MapScreen 을 항상 mount 시키고 detail 만 overlay
+#   구조 변경 필요 (App.tsx 라우팅 재설계). 추후 작업 후보.

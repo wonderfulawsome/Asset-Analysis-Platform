@@ -12,6 +12,19 @@ import type { SggOverview, BuySignal, RegionSummary } from "../types/api";
 // southkorea-maps(2013) 데이터를 행안부 LAWD_CD(5자리)로 변환해
 // metro-sgg.geojson 으로 저장하므로, properties.sgg_cd 를 직접 읽어서 매칭.
 
+// 모듈 레벨 캐시 — 라우팅으로 MapScreen unmount 후 재마운트 시 fetch 재실행 회피.
+// 첫 마운트만 비동기 fetch, 이후 마운트는 캐시값으로 즉시 setState.
+let _cachedPolygons: PolygonFeature[] | null = null;
+let _cachedOverviews: Map<string, SggOverview> | null = null;
+let _cachedGeoJson: any = null;
+
+async function fetchGeoJson() {
+  if (_cachedGeoJson) return _cachedGeoJson;
+  const res = await fetch("/static/realestate/geojson/metro-sgg.geojson");
+  _cachedGeoJson = await res.json();
+  return _cachedGeoJson;
+}
+
 interface SelectedRegion {
   sggCd: string;
   sggNm: string;
@@ -23,8 +36,7 @@ interface SelectedRegion {
 
 // GeoJSON FeatureCollection → KakaoMap 의 PolygonFeature[] 로 변환.
 async function loadPolygons(overviews: Map<string, SggOverview>): Promise<PolygonFeature[]> {
-  const res = await fetch("/static/realestate/geojson/metro-sgg.geojson");
-  const geo = await res.json();
+  const geo = await fetchGeoJson();
   const polys: PolygonFeature[] = [];
   for (const feat of geo.features ?? []) {
     const sggCd = feat.properties?.sgg_cd as string | undefined;
@@ -55,22 +67,29 @@ async function loadPolygons(overviews: Map<string, SggOverview>): Promise<Polygo
 
 export default function MapScreen() {
   const navigate = useNavigate();
-  const [polygons, setPolygons] = useState<PolygonFeature[]>([]);
-  const [overviews, setOverviews] = useState<Map<string, SggOverview>>(new Map());
+  // 모듈 캐시 hit 시 초기 state 가 즉시 채워져 첫 paint 부터 지도·색상 표시
+  const [polygons, setPolygons] = useState<PolygonFeature[]>(_cachedPolygons ?? []);
+  const [overviews, setOverviews] = useState<Map<string, SggOverview>>(_cachedOverviews ?? new Map());
   const [selected, setSelected] = useState<SelectedRegion | null>(null);
   const [signal, setSignal] = useState<BuySignal | null>(null);
   const [topStdgSummary, setTopStdgSummary] = useState<RegionSummary | null>(null);
 
   useEffect(() => {
+    // 캐시 hit 면 fetch skip — detail 페이지에서 돌아왔을 때 즉시 표시
+    if (_cachedPolygons && _cachedOverviews) return;
     let cancelled = false;
     apiFetch<SggOverview[]>(ENDPOINTS.sggOverview())
       .then(async (rows) => {
         if (cancelled) return;
         const map = new Map<string, SggOverview>();
         rows.forEach((r) => map.set(r.sgg_cd, r));
+        _cachedOverviews = map;
         setOverviews(map);
         const polys = await loadPolygons(map);
-        if (!cancelled) setPolygons(polys);
+        if (!cancelled) {
+          _cachedPolygons = polys;
+          setPolygons(polys);
+        }
       })
       .catch((e) => console.error("[MapScreen] load fail", e));
     return () => { cancelled = true; };
@@ -112,6 +131,7 @@ export default function MapScreen() {
         onPolygonClick={handlePolygonClick}
         center={{ lat: 37.45, lng: 127.0 }}
         level={11}
+        maxLevel={11}
       />
 
       {/* 플로팅 상단 검색바 */}
