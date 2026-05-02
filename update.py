@@ -6208,6 +6208,45 @@ if sgg_mapping is None:
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# [81] 2026-05-02 (UTC) — 첫 로딩 가속: supabase TLS warmup + GZip middleware
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# 사용자: "맨 처음 로딩이 느리다". 실측 — sgg-overview cold = 6.3s, warm = 0.2s.
+# 원인 (1) supabase TLS 핸드셰이크가 첫 요청자에게 동기 발생 (uvicorn boot 후 첫 호출자
+# 가 TLS 비용 부담). (2) 응답 21KB JSON 비압축 전송.
+
+# [수정 파일]
+# api/app.py
+# - lifespan() 끝에 supabase 1회 ping → uvicorn boot 시점에 TLS 미리 수행. 첫 요청
+#   6.3s → 0.6s (10x). startup 시간만 0.5s 늘어나는 트레이드.
+# - GZipMiddleware(minimum_size=500) — Starlette 규약상 마지막 add 가 outermost
+#   라 CORS 다음에 add. sgg-overview 21KB → 3KB (-86%). region-detail 5.8KB → ~1.5KB.
+
+# [핵심 코드]
+from fastapi.middleware.gzip import GZipMiddleware
+
+# lifespan 안:
+try:
+    from database.supabase_client import get_client
+    get_client().table('app_cache').select('cache_key').limit(1).execute()
+    print('[App] supabase warmup OK')
+except Exception as e:
+    print(f'[App] supabase warmup 실패 (무시): {e}')
+
+# 미들웨어 등록 순서 — CORS 먼저, GZip 나중에 (GZip 이 outermost 가 되어 응답을 압축)
+app.add_middleware(CORSMiddleware, allow_origins=['*'], ...)
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# [검증]
+# - sgg-overview cold: 6.3s → 0.6s (warmup 효과)
+# - sgg-overview wire: 21400B → 3034B (gzip 86% 압축)
+# - openapi.json 도 자동 압축 적용
+# - TestClient + curl --compressed 양쪽에서 content-encoding: gzip 확인
+# - middleware stack 검증: ServerError → GZip → CORS → Exception → Router (외→내)
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # [78] 2026-05-02 (UTC) — KR Stage 3.2b: HMM 학습 + 스케줄러 통합
 # ════════════════════════════════════════════════════════════════════════════
 
@@ -6295,3 +6334,21 @@ if sgg_mapping is None:
 # [검증]
 # - python ast.parse 4개 파일 모두 OK
 # - 사용자 backfill_kr 재실행 시 KS11 폴백 시작 확인 필요
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [80] 2026-05-02 (UTC) — KR 3-단 폴백 + index_price_raw 스키마 정합
+# ════════════════════════════════════════════════════════════════════════════
+# 1) FDR 도 내부적으로 pykrx 사용해 KRX 장애 시 함께 실패 → yfinance 3차 폴백 추가
+# 2) DB 에러 PGRST204 'name' 컬럼 없음 → record 에서 'name'/'volume' 제거
+#
+# 수정:
+# - collector/market_data_kr.py
+#     · _fdr_fallback_index — FDR 실패 시 yfinance(^KS11) 자동 폴백
+#     · _etf_ohlcv_fallback — 3단: pykrx → FDR → yfinance(6자리.KS)
+#     · fetch_kr_index_prices_today — record 에서 'name'/'volume' 제거
+# - scripts/backfill_kr.py — sector ETF row 'name'/'volume' 제거
+# - scheduler/job_kr.py — sector ETF row 'name'/'volume' 제거
+#
+# Yahoo 심볼: KOSPI=^KS11, KOSPI200=^KS200, ETF=6자리.KS, 종목=005930.KS
+# 폴백 못 되는: VKOSPI (Yahoo 없음), KR 10Y (Yahoo 404 — ECOS 권장 후속)

@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse, FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -76,6 +77,18 @@ async def lifespan(_app: FastAPI):
             CronTrigger(day=1, hour=18, minute=0),
             id='train_chart_pipeline',
         )
+        # KR Stage 2C: 매일 16:00 KST (= UTC 07:00) 한국 시장 데이터 1회 적재
+        # KR 장 마감(15:30) 후 30분 뒤 — 일별 단위 분석이라 분당 갱신 불필요
+        try:
+            from scheduler.job_kr import run_kr_pipeline
+            scheduler.add_job(
+                run_kr_pipeline,
+                CronTrigger(hour=7, minute=0),  # UTC 07:00 = KST 16:00
+                id='kr_daily_pipeline',
+            )
+            print('[App] KR 일일 파이프라인 등록 (KST 16:00, UTC 07:00)')
+        except Exception as e:
+            print(f'[App] KR 파이프라인 등록 실패 (collector 미설치 가능성): {e}')
         # Stage 4: 모델 .pkl 하나라도 빠져있으면 60초 후 init_once 1회 실행
         models_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
         if _need_init_once(models_dir):
@@ -88,6 +101,13 @@ async def lifespan(_app: FastAPI):
         print('[App] 스케줄러 활성화 (light=10m, full=3h 추론, train=매월 1일 03:00 KST)')
     else:
         print('[App] 스케줄러 비활성화 — 웹 서버 전용 모드 (RUN_SCHEDULER=false)')
+    # Supabase TLS warmup — 첫 요청의 핸드셰이크 5~6초를 startup 으로 옮김
+    try:
+        from database.supabase_client import get_client
+        get_client().table('app_cache').select('cache_key').limit(1).execute()
+        print('[App] supabase warmup OK')
+    except Exception as e:
+        print(f'[App] supabase warmup 실패 (무시): {e}')
     # FastAPI 앱 실행 구간 (요청 처리)
     yield
     # 서버 종료 시 스케줄러 정리
@@ -104,6 +124,9 @@ app.add_middleware(
     allow_methods=["*"],                                  # 모든 HTTP 메서드 허용
     allow_headers=["*"],                                  # 모든 헤더 허용
 )
+
+# GZip 압축 — 마지막 add 가 outermost (Starlette 규약). JSON/HTML/JS/CSS 1KB+ 자동 압축.
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # 정적 파일을 /static url로 요청을 보냄
 app.mount('/static', StaticFiles(directory='static'), name='static')
