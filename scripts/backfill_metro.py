@@ -23,9 +23,16 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
-# 수도권 신규 LAWD_CD (서울 25 제외) — 인천 10 + 경기 42 = 52
+# 수도권 전체 LAWD_CD — 서울 25 + 인천 10 + 경기 42 = 77
+# (역사적 변수명 유지. 서울은 추후 추가됨 — 매월 1ym 누적 외 backfill 필요)
 METRO_NEW_LAWD_CDS: list[str] = [
-    # 인천 (28)
+    # 서울 (11) 25
+    "11110", "11140", "11170", "11200", "11215",
+    "11230", "11260", "11290", "11305", "11320",
+    "11350", "11380", "11410", "11440", "11470",
+    "11500", "11530", "11545", "11560", "11590",
+    "11620", "11650", "11680", "11710", "11740",
+    # 인천 (28) 10
     "28110", "28140", "28177", "28185", "28200",
     "28237", "28245", "28260", "28710", "28720",
     # 경기 (41) — 단일 시·군 25
@@ -110,6 +117,10 @@ def main() -> int:
         sgg_10 = sgg + "00000"
         print(f"\n[{i}/{len(METRO_NEW_LAWD_CDS)}] LAWD_CD {sgg} ({elapsed:.0f}s 경과)", flush=True)
 
+        # mapping 캐시 — sgg 당 1회만 fetch (행정구역 코드는 1년 단위 변경, 12mo 안에서 무시).
+        # 동수 × 12 ym 호출 → 동수 × 1 호출로 감소 (sgg 당 mapping 단계 ~5분 → ~30초).
+        sgg_mapping = None
+
         for ym in yms:
             try:
                 trades = _re_norm_trades(fetch_trades(sgg, ym), sgg, ym)
@@ -124,8 +135,10 @@ def main() -> int:
                 upsert_mois_population(pop)
                 time.sleep(args.sleep)
 
-                mapping = _re_norm_mapping(build_mapping(sgg_10, ym))
-                upsert_stdg_admm_mapping(mapping)
+                if sgg_mapping is None:
+                    sgg_mapping = _re_norm_mapping(build_mapping(sgg_10, ym))
+                    upsert_stdg_admm_mapping(sgg_mapping)
+                mapping = sgg_mapping  # 모든 ym 의 region_summary 에 같은 mapping 재사용
 
                 household: list[dict] = []
                 if args.hh_months > 0 and ym in yms[-args.hh_months:]:
