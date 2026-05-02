@@ -88,6 +88,14 @@ export default function KakaoMap({
         setReady(true);
         // 라우팅 복귀 (detail → 뒤로가기) 시 컨테이너 크기 재측정. relayout 누락 시
         // 지도가 0×0 캔버스로 그려져 폴리곤 자체가 안 보이는 케이스 방지.
+        // ResizeObserver 로 컨테이너 사이즈 변할 때마다 호출 (1회 RAF 만으로는
+        // React 라우팅 lifecycle 와 brave 의 layout timing 이 일관되지 않음).
+        if (containerRef.current && 'ResizeObserver' in window) {
+          const ro = new ResizeObserver(() => mapRef.current?.relayout?.());
+          ro.observe(containerRef.current);
+          // useEffect cleanup 에서 disconnect 하기 위해 ref 에 보관
+          (mapRef.current as any).__ro = ro;
+        }
         requestAnimationFrame(() => mapRef.current?.relayout?.());
       } catch (e: any) {
         if (!cancelled) setError(e.message ?? String(e));
@@ -95,6 +103,9 @@ export default function KakaoMap({
     })();
     return () => {
       cancelled = true;
+      // ResizeObserver disconnect — 메모리 누수 방지
+      const ro = (mapRef.current as any)?.__ro;
+      if (ro) ro.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

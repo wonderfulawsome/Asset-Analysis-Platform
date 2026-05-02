@@ -44,7 +44,8 @@ async function loadPolygons(overviews: Map<string, SggOverview>): Promise<Polygo
     const subKey = feat.properties?.bucheon_sub as string | undefined;
     if (!sggCd || !name) continue;
     const ov = overviews.get(sggCd);
-    const change = ov?.change_pct_3m ?? null;
+    // 폴리곤 색칠 = 전월(1개월) 대비 — 사용자 요청. 빨강=상승, 파랑=하락 (KR 증시 관례).
+    const change = ov?.change_pct_1m ?? null;
     const fillColor = changePctColor(change);
 
     // GeoJSON 좌표 = [lng, lat]. 카카오는 LatLng(lat, lng) 라 변환 필요.
