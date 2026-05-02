@@ -19,6 +19,37 @@
     'market-valuation': { action: 'sector-tab', id: 'tab-market-valuation' },
   };
 
+  // KR 모드 지원 타일 (Stage 3.x). 나머지는 데이터 미적재 → 비활성화.
+  const KR_SUPPORTED_TILES = new Set([
+    'ai-chart', 'market', 'fundamental', 'market-valuation',
+  ]);
+
+  function _isKrMode() {
+    return (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+  }
+
+  // KR 모드 진입 시 미지원 타일 비활성화 + "준비 중" 라벨
+  function applyKrTileGuards() {
+    const isKr = _isKrMode();
+    document.querySelectorAll('.home-tile[data-tile]').forEach(el => {
+      const tile = el.dataset.tile;
+      const supported = !isKr || KR_SUPPORTED_TILES.has(tile);
+      el.classList.toggle('tile-disabled', !supported);
+      // "준비 중" 라벨 토글
+      let badge = el.querySelector('.tile-soon');
+      if (!supported) {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'tile-soon';
+          badge.textContent = '준비 중';
+          el.appendChild(badge);
+        }
+      } else if (badge) {
+        badge.remove();
+      }
+    });
+  }
+
   // 섹터 ETF ticker → 한국어 표시명 (DB·API 는 영어 그대로, 화면 표시만 번역)
   const SECTOR_KR = {
     XLK:  '기술',
@@ -235,9 +266,20 @@
     // conveyor ticker — main.js 의 loadFeed 가 #feed-list 채움 + setupTickerDrift 시작
     if (typeof window.loadFeed === 'function') window.loadFeed();
 
+    // 초기 + region 토글 시 KR 미지원 타일 비활성화
+    applyKrTileGuards();
+
     document.querySelectorAll('.home-tile').forEach(tile => {
       tile.addEventListener('click', () => {
-        if (tile.disabled) return;
+        if (tile.disabled || tile.classList.contains('tile-disabled')) {
+          // KR 모드 미지원 타일 클릭 시 토스트 (없으면 alert 폴백)
+          if (_isKrMode()) {
+            const msg = '한국 시장 데이터 준비 중입니다 (Stage 3 후속).';
+            if (typeof window._showToast === 'function') window._showToast(msg);
+            else console.info(msg);
+          }
+          return;
+        }
         const t = tile.dataset.tile;
         const m = TILE_MAP[t];
         if (!m) return;
