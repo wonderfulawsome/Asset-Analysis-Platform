@@ -68,7 +68,10 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
             <span>{ymLabel} · UPD</span>
           </div>
 
-          {/* 동 이름 */}
+          {/* 시군구 (작게 위) + 동 이름 (큼) */}
+          {selected.topStdgNm && (
+            <div className="text-xs text-gray-400 mb-1">{selected.sggNm}</div>
+          )}
           <h2 className="text-2xl font-bold mb-3 text-white">
             {selected.topStdgNm ?? selected.sggNm}
           </h2>
