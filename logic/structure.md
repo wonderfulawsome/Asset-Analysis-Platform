@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-02 (부천 mapping/population 옛 일반구(41192/41196) 합산 — backfill_metro.py 의 부천 분기 확장(stdg 7→24, region_summary 7→9 stdg 활성), database/repositories.py upsert_region_summary 에 NaN/pd.NA→None + INT 컬럼 float→int 캐스팅 스크럽 추가. app_cache 3종(sgg_overview, region_detail:41194, ranking) 즉시 재계산. update.py [78])
+마지막 갱신 시점: 2026-05-02 (부천(41194) mapping/population 옛 일반구(41192/41196) 합산 — backfill_metro.py 부천 분기 확장(mapping stdg 7→24, region_summary 활성 stdg 7→9), database/repositories.py upsert_region_summary 에 NaN/pd.NA→None + INT 컬럼 float→int 캐스팅 스크럽 추가, frontend-realestate/public/geojson/metro-sgg.geojson 부천 3폴리곤(소사·원미·오정 모두 sgg_cd=41194 동일)→1 MultiPolygon "부천시" 병합(79→77 features)으로 시각적 혼선 제거, app_cache 3종(sgg_overview·region_detail:41194·ranking) 즉시 재계산. update.py [80])

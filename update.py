@@ -6112,7 +6112,7 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 
 
 # ════════════════════════════════════════════════════════════════════════════
-# [78] 2026-05-02 (UTC) — 부천 mapping/population 옛 일반구 합산 (옥길동만 보이던 버그 fix)
+# [80] 2026-05-02 (UTC) — 부천 mapping/population 옛 일반구 합산 + 3폴리곤→1폴리곤 병합
 # ════════════════════════════════════════════════════════════════════════════
 
 # [개요]
@@ -6188,10 +6188,23 @@ if sgg_mapping is None:
 #   → METRO_NEW_LAWD_CDS 에 이미 일반구 코드들 들어있어 별개로 backfill 됨 → 부천만 단일 issue.
 # - 향후 sgg/일반구 통합 변경 시 backfill_metro.py 의 extra_lawd_cds 분기 점검.
 
+# [추가 fix — geojson 폴리곤 병합]
+# 위 backfill 후에도 사용자가 새로고침해도 부천을 클릭하면 여전히 "옥길동" 만 표시됐음.
+# 원인: frontend-realestate/public/geojson/metro-sgg.geojson 에 부천이 옛 일반구 경계대로
+# 3개 Polygon (소사구/원미구/오정구) 으로 분할 저장되어 있는데 모두 sgg_cd=41194 로 같은
+# sgg-overview entry 호출 → 같은 top_stdg=옥길동 (평단가 1위) 카드. 시각적 분할이
+# 사용자에게 "각 영역마다 다른 데이터" 라는 오인을 유발.
+#
+# 처리: 3 Polygon → 1 MultiPolygon (name="부천시", sgg_cd 유지) 합병 + frontend 빌드 재배포.
+# 결과: 79 features → 77 features. 부천 어느 곳을 클릭해도 1개 카드 일관 표시.
+# (다른 동 보고 싶으면 카드의 "구 전체 추이 →" 클릭 → RegionDetail 의 9 stdg 리스트)
+
 # [검증]
 # - python -c "import scripts.backfill_metro" OK
-# - 실 backfill 결과: mapping 7→24 stdg, region_summary 7→24/월 row 확장
-#   (자세한 후속 검증은 단순 SELECT count 로 완료)
+# - 실 backfill 결과: mapping 7→24 stdg, region_summary 7→9 활성 stdg 확장 (거래 기준)
+#   (4119410800 중동 158, 4119410900 상동 79, 4119410500 송내 59, 4119410300 범박 50,
+#    4119410400 괴안 45, 4119410600 옥길 26, 4119410700 역곡 26, 4119410200 심곡본 18)
+# - frontend npm run build 성공, geojson 79→77 features 확인
 
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -6237,3 +6250,48 @@ if sgg_mapping is None:
 # [한계]
 # - vix_term KR 정의가 US 와 의미 차이 (단기/장기 implied vol → mean reversion proxy)
 # - hy_spread KR=US 그대로 (글로벌 신용 환경)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [79] 2026-05-02 (UTC) — KR Stage 3.x: pykrx → FinanceDataReader 폴백 일괄 추가
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# pykrx 가 KRX 사이트와 통신 못하는 일시적 장애 시 (KeyError: '지수명' 등) KR 파이프
+# 라인 전체가 실패하던 문제. FDR 가 제공하는 KS11(KOSPI)/KS200/6자리 종목코드를
+# 활용해 자동 폴백하도록 모든 KR collector 통일.
+
+# [수정 파일]
+# - collector/market_data_kr.py
+#     · _fdr_fallback_index(symbol, days) — pykrx 실패 시 FDR 호출, 한글 컬럼 리네임
+#     · fetch_kospi_price_history → pykrx 1차, FDR(KS11) 2차
+#     · fetch_kospi200_price_history → pykrx 1차, FDR(KS200) 2차
+#     · fetch_kospi_per_pbr → pykrx 만 (FDR 미지원 — 빈 DF 반환)
+#     · _etf_ohlcv_fallback(ticker, days) — ETF OHLCV pykrx → FDR(6자리 직접) 폴백
+#     · fetch_kr_index_prices_today — _etf_ohlcv_fallback 사용
+#
+# - collector/sector_etf_kr.py
+#     · _etf_ohlcv_dual_source(ticker, days) — pykrx → FDR 폴백
+#     · fetch_sector_etf_prices_kr — 위 함수 사용
+#
+# - collector/noise_regime_data_kr.py
+#     · _stock_ohlcv_dual(ticker, years) — pykrx get_market_ohlcv → FDR 폴백
+#     · fetch_kr_stock_prices, fetch_kr_amihud_stocks — 위 함수 사용
+#     · fetch_kospi_close_daily — pykrx → FDR(KS11) 폴백
+#
+# - collector/valuation_signal_kr.py
+#     · _kospi_close_dual(years) — pykrx → FDR(KS11) 폴백 헬퍼
+#     · _compute_kr_dd_baseline_5y — _kospi_close_dual 사용
+#     · fetch_valuation_signal_today_kr — KOSPI close 폴백, PER 만 pykrx 의존
+#     · backfill_valuation_signal_kr — KOSPI close 폴백
+
+# [폴백이 안 되는 부분 (pykrx only)]
+# - KOSPI 시총가중 PER (fetch_kospi_per_pbr / get_index_fundamental):
+#   · FDR 가 시총가중 PER 시계열 미제공
+#   · pykrx 실패 시 valuation_signal·noise_regime 둘 다 부분 실패
+#   · 향후: KOSPI 200 ETF (KS200) PER 데이터를 자체 산출하거나 yfinance EWY/EWHA
+#     trailingPE 사용 등 대안 검토
+
+# [검증]
+# - python ast.parse 4개 파일 모두 OK
+# - 사용자 backfill_kr 재실행 시 KS11 폴백 시작 확인 필요
