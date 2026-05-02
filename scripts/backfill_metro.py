@@ -121,15 +121,28 @@ def main() -> int:
         # 동수 × 12 ym 호출 → 동수 × 1 호출로 감소 (sgg 당 mapping 단계 ~5분 → ~30초).
         sgg_mapping = None
 
+        # 부천(41194) 특수 — MOLIT 가 41194 (소사구 지역) 만 반환. 옛 일반구 LAWD_CD
+        # 41192 (원미)·41196 (오정) 도 추가 호출해서 거래 데이터 합쳐 sgg_cd=41194 로 통합.
+        extra_lawd_cds: list[str] = []
+        if sgg == '41194':
+            extra_lawd_cds = ['41192', '41196']
+
         for ym in yms:
             try:
-                trades = _re_norm_trades(fetch_trades(sgg, ym), sgg, ym)
-                upsert_re_trades(trades)
+                trades_all = list(_re_norm_trades(fetch_trades(sgg, ym), sgg, ym))
+                rents_all = list(_re_norm_rents(fetch_rents(sgg, ym), sgg, ym))
                 time.sleep(args.sleep)
-
-                rents = _re_norm_rents(fetch_rents(sgg, ym), sgg, ym)
-                upsert_re_rents(rents)
-                time.sleep(args.sleep)
+                for extra in extra_lawd_cds:
+                    extra_trades = _re_norm_trades(fetch_trades(extra, ym), sgg, ym)  # sgg=41194 로 normalize
+                    trades_all.extend(extra_trades)
+                    time.sleep(args.sleep)
+                    extra_rents = _re_norm_rents(fetch_rents(extra, ym), sgg, ym)
+                    rents_all.extend(extra_rents)
+                    time.sleep(args.sleep)
+                upsert_re_trades(trades_all)
+                upsert_re_rents(rents_all)
+                trades = trades_all
+                rents = rents_all
 
                 pop = _re_norm_population(fetch_population(sgg_10, ym), ym)
                 upsert_mois_population(pop)
