@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-02 (부천 폴리곤 sub-area 별 top_stdg — [80] 의 1MultiPolygon 합병을 되돌리고 3폴리곤(소사·원미·오정) 복원 + properties.bucheon_sub 추가. compute_sgg_overview 에 _bucheon_sub_top 호출 추가 — real_estate_trade_raw 의 umd_nm 기준 직접 집계해서 21 동 분리(MOLIT 가 stdg_cd 9개에 압축한 한계 우회). frontend SggOverview.bucheon_sub_top + KakaoMap onPolygonClick(sggCd, subKey) + MapScreen handlePolygonClick 에서 subKey 우선 매칭. 검증: sosa→옥길동(2663만/평), wonmi→약대동(2559), ojeong→여월동(2763). 직전 작업: 첫 로딩 가속(supabase TLS warmup + GZipMiddleware). update.py [82])
+마지막 갱신 시점: 2026-05-03 (cold-start 후속 fix — api/app.py 에 4분 주기 supabase_keepalive 잡 추가(idle TLS 닫힘 방지), database/supabase_client.py 의 threading.local() → 프로세스 단일 client 로 통합(worker thread 마다 새 pool 만들던 것을 하나로 공유), KakaoMap.tsx 가 지도 인스턴스 생성 후 requestAnimationFrame 로 relayout() 1회 호출(detail 진입→복귀 시 컨테이너 0×0 그려지던 버그 fix). 직전 작업: 부천 폴리곤 sub-area 별 top_stdg(소사→옥길/원미→약대/오정→여월). update.py [83])

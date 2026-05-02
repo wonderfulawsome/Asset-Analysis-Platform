@@ -6316,6 +6316,58 @@ def _bucheon_sub_top(client, ym):
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# [83] 2026-05-03 (UTC) — cold-start 후속 fix: keepalive ping + 단일 client + relayout
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# [81] warmup 적용 후에도 사용자: "여전히 처음 로딩이 느림 + detail 페이지·요약탭 거래량
+# 부분 너무 느림". 재측정 결과 cold = 5.8s 다시 발생. 원인 진단:
+# (1) supabase TLS 가 ~5분 idle 시 닫혀 다음 요청 핸드셰이크 다시 부담
+# (2) database/supabase_client.py 가 threading.local() 이라 worker thread 마다 새
+#     client = 새 httpx pool = 새 TLS handshake → 첫 sgg-overview 후 polygon click
+#     의 /signal /summary 가 다른 thread 에서 처리되면 또 cold
+# (3) KakaoMap.tsx 가 unmount → remount 시 relayout() 안 호출해 컨테이너 0×0 으로
+#     렌더되는 케이스 (사용자 "상세페이지 들어갔다 나오니까 지도가 안 나온다")
+
+# [수정 파일]
+# 1. api/app.py
+#    - 4분 주기 _supabase_keepalive 잡 추가 — 풀의 TLS conn 이 idle 닫히기 전에 ping
+# 2. database/supabase_client.py
+#    - threading.local() → 프로세스 단일 client (httpx.Client 자체가 thread-safe).
+#      모든 worker thread 가 같은 connection pool 사용 → 한 번 warm 되면 모든 후속
+#      요청이 즉시 응답.
+# 3. frontend-realestate/src/components/KakaoMap.tsx
+#    - 지도 인스턴스 생성 후 requestAnimationFrame 로 relayout() 1회 호출 추가.
+#      라우팅 복귀 시 컨테이너 크기 재측정 → 폴리곤 정상 표시.
+
+# [핵심 코드 — supabase_client.py]
+_client: Client | None = None
+def get_client() -> Client:
+    global _client
+    if _client is None:
+        _client = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    return _client
+
+# [핵심 코드 — app.py lifespan]
+def _supabase_keepalive():
+    try:
+        get_client().table('app_cache').select('cache_key').limit(1).execute()
+    except Exception as e:
+        print(f'[App][keepalive] {e}')
+scheduler.add_job(_supabase_keepalive, 'interval', minutes=4, id='supabase_keepalive')
+
+# [핵심 코드 — KakaoMap.tsx]
+mapRef.current = new kakao.maps.Map(containerRef.current, {...});
+setReady(true);
+requestAnimationFrame(() => mapRef.current?.relayout?.());
+
+# [기대 효과]
+# - cold-start 가 idle 후에도 4분 keepalive 로 풀 hot 유지 → 항상 warm 응답
+# - polygon click → /signal /summary 가 어느 worker thread 로 라우팅되든 즉시 응답
+# - detail 진입→복귀 시 지도 안 보이는 버그 해결 (relayout)
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # [78] 2026-05-02 (UTC) — KR Stage 3.2b: HMM 학습 + 스케줄러 통합
 # ════════════════════════════════════════════════════════════════════════════
 

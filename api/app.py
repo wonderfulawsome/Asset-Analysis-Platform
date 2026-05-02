@@ -69,6 +69,14 @@ async def lifespan(_app: FastAPI):
         scheduler = BackgroundScheduler()
         # 경량 파이프라인: 10분마다 최근 데이터만 갱신 (거시지표 + ETF 가격 + 실시간 예측)
         scheduler.add_job(run_pipeline, 'interval', minutes=10, id='light_pipeline', kwargs={'light': True})
+        # supabase TLS keepalive: 4분마다 1회 ping → idle 닫힘 방지 (cold = 5~6s 대신 0.3s 유지)
+        def _supabase_keepalive():
+            try:
+                from database.supabase_client import get_client
+                get_client().table('app_cache').select('cache_key').limit(1).execute()
+            except Exception as e:
+                print(f'[App][keepalive] {e}')
+        scheduler.add_job(_supabase_keepalive, 'interval', minutes=4, id='supabase_keepalive')
         # 전체 파이프라인: 3시간마다 실행 (수집 + HMM/XGBoost/chart 모두 추론, chart 학습 X)
         scheduler.add_job(run_pipeline, 'interval', hours=3, id='full_pipeline')
         # Stage 3: 매월 1일 03:00 KST (= UTC 18:00) chart 5-모델 재학습 1회

@@ -86,6 +86,9 @@ export default function KakaoMap({
           mapRef.current.setMaxLevel(maxLevel);
         }
         setReady(true);
+        // 라우팅 복귀 (detail → 뒤로가기) 시 컨테이너 크기 재측정. relayout 누락 시
+        // 지도가 0×0 캔버스로 그려져 폴리곤 자체가 안 보이는 케이스 방지.
+        requestAnimationFrame(() => mapRef.current?.relayout?.());
       } catch (e: any) {
         if (!cancelled) setError(e.message ?? String(e));
       }
