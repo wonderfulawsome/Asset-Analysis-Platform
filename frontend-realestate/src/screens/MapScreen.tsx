@@ -31,7 +31,7 @@ interface SelectedRegion {
   topStdgNm: string | null;
   topStdgCd: string | null;
   medianPricePerPy: number | null;
-  changePct: number | null;
+  changePct: number | null;        // FeatureCard 표시용 — 1개월(전월) 대비 변화
 }
 
 // GeoJSON FeatureCollection → KakaoMap 의 PolygonFeature[] 로 변환.
@@ -105,7 +105,8 @@ export default function MapScreen() {
       topStdgNm: ov?.top_stdg_nm ?? null,
       topStdgCd: ov?.top_stdg_cd ?? null,
       medianPricePerPy: ov?.median_price_per_py ?? null,
-      changePct: ov?.change_pct_3m ?? null,
+      // FeatureCard 표시용 = 1개월 전 대비 (사용자 의도). 폴리곤 색칠은 3M 그대로.
+      changePct: ov?.change_pct_1m ?? null,
     });
     // 시그널 + 대표 법정동 summary 병렬 fetch — 끝날 때까지 loading=true
     setSignal(null);

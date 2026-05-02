@@ -89,7 +89,7 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
               loading={loading && tradeCount == null}
             />
             <Metric
-              label="3M 변화"
+              label="전월 대비"
               value={changeStr}
               valueColor={changeColor}
               loading={loading && changeStr == null}

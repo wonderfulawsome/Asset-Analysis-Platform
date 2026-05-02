@@ -80,7 +80,8 @@ export interface SggOverview {
   sgg_nm: string | null;
   stats_ym: string;
   median_price_per_py: number | null;
-  change_pct_3m: number | null;
+  change_pct_3m: number | null;        // 3개월 변화 (지도 폴리곤 색칠용)
+  change_pct_1m: number | null;        // 1개월 변화 (FeatureCard 표시용)
   trade_count: number;
   top_stdg_cd: string | null;
   top_stdg_nm: string | null;

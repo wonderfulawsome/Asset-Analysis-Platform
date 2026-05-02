@@ -233,7 +233,7 @@ def compute_sgg_overview(ym: str = '') -> list[dict]:
             d['_ps'] += r['median_price_per_py']
             d['_pn'] += 1
         d['trade_count'] += r.get('trade_count') or 0
-    # 시군구별 최신월(target_ym) 평균 + 3개월 전 평균 → 변화율
+    # 시군구별 최신월(target_ym) 평균 + 3개월/1개월 전 평균 → 변화율 둘 다
     out = []
     sgg_cds = sorted({r['sgg_cd'] for r in rows})
     for sgg_cd in sgg_cds:
@@ -243,19 +243,24 @@ def compute_sgg_overview(ym: str = '') -> list[dict]:
             continue
         # target_ym 또는 가장 가까운 과거
         latest_ym = target_ym if target_ym in yms else yms[-1]
-        # 3개월 전 (없으면 가장 오래된 월)
         try:
             li = yms.index(latest_ym)
         except ValueError:
             continue
-        prev_ym = yms[max(0, li - 3)]
+        prev3_ym = yms[max(0, li - 3)]    # 3개월 전 (지도 폴리곤 색칠용)
+        prev1_ym = yms[max(0, li - 1)]    # 1개월 전 (FeatureCard 표시용 — 사용자 의도)
         latest = by_sm[(sgg_cd, latest_ym)]
-        prev = by_sm[(sgg_cd, prev_ym)]
+        prev3 = by_sm[(sgg_cd, prev3_ym)]
+        prev1 = by_sm[(sgg_cd, prev1_ym)]
         latest_avg = latest['_ps'] / latest['_pn'] if latest['_pn'] else None
-        prev_avg = prev['_ps'] / prev['_pn'] if prev['_pn'] else None
+        prev3_avg = prev3['_ps'] / prev3['_pn'] if prev3['_pn'] else None
+        prev1_avg = prev1['_ps'] / prev1['_pn'] if prev1['_pn'] else None
         change_pct = None
-        if latest_avg and prev_avg and latest_ym != prev_ym:
-            change_pct = round((latest_avg / prev_avg - 1) * 100, 2)
+        if latest_avg and prev3_avg and latest_ym != prev3_ym:
+            change_pct = round((latest_avg / prev3_avg - 1) * 100, 2)
+        change_pct_1m = None
+        if latest_avg and prev1_avg and latest_ym != prev1_ym:
+            change_pct_1m = round((latest_avg / prev1_avg - 1) * 100, 2)
         # 대표 법정동 — target_ym 의 법정동 중 평단가 1위
         top_stdg = max(
             (r for r in rows if r['sgg_cd'] == sgg_cd and r['stats_ym'] == latest_ym),
@@ -267,7 +272,8 @@ def compute_sgg_overview(ym: str = '') -> list[dict]:
             'sgg_nm': None,  # region_summary 에 sgg_nm 컬럼 없음 — 프론트에서 시군구 dictionary 별도 매핑
             'stats_ym': latest_ym,
             'median_price_per_py': round(latest_avg, 0) if latest_avg else None,
-            'change_pct_3m': change_pct,
+            'change_pct_3m': change_pct,           # 3개월 전 대비 (지도 폴리곤 색칠용)
+            'change_pct_1m': change_pct_1m,        # 1개월 전 대비 (FeatureCard 표시용)
             'trade_count': latest['trade_count'],
             'top_stdg_cd': top_stdg['stdg_cd'] if top_stdg else None,
             'top_stdg_nm': top_stdg.get('stdg_nm') if top_stdg else None,
