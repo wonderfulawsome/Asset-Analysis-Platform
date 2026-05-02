@@ -127,7 +127,11 @@ export default function KakaoMap({
     if (!ready || !map || !window.kakao || !polygons || polygons.length === 0) return;
     const { kakao } = window;
     const created: any[] = [];
+    // sgg 별 라벨은 1번만 — 같은 sgg_cd 의 여러 ring 중 가장 큰 ring 의 centroid 에 배치
+    const labelDrawn: Record<string, boolean> = {};
     polygons.forEach((poly) => {
+      // 가장 큰 ring (점 수 기준) 식별 — 라벨 한 번만 표시
+      const biggestRing = poly.paths.reduce((a, b) => (a.length >= b.length ? a : b));
       poly.paths.forEach((ring) => {
         const path = ring.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
         const kpoly = new kakao.maps.Polygon({
@@ -139,12 +143,32 @@ export default function KakaoMap({
           strokeColor: "#111827",
           strokeOpacity: 0.8,
         });
-        // 클릭은 polygon 단위로 — 같은 sgg_cd 의 여러 ring 모두 같은 콜백
         kakao.maps.event.addListener(kpoly, "click", () => onPolygonClick?.(poly.sggCd));
-        // hover 효과: 마우스 진입 시 fillOpacity 증가
         kakao.maps.event.addListener(kpoly, "mouseover", () => kpoly.setOptions({ fillOpacity: 0.65 }));
         kakao.maps.event.addListener(kpoly, "mouseout", () => kpoly.setOptions({ fillOpacity: 0.45 }));
         created.push(kpoly);
+        // 시군구명 라벨 — sgg 별 1번 (가장 큰 ring) 만, 폴리곤 centroid 에 표시
+        if (ring === biggestRing && !labelDrawn[poly.sggCd]) {
+          labelDrawn[poly.sggCd] = true;
+          const cLat = ring.reduce((s, p) => s + p.lat, 0) / ring.length;
+          const cLng = ring.reduce((s, p) => s + p.lng, 0) / ring.length;
+          const labelOverlay = new kakao.maps.CustomOverlay({
+            position: new kakao.maps.LatLng(cLat, cLng),
+            content: `<div style="
+              padding: 1px 6px; font-size: 10px; font-weight: 600;
+              color: #f3f4f6;
+              background: rgba(17, 24, 39, 0.65);
+              border-radius: 4px;
+              white-space: nowrap;
+              text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+              pointer-events: none;
+            ">${poly.name}</div>`,
+            map,
+            yAnchor: 0.5,
+            xAnchor: 0.5,
+          });
+          created.push(labelOverlay);
+        }
       });
     });
     return () => {
