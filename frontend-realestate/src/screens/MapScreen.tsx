@@ -41,6 +41,7 @@ async function loadPolygons(overviews: Map<string, SggOverview>): Promise<Polygo
   for (const feat of geo.features ?? []) {
     const sggCd = feat.properties?.sgg_cd as string | undefined;
     const name = feat.properties?.name as string | undefined;
+    const subKey = feat.properties?.bucheon_sub as string | undefined;
     if (!sggCd || !name) continue;
     const ov = overviews.get(sggCd);
     const change = ov?.change_pct_3m ?? null;
@@ -60,7 +61,7 @@ async function loadPolygons(overviews: Map<string, SggOverview>): Promise<Polygo
         rings.push(ring.map(([lng, lat]: [number, number]) => ({ lat, lng })));
       }
     }
-    polys.push({ sggCd, name, paths: rings, fillColor, changePct: change });
+    polys.push({ sggCd, name, paths: rings, fillColor, changePct: change, subKey });
   }
   return polys;
 }
@@ -96,15 +97,23 @@ export default function MapScreen() {
     return () => { cancelled = true; };
   }, []);
 
-  function handlePolygonClick(sggCd: string) {
+  function handlePolygonClick(sggCd: string, subKey?: string) {
     const ov = overviews.get(sggCd);
-    const sggNm = polygons.find((p) => p.sggCd === sggCd)?.name ?? sggCd;
+    const sggNm = polygons.find((p) => p.sggCd === sggCd && p.subKey === subKey)?.name
+                  ?? polygons.find((p) => p.sggCd === sggCd)?.name
+                  ?? sggCd;
+    // 부천(41194) 만 — 폴리곤 sub_key (sosa/wonmi/ojeong) 와 매칭되는 sub_top 우선 사용.
+    // sub 데이터 없으면 sgg 전체 top 폴백.
+    const sub = subKey ? ov?.bucheon_sub_top?.[subKey] : undefined;
+    const topStdgCd = sub?.top_stdg_cd ?? ov?.top_stdg_cd ?? null;
+    const topStdgNm = sub?.top_stdg_nm ?? ov?.top_stdg_nm ?? null;
+    const medianPp = sub?.median_price_per_py ?? ov?.median_price_per_py ?? null;
     setSelected({
       sggCd,
       sggNm,
-      topStdgNm: ov?.top_stdg_nm ?? null,
-      topStdgCd: ov?.top_stdg_cd ?? null,
-      medianPricePerPy: ov?.median_price_per_py ?? null,
+      topStdgNm,
+      topStdgCd,
+      medianPricePerPy: medianPp,
       // FeatureCard 표시용 = 1개월 전 대비 (사용자 의도). 폴리곤 색칠은 3M 그대로.
       changePct: ov?.change_pct_1m ?? null,
     });
@@ -120,11 +129,25 @@ export default function MapScreen() {
         })
         .catch(() => {})
     );
-    if (ov?.top_stdg_cd) {
+    if (sub) {
+      // 부천 sub-area — raw 집계라 region_summary 에 그 동 row 가 없을 수 있어
+      // backend 가 준 trade_count 를 직접 가짜 RegionSummary 로 set (FeatureCard 거래량 표기용).
+      setTopStdgSummary({
+        sgg_cd: sggCd,
+        stdg_cd: sub.top_stdg_cd,
+        stdg_nm: sub.top_stdg_nm,
+        stats_ym: ov?.stats_ym ?? '',
+        trade_count: sub.trade_count,
+        avg_price: null, median_price: null,
+        median_price_per_py: sub.median_price_per_py,
+        jeonse_count: null, wolse_count: null, avg_deposit: null,
+        population: null, solo_rate: null,
+      } as RegionSummary);
+    } else if (topStdgCd) {
       tasks.push(
         apiFetch<RegionSummary[]>(ENDPOINTS.summary(sggCd))
           .then((rows) => {
-            const match = rows.find((r) => r.stdg_cd === ov.top_stdg_cd) ?? rows[0] ?? null;
+            const match = rows.find((r) => r.stdg_cd === topStdgCd) ?? rows[0] ?? null;
             if (match) setTopStdgSummary(match);
           })
           .catch(() => {})

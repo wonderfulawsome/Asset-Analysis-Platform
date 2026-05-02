@@ -293,6 +293,23 @@ def get_migration(sgg_cd: str = Query(..., description='시군구 코드 5자리
 
 SGG_OVERVIEW_CACHE_KEY = 'sgg_overview'
 
+# 부천(41194) sub-area 매핑 — 옛 일반구 폐지 전 행정구역대로 stdg 분류.
+# 지도 폴리곤이 옛 3개 구로 분할되어 있어 (geojson properties.bucheon_sub) 폴리곤별
+# 그 영역 안의 동들 중 top 을 따로 계산해 표시 (사용자: "지도 영역에 맞는 동이 나와야").
+# 키는 stdg_nm (법정동명, 끝 '동' 포함). 누락 stdg 는 sub 미할당 → 전체 sgg top 으로 폴백.
+BUCHEON_STDG_SUB: dict[str, str] = {
+    # 41194 (옛 소사구) — MOIS 4119400000 반환
+    '계수동': 'sosa', '괴안동': 'sosa', '범박동': 'sosa', '소사본동': 'sosa',
+    '송내동': 'sosa', '심곡본동': 'sosa', '옥길동': 'sosa',
+    # 41192 (옛 원미구) — MOIS 4119200000
+    '도당동': 'wonmi', '상동': 'wonmi', '소사동': 'wonmi', '심곡동': 'wonmi',
+    '약대동': 'wonmi', '역곡동': 'wonmi', '원미동': 'wonmi', '중동': 'wonmi',
+    '춘의동': 'wonmi',
+    # 41196 (옛 오정구) — MOIS 4119600000
+    '고강동': 'ojeong', '내동': 'ojeong', '대장동': 'ojeong', '삼정동': 'ojeong',
+    '여월동': 'ojeong', '오정동': 'ojeong', '원종동': 'ojeong', '작동': 'ojeong',
+}
+
 
 def compute_sgg_overview(ym: str = '') -> list[dict]:
     """sgg-overview 본 계산 — region_summary 4000+ 행 페이지네이션 + 시군구 그룹핑.
@@ -357,12 +374,9 @@ def compute_sgg_overview(ym: str = '') -> list[dict]:
         if latest_avg and prev1_avg and latest_ym != prev1_ym:
             change_pct_1m = round((latest_avg / prev1_avg - 1) * 100, 2)
         # 대표 법정동 — target_ym 의 법정동 중 평단가 1위
-        top_stdg = max(
-            (r for r in rows if r['sgg_cd'] == sgg_cd and r['stats_ym'] == latest_ym),
-            key=lambda x: x.get('median_price_per_py') or 0,
-            default=None,
-        )
-        out.append({
+        sgg_rows = [r for r in rows if r['sgg_cd'] == sgg_cd and r['stats_ym'] == latest_ym]
+        top_stdg = max(sgg_rows, key=lambda x: x.get('median_price_per_py') or 0, default=None)
+        entry = {
             'sgg_cd': sgg_cd,
             'sgg_nm': None,  # region_summary 에 sgg_nm 컬럼 없음 — 프론트에서 시군구 dictionary 별도 매핑
             'stats_ym': latest_ym,
@@ -372,8 +386,57 @@ def compute_sgg_overview(ym: str = '') -> list[dict]:
             'trade_count': latest['trade_count'],
             'top_stdg_cd': top_stdg['stdg_cd'] if top_stdg else None,
             'top_stdg_nm': top_stdg.get('stdg_nm') if top_stdg else None,
-        })
+        }
+        # 부천 — 옛 일반구별 sub_top 추가 계산 (geojson 의 bucheon_sub 별 폴리곤이 그 영역 동을 보도록).
+        # MOLIT 가 부천 21 동을 stdg_cd 9개에 압축해 region_summary 의 stdg_nm 이 일부 묻혀
+        # (예: 4119410100 에 소사본·오정·원미가 합산), region_summary 가 아닌 raw trade 의
+        # umd_nm 으로 직접 집계해야 21 동 분리 가능.
+        if sgg_cd == '41194':
+            entry['bucheon_sub_top'] = _bucheon_sub_top(client, latest_ym)
+        out.append(entry)
     return out
+
+
+def _bucheon_sub_top(client, ym: str) -> dict[str, dict]:
+    """raw trade 에서 부천 umd_nm 별 평단가 median 산출 → sub-area 별 top stdg.
+    MOLIT API 가 부천 동을 stdg_cd 9개에 묶어 region_summary 가 부정확 (옛 41192/41196
+    동들이 41194 stdg_cd 에 합산됨). raw 에서 umd_nm (동 이름) 그대로 그룹핑."""
+    PAGE = 1000
+    offset = 0
+    rows: list[dict] = []
+    while True:
+        chunk = (
+            client.table('real_estate_trade_raw')
+            .select('umd_nm,deal_amount,exclu_use_ar')
+            .eq('sgg_cd', '41194').eq('deal_ym', ym)
+            .range(offset, offset + PAGE - 1).execute().data or []
+        )
+        rows.extend(chunk)
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
+    from collections import defaultdict
+    by_nm: dict[str, list[float]] = defaultdict(list)
+    for r in rows:
+        nm = r.get('umd_nm'); amt = r.get('deal_amount'); ar = r.get('exclu_use_ar')
+        if not (nm and amt and ar):
+            continue
+        py = amt / (ar / 3.3058)
+        by_nm[nm].append(py)
+    sub_top: dict[str, dict] = {}
+    for sub in ('sosa', 'wonmi', 'ojeong'):
+        cands = [(nm, sorted(vals)[len(vals)//2]) for nm, vals in by_nm.items()
+                 if BUCHEON_STDG_SUB.get(nm) == sub]
+        if not cands:
+            continue
+        nm, med = max(cands, key=lambda x: x[1])
+        sub_top[sub] = {
+            'top_stdg_cd': nm,    # raw 기반이라 stdg_cd 가 정확 매핑 안 됨 → umd_nm 으로 대체
+            'top_stdg_nm': nm,
+            'median_price_per_py': round(med, 0),
+            'trade_count': len(by_nm[nm]),    # raw 동별 거래수 (region_summary 에 동이 없을 수 있어 직접 제공)
+        }
+    return sub_top
 
 
 @router.get('/sgg-overview')

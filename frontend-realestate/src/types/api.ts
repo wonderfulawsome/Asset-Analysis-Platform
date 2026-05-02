@@ -85,6 +85,14 @@ export interface SggOverview {
   trade_count: number;
   top_stdg_cd: string | null;
   top_stdg_nm: string | null;
+  // 부천(41194) 만 — 옛 일반구 sub-area (sosa/wonmi/ojeong) 별 top stdg.
+  // geojson 폴리곤이 일반구 단위로 분할돼 있어 클릭한 폴리곤의 영역에 맞는 동을 따로 표시.
+  bucheon_sub_top?: Record<string, {
+    top_stdg_cd: string;
+    top_stdg_nm: string | null;
+    median_price_per_py: number;
+    trade_count: number;
+  }>;
 }
 
 // GET /api/realestate/stdg-detail — 법정동 상세 페이지 통합 응답

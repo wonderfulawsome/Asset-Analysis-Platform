@@ -21,13 +21,16 @@ export interface PolygonFeature {
   paths: { lat: number; lng: number }[][];
   fillColor: string;        // changePctColor() 결과
   changePct: number | null;
+  // 1개 sgg 가 여러 폴리곤일 때 (현재 부천만) 폴리곤별 sub-area 식별자.
+  // MapScreen 의 sgg-overview.bucheon_sub_top key (sosa/wonmi/ojeong) 와 매칭.
+  subKey?: string;
 }
 
 interface Props {
   markers?: MapMarker[];
   onMarkerClick?: (sggCd: string) => void;
   polygons?: PolygonFeature[];
-  onPolygonClick?: (sggCd: string) => void;
+  onPolygonClick?: (sggCd: string, subKey?: string) => void;
   center?: { lat: number; lng: number };
   level?: number;
   maxLevel?: number;  // 최대 줌아웃 제한 — 작을수록 축소 못 함 (수도권만 보이도록 11~12 권장)
@@ -139,7 +142,7 @@ export default function KakaoMap({
           strokeColor: "#111827",
           strokeOpacity: 0.8,
         });
-        kakao.maps.event.addListener(kpoly, "click", () => onPolygonClick?.(poly.sggCd));
+        kakao.maps.event.addListener(kpoly, "click", () => onPolygonClick?.(poly.sggCd, poly.subKey));
         kakao.maps.event.addListener(kpoly, "mouseover", () => kpoly.setOptions({ fillOpacity: 0.65 }));
         kakao.maps.event.addListener(kpoly, "mouseout", () => kpoly.setOptions({ fillOpacity: 0.45 }));
         created.push(kpoly);

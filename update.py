@@ -6247,6 +6247,75 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 
 
 # ════════════════════════════════════════════════════════════════════════════
+# [82] 2026-05-02 (UTC) — 부천 폴리곤 sub-area 별 top_stdg (지도 영역에 맞는 동)
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# [80] 에서 부천 3폴리곤(소사·원미·오정) → 1폴리곤 병합했으나 사용자: "지도 영역에
+# 맞는 동이 나와야". 3폴리곤 복원 + 폴리곤별 그 영역 안의 동만 보고 top 표시.
+#
+# 데이터 한계 — MOLIT 가 부천 21 동을 stdg_cd 9개에 압축해 region_summary 의
+# stdg_nm 일부 묻힘 (4119410100 row 에 소사본·오정·원미 거래 모두 합산). 따라서
+# region_summary 가 아닌 real_estate_trade_raw 에서 umd_nm (동 이름) 기준 직접
+# 집계해야 21 동 정상 분리.
+
+# [수정 파일]
+# 1. frontend-realestate/public/geojson/metro-sgg.geojson
+#    - 부천 3폴리곤 복원 (79 features) + 각 폴리곤에 properties.bucheon_sub
+#      ('sosa'/'wonmi'/'ojeong') 추가
+# 2. api/routers/real_estate.py
+#    - BUCHEON_STDG_SUB 하드코딩 (24 동 → sub-area 매핑)
+#    - compute_sgg_overview 의 sgg_cd=41194 분기에 _bucheon_sub_top() 호출 추가
+#    - _bucheon_sub_top: real_estate_trade_raw 에서 umd_nm 기준 그룹핑 → median 평단가 →
+#      sub-area 별 top 동. trade_count 도 raw 에서 직접 산출 (region_summary 누락 동 대응).
+# 3. frontend-realestate/src/types/api.ts
+#    - SggOverview.bucheon_sub_top?: Record<sub,{top_stdg_cd/nm, median_price_per_py, trade_count}>
+# 4. frontend-realestate/src/components/KakaoMap.tsx
+#    - PolygonFeature.subKey?: string 추가
+#    - onPolygonClick 시그니처: (sggCd) → (sggCd, subKey)
+# 5. frontend-realestate/src/screens/MapScreen.tsx
+#    - loadPolygons 가 properties.bucheon_sub → polygon.subKey 전달
+#    - handlePolygonClick: subKey 있을 때 ov.bucheon_sub_top[subKey] 우선 사용,
+#      sub 매칭 시 region_summary 에 동 row 가 없을 수 있어 가짜 RegionSummary 직접 set
+
+# [핵심 코드]
+BUCHEON_STDG_SUB: dict[str, str] = {
+    '계수동': 'sosa', '괴안동': 'sosa', '범박동': 'sosa', '소사본동': 'sosa',
+    '송내동': 'sosa', '심곡본동': 'sosa', '옥길동': 'sosa',
+    '도당동': 'wonmi', '상동': 'wonmi', '소사동': 'wonmi', '심곡동': 'wonmi',
+    '약대동': 'wonmi', '역곡동': 'wonmi', '원미동': 'wonmi', '중동': 'wonmi',
+    '춘의동': 'wonmi',
+    '고강동': 'ojeong', '내동': 'ojeong', '대장동': 'ojeong', '삼정동': 'ojeong',
+    '여월동': 'ojeong', '오정동': 'ojeong', '원종동': 'ojeong', '작동': 'ojeong',
+}
+
+def _bucheon_sub_top(client, ym):
+    rows = client.table('real_estate_trade_raw').select(
+        'umd_nm,deal_amount,exclu_use_ar'
+    ).eq('sgg_cd', '41194').eq('deal_ym', ym).execute().data or []
+    by_nm = defaultdict(list)
+    for r in rows:
+        if r.get('umd_nm') and r.get('deal_amount') and r.get('exclu_use_ar'):
+            by_nm[r['umd_nm']].append(r['deal_amount'] / (r['exclu_use_ar'] / 3.3058))
+    sub_top = {}
+    for sub in ('sosa', 'wonmi', 'ojeong'):
+        cands = [(nm, sorted(v)[len(v)//2]) for nm, v in by_nm.items()
+                 if BUCHEON_STDG_SUB.get(nm) == sub]
+        if cands:
+            nm, med = max(cands, key=lambda x: x[1])
+            sub_top[sub] = {'top_stdg_cd': nm, 'top_stdg_nm': nm,
+                            'median_price_per_py': round(med, 0),
+                            'trade_count': len(by_nm[nm])}
+    return sub_top
+
+# [검증 — 202603]
+# sosa: 옥길동 (2663 만/평, 30 거래)
+# wonmi: 약대동 (2559, 22)
+# ojeong: 여월동 (2763, 7)
+# 79 features geojson + frontend npm run build 성공 + sgg_overview cache 즉시 갱신
+
+
+# ════════════════════════════════════════════════════════════════════════════
 # [78] 2026-05-02 (UTC) — KR Stage 3.2b: HMM 학습 + 스케줄러 통합
 # ════════════════════════════════════════════════════════════════════════════
 
