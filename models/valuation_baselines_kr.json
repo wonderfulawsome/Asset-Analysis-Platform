@@ -1,0 +1,26 @@
+{
+  "erp": {
+    "mean": 0.02,
+    "std": 0.015,
+    "n": 0,
+    "source": "fallback"
+  },
+  "vix": {
+    "mean": 18.0,
+    "std": 5.0,
+    "n": 0,
+    "source": "fallback"
+  },
+  "dd": {
+    "mean": -0.04671031953844369,
+    "std": 0.04010957572922508,
+    "n": 1224,
+    "source": "kospi_dual"
+  },
+  "updated_at": "2026-05-02T23:17:36.588280",
+  "weights": {
+    "erp": 0.4,
+    "vix": 0.3,
+    "dd": 0.3
+  }
+}

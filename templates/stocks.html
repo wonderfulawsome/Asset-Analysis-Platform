@@ -123,6 +123,10 @@
       </div>
     </div>
     <div class="header-right">
+      <div id="btn-region" class="region-toggle" role="button" aria-label="Region toggle">
+        <span class="region-flag region-us">🇺🇸</span>
+        <span class="region-flag region-kr">🇰🇷</span>
+      </div>
       <button id="btn-theme" class="theme-btn" aria-label="Toggle dark mode"></button>
       <button id="btn-lang" class="lang-btn">EN</button>
       <div id="btn-edit-holdings" class="settings-btn">⚙️</div>
@@ -508,6 +512,7 @@
     <div id="detail-body" class="detail-body"></div>
   </div>
 
+  <script src="/static/js/region.js?v=2"></script>
   <script src="/static/js/i18n.js?v=4"></script>
   <script>
     // ── 다크모드 토글 (헤더 + setup 화면 동기화) ──
@@ -544,8 +549,8 @@
     document.getElementById('btn-lang').addEventListener('click', switchLang);
     document.getElementById('setup-lang').addEventListener('click', switchLang);
   </script>
-  <script src="/static/js/chart.js?v=24"></script>
-  <script src="/static/js/main.js?v=116"></script>
+  <script src="/static/js/chart.js?v=25"></script>
+  <script src="/static/js/main.js?v=117"></script>
   <script src="/static/js/sector.js?v=5"></script>
   <script src="/static/js/home.js?v=26"></script>
 </body>

@@ -6352,3 +6352,22 @@ app.add_middleware(GZipMiddleware, minimum_size=500)
 #
 # Yahoo 심볼: KOSPI=^KS11, KOSPI200=^KS200, ETF=6자리.KS, 종목=005930.KS
 # 폴백 못 되는: VKOSPI (Yahoo 없음), KR 10Y (Yahoo 404 — ECOS 권장 후속)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [81] 2026-05-02 (UTC) — KR 폴백 마무리 (valuation/noise_regime_data 종목)
+# ════════════════════════════════════════════════════════════════════════════
+# 1) valuation_signal_kr — 컴포넌트별 try/except 분리, PER/KR10Y/VKOSPI 모두 fallback
+#    · PER fallback 14.0 평탄 시리즈
+#    · KR 10Y fallback 0.035 (3.5%) 평탄
+#    · VKOSPI fallback KOSPI 20D RV × √252 × 100 proxy
+#
+# 2) noise_regime_data_kr._stock_ohlcv_dual — 3단 폴백 추가
+#    · pykrx → FDR → yfinance (6자리.KS)
+#    · KRX 장애 시에도 25종목 5년치 fetch 가능 → train_kr_hmm 작동
+#
+# [실측 결과 (사용자 환경, KRX 장애)]
+# backfill_kr 실행: macro=90, index=5, sector=10, valuation=90 모두 적재
+# 폴백 활성: PER 14.0, KR10Y 3.5%, VKOSPI=KOSPI RV proxy
+# 한계: ERP/yield 평탄 → z_erp/z_dd 분산 작아짐, z_comp 신호 약함
+#       KRX/ECOS 복구 후 정상 분포 회복

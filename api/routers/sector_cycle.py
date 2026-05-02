@@ -1,6 +1,6 @@
 from collections import defaultdict
 from statistics import mean, stdev
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from database.repositories import (
     fetch_sector_cycle_latest, fetch_sector_cycle_history, fetch_sector_macro_history,
     fetch_sector_valuation_latest, fetch_sector_valuation_history,
@@ -10,16 +10,20 @@ from processor.feature7_sector_momentum import compute_sector_momentum
 router = APIRouter()
 
 
+def _norm_region(region: str) -> str:
+    return region if region in ('us', 'kr') else 'us'
+
+
 @router.get('/current')
-def get_current():
+def get_current(region: str = Query('us')):
     """최신 경기국면 분석 결과 조회"""
-    return fetch_sector_cycle_latest()
+    return fetch_sector_cycle_latest(region=_norm_region(region))
 
 
 @router.get('/holdings-perf')
-def get_holdings_perf(tickers: str = 'QQQ,SPY'):
+def get_holdings_perf(tickers: str = 'QQQ,SPY', region: str = Query('us')):
     """사용자 보유종목의 국면별 성과 조회"""
-    data = fetch_sector_cycle_latest()
+    data = fetch_sector_cycle_latest(region=_norm_region(region))
     if not data:
         return None
     ticker_list = [t.strip().upper() for t in tickers.split(',') if t.strip()]
@@ -35,21 +39,21 @@ def get_holdings_perf(tickers: str = 'QQQ,SPY'):
 
 
 @router.get('/history')
-def get_history(days: int = 12):
+def get_history(days: int = 12, region: str = Query('us')):
     """최근 N건 경기국면 히스토리 조회"""
-    return fetch_sector_cycle_history(days)
+    return fetch_sector_cycle_history(days, region=_norm_region(region))
 
 
 @router.get('/macro-history')
-def get_macro_history(limit: int = 120):
+def get_macro_history(limit: int = 120, region: str = Query('us')):
     """최근 N개월 매크로 지표 히스토리 (10년 = 120개월)"""
-    return fetch_sector_macro_history(limit)
+    return fetch_sector_macro_history(limit, region=_norm_region(region))
 
 
 # ── 신규 ─────────────────────────────────────────────────────
 
 @router.get('/valuation')
-def get_valuation():
+def get_valuation(region: str = Query('us')):
     """12개 섹터 ETF 의 PER/PBR + z-score (각 티커의 자기 자신 historical 기준).
 
     z = (x_today - μ_ticker) / σ_ticker
@@ -57,12 +61,13 @@ def get_valuation():
         샘플 < HIST_MIN_N 이면 z=null (시계열 부족 → 색 회색).
     양수 = 자기 자신의 historical 평균보다 비쌈, 음수 = 평균보다 쌈.
     """
+    region = _norm_region(region)
     HIST_MIN_N = 5  # 시계열 최소 표본 수 — 그 미만이면 z 산출 안 함
-    rows = fetch_sector_valuation_latest()
+    rows = fetch_sector_valuation_latest(region=region)
     if not rows:
         return {"phase_name": None, "valuations": []}
 
-    history = fetch_sector_valuation_history(days=365 * 5)  # 최대 5년치
+    history = fetch_sector_valuation_history(days=365 * 5, region=region)  # 최대 5년치
     by_ticker_per: dict[str, list[float]] = defaultdict(list)
     by_ticker_pbr: dict[str, list[float]] = defaultdict(list)
     for h in history:

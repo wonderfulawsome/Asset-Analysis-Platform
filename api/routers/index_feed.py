@@ -2,17 +2,21 @@
 # DB 에서 최신 ETF 가격 데이터를 조회해 반환하는 FastAPI 라우터 엔드포인트
 # 특정 URL 경로(예: /latest)로 HTTP 요청이 들어왔을 때 어떤 함수를 실행할지 연결해주는 규칙 정의
 # -------------------------------------------------------------------
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from database.repositories import fetch_index_prices_latest
 from database.supabase_client import get_client
 
 router = APIRouter()
 
 
+def _norm_region(region: str) -> str:
+    return region if region in ('us', 'kr') else 'us'
+
+
 @router.get('/latest')
-def get_index_latest():
+def get_index_latest(region: str = Query('us')):
     # DB에서 가장 최근 날짜의 ETF 가격/등락률 조회
-    return fetch_index_prices_latest()
+    return fetch_index_prices_latest(region=_norm_region(region))
 
 
 @router.get('/debug')

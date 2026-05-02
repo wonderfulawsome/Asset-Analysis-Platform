@@ -265,6 +265,47 @@ body {
   transform: scale(0.95);                          /* 클릭 시 축소 효과 */
 }
 
+/* ── Region Toggle (US/KR) ─────────────────────── */
+.region-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--sep);
+  cursor: pointer;
+  user-select: none;
+  font-size: 14px;
+  line-height: 1;
+}
+.region-toggle .region-flag {
+  padding: 4px 8px;
+  border-radius: 8px;
+  opacity: 0.4;
+  transition: opacity 0.15s, background 0.15s;
+}
+.region-toggle.region-mode-us .region-us,
+.region-toggle.region-mode-kr .region-kr {
+  background: var(--card);
+  opacity: 1;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.region-toggle:active { transform: scale(0.97); }
+
+/* KR 모드에서 "준비 중" 배너 — Stage 2 까지 노출 */
+.kr-coming-soon {
+  margin: 16px 12px 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(239,68,68,0.08), rgba(59,130,246,0.06));
+  border: 1px dashed rgba(255,255,255,0.15);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--sub);
+  text-align: center;
+}
+.kr-coming-soon b { color: var(--text); }
+
 /* ── 면책 문구 ─────────────────────────────────── */
 .disclaimer {
   margin-top: 32px;                                /* 콘텐츠와 간격 */

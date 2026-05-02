@@ -1,0 +1,26 @@
+{
+  "erp": {
+    "mean": 0.004159,
+    "std": 0.013326,
+    "n": 64,
+    "source": "shiller+yfinance(5Y)"
+  },
+  "vix": {
+    "mean": 19.2508,
+    "std": 5.2639,
+    "n": 1256,
+    "source": "yfinance(^VIX,5Y)"
+  },
+  "dd": {
+    "mean": -0.032435,
+    "std": 0.041742,
+    "n": 1255,
+    "source": "yfinance(SPY,5Y)"
+  },
+  "weights": {
+    "erp": 0.4,
+    "vix": 0.3,
+    "dd": 0.3
+  },
+  "computed_at": "2026-04-29T18:47:07.301155"
+}

@@ -36,22 +36,27 @@ def _calc_rsi(period: int = 14) -> float:
         return 0                                             # 실패 시 0 반환
 
 
+def _norm_region(region: str) -> str:
+    return region if region in ('us', 'kr') else 'us'
+
+
 @router.get('/today')                                        # GET /api/market-summary/today
-def get_market_summary_today():
-    fg = fetch_fear_greed_latest()                           # 공포탐욕지수 조회
-    prices = fetch_index_prices_latest()                     # ETF 가격 조회
+def get_market_summary_today(region: str = Query('us')):
+    region = _norm_region(region)
+    fg = fetch_fear_greed_latest(region=region)              # 공포탐욕지수 조회
+    prices = fetch_index_prices_latest(region=region)        # ETF 가격 조회
     score = fg.get('score', 0) if fg else 0                  # 공포탐욕 점수 (없으면 0)
     rating = fg.get('rating', '-') if fg else '-'            # 등급 (Extreme Fear 등)
-    target = {'SPY', 'QQQ', 'DIA'}                           # 평균 수익률 계산 대상 ETF
+    target = {'SPY', 'QQQ', 'DIA'} if region == 'us' else set()  # 평균 수익률 대상 (KR 은 별도 ticker)
     changes = [p['change_pct'] for p in prices if p['ticker'] in target]  # 대상 ETF 등락률 추출
     avg_return = sum(changes) / len(changes) if changes else 0  # 평균 등락률
-    macro = fetch_macro_latest()                             # 거시지표 조회
+    macro = fetch_macro_latest(region=region)                # 거시지표 조회
     rsi = macro.get('sp500_rsi') if macro else None          # DB에 저장된 RSI 사용
-    if not rsi:                                              # DB에 RSI 없으면
-        rsi = _calc_rsi()                                    # Yahoo에서 실시간 계산
-    else:
+    if not rsi and region == 'us':                           # US 만 yfinance 폴백
+        rsi = _calc_rsi()
+    elif rsi:
         rsi = round(float(rsi), 1)                           # 소수점 1자리 반올림
-    cs = fetch_crash_surge_current()                         # 폭락/급등 점수 조회
+    cs = fetch_crash_surge_current(region=region)            # 폭락/급등 점수 조회
     crash_surge = None
     if cs:
         crash_s = cs.get('crash_score') or cs.get('crash_prob')
@@ -111,34 +116,66 @@ _ai_lock = threading.Lock()                                  # AI 요약 캐시 
 _AI_TTL = 900                                                # AI 요약 캐시 유효 시간 (900초 = 15분)
 
 
-def _build_indicator_text(lang='ko'):
+def _market_labels(region: str, lang: str) -> dict:
+    """region 별 시장 라벨 사전 (LLM 프롬프트용).
+
+    macro_raw 의 컬럼명(sp500_*, vix, tnx)은 영구 유지하되, 사용자/LLM 에 노출되는
+    라벨만 region 별로 분기.
+    """
+    is_en = (lang == 'en')
+    if region == 'kr':
+        return {
+            'index_name':    'KOSPI' if is_en else 'KOSPI',
+            'index_return':  'KOSPI Daily Return' if is_en else 'KOSPI 일간수익률',
+            'vol20_label':   'KOSPI 20D Volatility' if is_en else 'KOSPI 20일 변동성',
+            'vix_name':      'VKOSPI',
+            'rate_name':     'KR 10Y' if is_en else 'KR 10Y 국고채',
+            'spread_name':   'KR Yield Spread' if is_en else 'KR 장단기차',
+            'major_tickers': ('069500', '102110', '232080', '229200'),  # KODEX 200 / TIGER 200 / 코스닥150
+            'price_unit':    '원',
+        }
+    return {
+        'index_name':    'S&P500',
+        'index_return':  'S&P500 Daily Return' if is_en else 'S&P500 일간수익률',
+        'vol20_label':   '20D Volatility' if is_en else '20일 변동성',
+        'vix_name':      'VIX',
+        'rate_name':     '10Y Rate' if is_en else '10Y금리',
+        'spread_name':   'Yield Spread' if is_en else '장단기차',
+        'major_tickers': ('SPY', 'QQQ', 'DIA', 'VOO', 'IWM'),
+        'price_unit':    '$',
+    }
+
+
+def _build_indicator_text(lang='ko', region: str = 'us'):
     """AI 요약 프롬프트에 전달할 지표 텍스트를 조합하는 함수."""
+    region = _norm_region(region)
+    L = _market_labels(region, lang)
     lines = []                                               # 텍스트 줄 목록
-    fg = fetch_fear_greed_latest()                           # 공포탐욕지수 조회
+    fg = fetch_fear_greed_latest(region=region)              # 공포탐욕지수 조회
     if fg:
         if lang == 'en':
             lines.append(f"Fear & Greed Index: {fg.get('score', '?')} ({fg.get('rating', '?')})")
         else:
             lines.append(f"공포탐욕지수: {fg.get('score', '?')} ({fg.get('rating', '?')})")
-    macro = fetch_macro_latest()                             # 거시지표 조회
+    macro = fetch_macro_latest(region=region)                # 거시지표 조회
     if macro:
         if lang == 'en':
-            lines.append(f"S&P500 Daily Return: {macro.get('sp500_return', '?')}%")
+            lines.append(f"{L['index_return']}: {macro.get('sp500_return', '?')}%")
             lines.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
-            lines.append(f"VIX: {macro.get('vix', '?')}")
-            lines.append(f"20D Volatility: {macro.get('sp500_vol20', '?')}")
-            lines.append(f"10Y Rate: {macro.get('tnx', '?')}, Yield Spread: {macro.get('yield_spread', '?')}")
-            if macro.get('putcall_ratio'):                    # Put/Call 비율이 있으면
+            lines.append(f"{L['vix_name']}: {macro.get('vix', '?')}")
+            lines.append(f"{L['vol20_label']}: {macro.get('sp500_vol20', '?')}")
+            lines.append(f"{L['rate_name']}: {macro.get('tnx', '?')}, {L['spread_name']}: {macro.get('yield_spread', '?')}")
+            if macro.get('putcall_ratio'):
                 lines.append(f"Put/Call Ratio: {macro['putcall_ratio']}")
         else:
-            lines.append(f"S&P500 일간수익률: {macro.get('sp500_return', '?')}%")
+            lines.append(f"{L['index_return']}: {macro.get('sp500_return', '?')}%")
             lines.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
-            lines.append(f"VIX: {macro.get('vix', '?')}")
-            lines.append(f"20일 변동성: {macro.get('sp500_vol20', '?')}")
-            lines.append(f"10Y금리: {macro.get('tnx', '?')}, 장단기차: {macro.get('yield_spread', '?')}")
-            if macro.get('putcall_ratio'):                    # Put/Call 비율이 있으면
+            lines.append(f"{L['vix_name']}: {macro.get('vix', '?')}")
+            lines.append(f"{L['vol20_label']}: {macro.get('sp500_vol20', '?')}")
+            lines.append(f"{L['rate_name']}: {macro.get('tnx', '?')}, {L['spread_name']}: {macro.get('yield_spread', '?')}")
+            if macro.get('putcall_ratio'):
                 lines.append(f"풋콜비율: {macro['putcall_ratio']}")
-    regime = fetch_noise_regime_current()                    # Noise 국면 조회
+    regime = fetch_noise_regime_current(region=region)       # Noise 국면 조회
     if regime:
         ns = regime.get('noise_score', 0)                    # Noise Score 값
         try:
@@ -167,7 +204,7 @@ def _build_indicator_text(lang='ko'):
                 interp = '주가와 펀더멘털이 크게 괴리됨 (감정 지배)'
             lines.append(f"시장 이성 점수: {ns} → {interp}")
             lines.append(f"  (양수일수록 이성적/펀더멘털 반영, 음수가 클수록 감정적/괴리)")
-    cs = fetch_crash_surge_current()                         # 폭락/급등 점수 조회
+    cs = fetch_crash_surge_current(region=region)            # 폭락/급등 점수 조회
     if cs:
         c_s = cs.get('crash_score') or cs.get('crash_prob') or 0  # 하락 점수 (필드명 호환)
         s_s = cs.get('surge_score') or cs.get('surge_prob') or 0  # 상승 점수 (필드명 호환)
@@ -176,14 +213,15 @@ def _build_indicator_text(lang='ko'):
             lines.append(f"Crash Risk: {c_s}pts, Surge Potential: {s_s}pts, Gap: {gap:+.1f}pts")
         else:
             lines.append(f"하락 위험도: {c_s}점, 상승 기대도: {s_s}점, 간극: {gap:+.1f}점")
-    prices = fetch_index_prices_latest()                     # ETF 가격 조회
+    prices = fetch_index_prices_latest(region=region)        # ETF 가격 조회
     if prices:
-        major = [p for p in prices if p.get('ticker') in ('SPY', 'QQQ', 'DIA', 'VOO', 'IWM')]  # 주요 5개 ETF
+        major = [p for p in prices if p.get('ticker') in L['major_tickers']]
         for p in major:
-            chg = p.get('change_pct', 0)                     # 등락률
-            sign = '+' if chg >= 0 else ''                   # 양수면 + 접두사
-            lines.append(f"{p['ticker']}: ${p.get('close', '?')} ({sign}{chg}%)")
-    sector = fetch_sector_cycle_latest()                     # 경기국면 조회
+            chg = p.get('change_pct', 0)
+            sign = '+' if chg >= 0 else ''
+            tk_label = p.get('name') or p['ticker']
+            lines.append(f"{tk_label} ({p['ticker']}): {L['price_unit']}{p.get('close', '?')} ({sign}{chg}%)")
+    sector = fetch_sector_cycle_latest(region=region)        # 경기국면 조회
     if sector:
         if lang == 'en':
             lines.append(f"Business Cycle: {sector.get('phase_name', '?')}")
@@ -255,8 +293,7 @@ Rules:
 }
 
 
-_ai_cache = {'ko': {'summary': None, 'generated_at': None, 'expires': 0},  # 한국어 AI 요약 캐시
-             'en': {'summary': None, 'generated_at': None, 'expires': 0}}  # 영어 AI 요약 캐시
+_ai_cache: dict = {}                                         # 키: f"{lang}_{region}", 값: {summary, generated_at, expires}
 
 _ERR_MSGS = {                                                # 에러 메시지 (한/영)
     'ko': {'no_data': '지표 데이터가 아직 준비되지 않았습니다.',
@@ -267,35 +304,29 @@ _ERR_MSGS = {                                                # 에러 메시지 
            'fail': 'Unable to generate AI summary.'},
 }
 
-def _build_home_indicator_text(lang: str = 'ko') -> str:
+def _build_home_indicator_text(lang: str = 'ko', region: str = 'us') -> str:
     """홈 헤드라인용 — 4개 탭별로 그룹화한 핵심 지표 텍스트.
 
     LLM 이 탭별 지표를 비교해 가장 주목할 신호 1개를 직접 고를 수 있도록 설계.
     """
+    region = _norm_region(region)
+    L = _market_labels(region, lang)
     is_en = (lang == 'en')
     lines = []
 
     # ── 시장 탭 ──
     section = []
-    fg = fetch_fear_greed_latest()
+    fg = fetch_fear_greed_latest(region=region)
     if fg:
         section.append(f"{'Fear & Greed' if is_en else '공포탐욕지수'}: {fg.get('score', '?')} ({fg.get('rating', '?')})")
-    macro = fetch_macro_latest()
+    macro = fetch_macro_latest(region=region)
     if macro:
-        if is_en:
-            section.append(f"S&P500 Daily Return: {macro.get('sp500_return', '?')}%")
-            section.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
-            section.append(f"VIX: {macro.get('vix', '?')}")
-            section.append(f"20D Volatility: {macro.get('sp500_vol20', '?')}")
-            if macro.get('putcall_ratio'):
-                section.append(f"Put/Call Ratio: {macro['putcall_ratio']}")
-        else:
-            section.append(f"S&P500 일간수익률: {macro.get('sp500_return', '?')}%")
-            section.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
-            section.append(f"VIX: {macro.get('vix', '?')}")
-            section.append(f"20일 변동성: {macro.get('sp500_vol20', '?')}")
-            if macro.get('putcall_ratio'):
-                section.append(f"풋콜비율: {macro['putcall_ratio']}")
+        section.append(f"{L['index_return']}: {macro.get('sp500_return', '?')}%")
+        section.append(f"RSI(14): {macro.get('sp500_rsi', '?')}")
+        section.append(f"{L['vix_name']}: {macro.get('vix', '?')}")
+        section.append(f"{L['vol20_label']}: {macro.get('sp500_vol20', '?')}")
+        if macro.get('putcall_ratio'):
+            section.append(f"{'Put/Call Ratio' if is_en else '풋콜비율'}: {macro['putcall_ratio']}")
     if section:
         lines.append(f"[{'Market Tab' if is_en else '시장 탭'}]")
         lines.extend(section)
@@ -303,7 +334,7 @@ def _build_home_indicator_text(lang: str = 'ko') -> str:
 
     # ── 펀더멘털 탭 ──
     section = []
-    regime = fetch_noise_regime_current()
+    regime = fetch_noise_regime_current(region=region)
     if regime:
         ns = regime.get('noise_score', 0)
         try:
@@ -339,7 +370,7 @@ def _build_home_indicator_text(lang: str = 'ko') -> str:
 
     # ── 신호 탭 ──
     section = []
-    cs = fetch_crash_surge_current()
+    cs = fetch_crash_surge_current(region=region)
     if cs:
         c_s = cs.get('crash_score') or cs.get('crash_prob') or 0
         s_s = cs.get('surge_score') or cs.get('surge_prob') or 0
@@ -359,7 +390,7 @@ def _build_home_indicator_text(lang: str = 'ko') -> str:
 
     # ── 섹터 탭 ──
     section = []
-    sector = fetch_sector_cycle_latest()
+    sector = fetch_sector_cycle_latest(region=region)
     if sector:
         if is_en:
             section.append(f"Business Cycle Phase: {sector.get('phase_name', '?')}")
@@ -372,13 +403,14 @@ def _build_home_indicator_text(lang: str = 'ko') -> str:
 
     # ── 시장 밸류 탭 ──
     section = []
-    val = fetch_valuation_signal_latest()
+    val = fetch_valuation_signal_latest(region=region)
     if val:
         z_comp = val.get('z_comp')
         label = val.get('label')
         erp = val.get('erp')
-        per = val.get('spy_per')
-        vix = val.get('vix')
+        per = val.get('spy_per')                              # KR 도 같은 컬럼명에 KOSPI PER 저장
+        vix = val.get('vix')                                  # KR 은 VKOSPI
+        per_label = f"{L['index_name']} PER"
         if is_en:
             if z_comp is not None:
                 section.append(f"Composite Valuation z_comp: {z_comp:+.2f} ({label or '?'})")
@@ -386,9 +418,9 @@ def _build_home_indicator_text(lang: str = 'ko') -> str:
             if erp is not None:
                 section.append(f"ERP (Equity Risk Premium): {erp:+.4f}")
             if per is not None:
-                section.append(f"SPY PER: {per}")
+                section.append(f"{per_label}: {per}")
             if vix is not None:
-                section.append(f"VIX: {vix}")
+                section.append(f"{L['vix_name']}: {vix}")
         else:
             if z_comp is not None:
                 section.append(f"시장 밸류 z_comp: {z_comp:+.2f} ({label or '?'})")
@@ -396,9 +428,9 @@ def _build_home_indicator_text(lang: str = 'ko') -> str:
             if erp is not None:
                 section.append(f"ERP (주식 위험 프리미엄): {erp:+.4f}")
             if per is not None:
-                section.append(f"S&P500 PER: {per}")
+                section.append(f"{per_label}: {per}")
             if vix is not None:
-                section.append(f"VIX: {vix}")
+                section.append(f"{L['vix_name']}: {vix}")
     if section:
         lines.append(f"[{'Market Valuation Tab' if is_en else '시장 밸류 탭'}]")
         lines.extend(section)
@@ -477,34 +509,38 @@ The market is fair, and with Market Rationality at +1.5, indicating a reasonable
 The market is overvalued, and with Market Rationality at -2.3, indicating an unreasonable valuation. Strong emotional flow stands out.""",
 }
 
-_headline_cache = {'ko': {'summary': None, 'generated_at': None, 'expires': 0},
-                   'en': {'summary': None, 'generated_at': None, 'expires': 0}}
+_headline_cache: dict = {}  # 키: f"{lang}_{region}", 값: {summary, generated_at, expires}
 _headline_lock = threading.Lock()
 
 
-@router.get('/home-headline')
-def get_home_headline(lang: str = Query('ko')):
-    """홈 화면 상단 — 4개 탭 지표 중 가장 중요한 신호 한 문장.
+def _cache_key(lang: str, region: str) -> str:
+    """region 별 캐시 키 생성."""
+    return f'{lang}_{region}'
 
-    LLM 이 탭별 정보를 비교해 가장 주목할 만한 신호 1개를 골라 1문장으로 응답.
+
+@router.get('/home-headline')
+def get_home_headline(lang: str = Query('ko'), region: str = Query('us')):
+    """홈 화면 상단 — 5개 탭 지표 비교 후 1~2문장 헤드라인.
+
+    LLM 첫 문장 = 시장 이성 점수 × 시장 밸류 결합 판단 (고정 템플릿).
     """
     lang = lang if lang in ('ko', 'en') else 'ko'
+    region = _norm_region(region)
     err = _ERR_MSGS[lang]
+    key = _cache_key(lang, region)
     now = time.time()
     with _headline_lock:
-        c = _headline_cache[lang]
-        if c['summary'] and now < c['expires']:
+        c = _headline_cache.get(key)
+        if c and c['summary'] and now < c['expires']:
             return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
     try:
-        text = _build_home_indicator_text(lang)
+        text = _build_home_indicator_text(lang, region=region)
         if not text.strip():
             return {'summary': err['no_data'], 'error': True}
         result = _groq_call(_HEADLINE_PROMPTS[lang], text, 350)
         if not result:
             return {'summary': err['no_service'], 'error': True}
-        # 1~2 문장만 통과 — 첫 줄(개행 제거)에서 마침표 2개까지 허용
         cleaned = result.strip().replace('\n', ' ')
-        # 마침표 기준 분할 (~입니다.) 후 최대 2문장 사용
         import re as _re
         sentences = [s.strip() for s in _re.split(r'(?<=[.!?])\s+', cleaned) if s.strip()]
         kept = sentences[:2]
@@ -513,7 +549,7 @@ def get_home_headline(lang: str = Query('ko')):
             cleaned += '.'
         ts = _kst_now_str()
         with _headline_lock:
-            _headline_cache[lang].update({'summary': cleaned, 'generated_at': ts, 'expires': now + _AI_TTL})
+            _headline_cache[key] = {'summary': cleaned, 'generated_at': ts, 'expires': now + _AI_TTL}
         return {'summary': cleaned, 'generated_at': ts, 'cached': False}
     except Exception as e:
         print(f'[Home Headline] error: {e}')
@@ -521,28 +557,30 @@ def get_home_headline(lang: str = Query('ko')):
 
 
 @router.get('/ai-summary')                                   # GET /api/market-summary/ai-summary
-def get_ai_summary(lang: str = Query('ko')):                 # 언어 쿼리 파라미터 (기본 한국어)
-    lang = lang if lang in ('ko', 'en') else 'ko'            # 유효하지 않은 언어면 한국어로
-    err = _ERR_MSGS[lang]                                    # 해당 언어 에러 메시지 선택
-    now = time.time()                                        # 현재 시각 (Unix timestamp)
-    with _ai_lock:                                           # 캐시 접근 보호
-        c = _ai_cache[lang]                                  # 해당 언어 캐시
-        if c['summary'] and now < c['expires']:              # 캐시가 유효하면
-            return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}  # 캐시 반환
+def get_ai_summary(lang: str = Query('ko'), region: str = Query('us')):
+    lang = lang if lang in ('ko', 'en') else 'ko'
+    region = _norm_region(region)
+    err = _ERR_MSGS[lang]
+    key = _cache_key(lang, region)
+    now = time.time()
+    with _ai_lock:
+        c = _ai_cache.get(key)
+        if c and c['summary'] and now < c['expires']:
+            return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
     try:
-        text = _build_indicator_text(lang)                   # 지표 텍스트 조합
-        if not text.strip():                                 # 데이터가 비어있으면
+        text = _build_indicator_text(lang, region=region)
+        if not text.strip():
             return {'summary': err['no_data'], 'error': True}
-        result = _groq_call(_SUMMARY_PROMPTS[lang], text, 400)  # Groq LLM 호출 (최대 400토큰)
-        if not result:                                       # API 키 없으면
+        result = _groq_call(_SUMMARY_PROMPTS[lang], text, 400)
+        if not result:
             return {'summary': err['no_service'], 'error': True}
-        ts = _kst_now_str()                                  # 생성 시각 (KST)
-        with _ai_lock:                                       # 캐시 갱신
-            _ai_cache[lang].update({'summary': result, 'generated_at': ts, 'expires': now + _AI_TTL})
-        return {'summary': result, 'generated_at': ts, 'cached': False}  # 새 결과 반환
-    except Exception as e:                                   # 예외 발생 시
-        print(f'[AI Summary] error: {e}')                    # 에러 로그
-        return {'summary': err['fail'], 'error': True}       # 에러 응답
+        ts = _kst_now_str()
+        with _ai_lock:
+            _ai_cache[key] = {'summary': result, 'generated_at': ts, 'expires': now + _AI_TTL}
+        return {'summary': result, 'generated_at': ts, 'cached': False}
+    except Exception as e:
+        print(f'[AI Summary] error: {e}')
+        return {'summary': err['fail'], 'error': True}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -756,13 +794,14 @@ Rules:
 }
 
 
-def _build_explain_text(tab: str, lang: str = 'ko') -> str:
+def _build_explain_text(tab: str, lang: str = 'ko', region: str = 'us') -> str:
     """각 탭(펀더멘털/신호/섹터)의 AI 해설에 전달할 데이터 텍스트를 조합."""
+    region = _norm_region(region)
     is_en = (lang == 'en')                                   # 영어 여부 플래그
     lines = []                                               # 텍스트 줄 목록
 
     if tab == 'fundamental':                                 # ── 펀더멘털 탭 ──
-        regime = fetch_noise_regime_current()                # Noise 국면 조회
+        regime = fetch_noise_regime_current(region=region)   # Noise 국면 조회
         if regime:
             lines.append(f"{'Regime' if is_en else '레짐'}: {regime.get('regime_name', '?')}")  # 국면명
             if is_en:
@@ -791,7 +830,7 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
                     lines.append(f"  {k}: {v}")
 
     elif tab == 'signal':                                    # ── 신호 탭 ──
-        cs = fetch_crash_surge_current()                     # 폭락/급등 현재 점수 조회
+        cs = fetch_crash_surge_current(region=region)        # 폭락/급등 현재 점수 조회
         if cs:
             crash_s = cs.get('crash_score') or cs.get('crash_prob') or 0  # 하락 점수
             surge_s = cs.get('surge_score') or cs.get('surge_prob') or 0  # 상승 점수
@@ -806,7 +845,7 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
                 lines.append(f"간극 (상승-하락): {gap:+.1f}점")
 
             # 30일 간극 추세 분석
-            history = fetch_crash_surge_history(30)           # 최근 30일 히스토리 조회
+            history = fetch_crash_surge_history(30, region=region)  # 최근 30일 히스토리 조회
             if history and len(history) >= 2:                 # 2건 이상 있으면 추세 분석
                 gaps = []                                     # 날짜별 간극 목록
                 for h in reversed(history):                   # 오래된 순으로 정렬
@@ -913,7 +952,7 @@ def _build_explain_text(tab: str, lang: str = 'ko') -> str:
                     lines.append(f"  rank {x['rank']}: {x['ticker']} ({x['sector_name']}): 1W {r1w:+.1f}%, 1M {r1m:+.1f}%")
 
     elif tab == 'sector':                                    # ── 섹터 탭 ──
-        sc = fetch_sector_cycle_latest()                     # 경기국면 조회
+        sc = fetch_sector_cycle_latest(region=region)        # 경기국면 조회
         if sc:
             lines.append(f"{'Business Cycle' if is_en else '경기 국면'}: {sc.get('phase_name', '?')} {sc.get('phase_emoji', '')}")
             ms = sc.get('macro_snapshot', {})                # 매크로 스냅샷 (JSONB)
@@ -951,29 +990,31 @@ _EXPLAIN_ERR = {                                             # 해설 에러 메
 
 @router.get('/ai-explain')                                   # GET /api/market-summary/ai-explain
 def get_ai_explain(tab: str = Query(..., description='fundamental, signal, sector, sector-val, sector-mom'),
-                   lang: str = Query('ko')):                 # 언어 파라미터 (기본 한국어)
-    lang = lang if lang in ('ko', 'en') else 'ko'            # 유효하지 않은 언어면 한국어로
-    err = _EXPLAIN_ERR[lang]                                 # 해당 언어 에러 메시지
-    if tab not in _EXPLAIN_PROMPTS['ko']:                    # 지원하지 않는 탭이면
+                   lang: str = Query('ko'),
+                   region: str = Query('us')):
+    lang = lang if lang in ('ko', 'en') else 'ko'
+    region = _norm_region(region)
+    err = _EXPLAIN_ERR[lang]
+    if tab not in _EXPLAIN_PROMPTS['ko']:
         return {'explanation': err['bad_tab'], 'error': True}
 
-    now = time.time()                                        # 현재 시각
-    cache_key = f'explain_{tab}_{lang}'                      # 캐시 키 (예: explain_signal_ko)
-    with _explain_lock:                                      # 캐시 접근 보호
-        cached = _explain_cache.get(cache_key)               # 캐시 조회
-        if cached and now < cached.get('expires', 0):        # 캐시가 유효하면
-            return {'explanation': cached['text'], 'tab': tab, 'cached': True}  # 캐시 반환
+    now = time.time()
+    cache_key = f'explain_{tab}_{lang}_{region}'             # region 별 캐시 분리
+    with _explain_lock:
+        cached = _explain_cache.get(cache_key)
+        if cached and now < cached.get('expires', 0):
+            return {'explanation': cached['text'], 'tab': tab, 'cached': True}
 
     try:
-        text = _build_explain_text(tab, lang)                # 탭별 데이터 텍스트 조합
-        if not text.strip():                                 # 데이터가 비어있으면
+        text = _build_explain_text(tab, lang, region=region)
+        if not text.strip():
             return {'explanation': err['no_data'], 'tab': tab, 'error': True}
-        result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 300)  # Groq LLM 호출 (최대 300토큰)
-        if not result:                                       # API 키 없으면
+        result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 300)
+        if not result:
             return {'explanation': err['no_service'], 'tab': tab, 'error': True}
-        with _explain_lock:                                  # 캐시 갱신
+        with _explain_lock:
             _explain_cache[cache_key] = {'text': result, 'expires': now + _EXPLAIN_TTL}
-        return {'explanation': result, 'tab': tab, 'cached': False}  # 새 해설 반환
-    except Exception as e:                                   # 예외 발생 시
-        print(f'[AI Explain {tab}] error: {e}')              # 에러 로그
-        return {'explanation': err['fail'], 'tab': tab, 'error': True}  # 에러 응답
+        return {'explanation': result, 'tab': tab, 'cached': False}
+    except Exception as e:
+        print(f'[AI Explain {tab}] error: {e}')
+        return {'explanation': err['fail'], 'tab': tab, 'error': True}

@@ -1,6 +1,6 @@
 import threading
 from datetime import datetime, time as dtime
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 import pandas as pd
 import pytz
 import yfinance as yf
@@ -11,6 +11,10 @@ from database.repositories import (
 )
 
 router = APIRouter()
+
+
+def _norm_region(region: str) -> str:
+    return region if region in ('us', 'kr') else 'us'
 
 # 미국 동부시간 타임존
 _ET = pytz.timezone('US/Eastern')
@@ -75,8 +79,8 @@ def _realtime_vol_ratio():
 
 
 @router.get('/latest')
-def get_latest():
-    rows = fetch_macro_latest2()
+def get_latest(region: str = Query('us')):
+    rows = fetch_macro_latest2(region=_norm_region(region))
     if not rows:
         return None
     current = rows[0]
@@ -109,8 +113,8 @@ def get_latest():
 
 
 @router.get('/fear-greed')
-def get_fear_greed():
-    rows = fetch_fear_greed_latest2()
+def get_fear_greed(region: str = Query('us')):
+    rows = fetch_fear_greed_latest2(region=_norm_region(region))
     if not rows:
         return None
     current = rows[0]
@@ -247,21 +251,25 @@ def build_valuation_interpretation(today: dict, baselines: dict) -> str:
 
 
 @router.get('/valuation-signal')
-def get_valuation_signal():
+def get_valuation_signal(region: str = Query('us')):
     """DB 만 select 하는 fast-path. 스케줄러 [Step 5d] 가 매일 raw·점수·LLM 해설·
     baseline 스냅샷 모두 미리 적재 → endpoint 는 단순 select. 외부 호출 0회.
 
     레거시 (interpretation/baseline_snapshot 미적재 행) 안전망:
     - on-the-fly 산출 후 응답 (단 그 결과는 DB 에 다시 적재 안 함 — scheduler 책임)
     """
+    region = _norm_region(region)
     now = _time.time()
-    cached = _val_sig_cache['data']
-    if cached and (now - _val_sig_cache['ts']) < _VAL_SIG_TTL:
+    # region 별 캐시키 분리
+    cache_key = f'data_{region}'
+    cached = _val_sig_cache.get(cache_key)
+    cached_ts = _val_sig_cache.get(f'ts_{region}', 0)
+    if cached and (now - cached_ts) < _VAL_SIG_TTL:
         return {**cached, 'cached': True}
 
     try:
-        today = fetch_valuation_signal_latest()
-        history = fetch_valuation_signal_history(days=90)
+        today = fetch_valuation_signal_latest(region=region)
+        history = fetch_valuation_signal_history(days=90, region=region)
     except Exception as e:
         print(f'[valuation_signal] DB fetch 실패: {e}')
         return {'error': f'DB fetch failed: {type(e).__name__}: {str(e)[:200]}'}
@@ -292,6 +300,6 @@ def get_valuation_signal():
         'baselines_5y': baseline_snapshot,
         'cached': False,
     }
-    _val_sig_cache['data'] = response
-    _val_sig_cache['ts'] = now
+    _val_sig_cache[f'data_{region}'] = response
+    _val_sig_cache[f'ts_{region}'] = now
     return response

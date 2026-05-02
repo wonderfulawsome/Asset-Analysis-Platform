@@ -51,7 +51,16 @@ FEATURE_NAMES = [
 ]
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
+# 하위호환 — region 미지정 시 기존 'noise_hmm.pkl' 그대로 사용 (US default).
+# region='kr' 은 _kr.pkl 로 분리.
 MODEL_PATH = os.path.join(MODEL_DIR, 'noise_hmm.pkl')
+
+
+def _model_path(region: str = 'us') -> str:
+    """region 별 모델 파일 경로. US 는 기존 파일 (하위호환), KR 은 _kr.pkl."""
+    if region == 'kr':
+        return os.path.join(MODEL_DIR, 'noise_hmm_kr.pkl')
+    return MODEL_PATH
 
 
 def compute_noise_score(means: np.ndarray) -> np.ndarray:
@@ -74,15 +83,16 @@ def compute_noise_score(means: np.ndarray) -> np.ndarray:
     )
 
 
-def train_hmm(features_df, monthly_bundle: dict = None) -> dict:
+def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> dict:
     """4-state GaussianHMM 학습 → 모델 번들 저장 및 반환.
 
     Args:
         features_df: pd.DataFrame with FEATURE_NAMES columns (윈저라이징 적용 완료)
         monthly_bundle: compute_monthly_features() 반환값 (경량 파이프라인용 캐시 데이터 포함)
+        region: 'us' 또는 'kr' — 모델 파일 분리 (noise_hmm.pkl ↔ noise_hmm_kr.pkl)
 
     Returns:
-        dict with model, scaler, state_to_phase, phase_order, train_month,
+        dict with model, scaler, state_to_phase, phase_order, train_month, region,
              last_monthly_values, winsor_bounds, amihud_q01, amihud_q99
     """
     X = features_df[FEATURE_NAMES].values
@@ -130,34 +140,37 @@ def train_hmm(features_df, monthly_bundle: dict = None) -> dict:
         amihud_q99 = monthly_bundle.get('amihud_q99', 0.0)      # Amihud 윈저 상한
 
     bundle = {
-        'model': model,                                  # 학습된 HMM 모델
-        'scaler': scaler,                                # RobustScaler
-        'state_to_phase': state_to_phase,                # HMM state → 국면 매핑
-        'phase_order': phase_order,                      # 국면 순서
-        'train_month': datetime.date.today().strftime('%Y-%m'),  # 학습 월
-        'last_monthly_values': last_monthly,             # 월별 4피처 최신값 (경량용)
-        'winsor_bounds': winsor_bounds,                  # 윈저라이징 범위 (경량용)
-        'amihud_q01': amihud_q01,                        # Amihud 윈저 하한 (경량용)
-        'amihud_q99': amihud_q99,                        # Amihud 윈저 상한 (경량용)
+        'model': model,
+        'scaler': scaler,
+        'state_to_phase': state_to_phase,
+        'phase_order': phase_order,
+        'train_month': datetime.date.today().strftime('%Y-%m'),
+        'region': region,
+        'last_monthly_values': last_monthly,
+        'winsor_bounds': winsor_bounds,
+        'amihud_q01': amihud_q01,
+        'amihud_q99': amihud_q99,
     }
 
     os.makedirs(MODEL_DIR, exist_ok=True)
-    joblib.dump(bundle, MODEL_PATH)
-    print(f'[NoiseHMM] 모델 저장: {MODEL_PATH}')
+    path = _model_path(region)
+    joblib.dump(bundle, path)
+    print(f'[NoiseHMM-{region}] 모델 저장: {path}')
 
     return bundle
 
 
-def load_model() -> Optional[dict]:
+def load_model(region: str = 'us') -> Optional[dict]:
     """저장된 모델 번들 로드. 없으면 None."""
-    if not os.path.exists(MODEL_PATH):
+    path = _model_path(region)
+    if not os.path.exists(path):
         return None
     try:
-        bundle = joblib.load(MODEL_PATH)
-        print(f'[NoiseHMM] 모델 로드 (학습 월: {bundle.get("train_month", "?")})')
+        bundle = joblib.load(path)
+        print(f'[NoiseHMM-{region}] 모델 로드 (학습 월: {bundle.get("train_month", "?")})')
         return bundle
     except Exception as e:
-        print(f'[NoiseHMM] 모델 로드 실패: {e}')
+        print(f'[NoiseHMM-{region}] 모델 로드 실패: {e}')
         return None
 
 
@@ -228,35 +241,46 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
         'feature_values': feature_values,
     }
 
-    print(f'[NoiseHMM] {today_str} → {PHASE_EMOJIS[hmm_phase]} {pred_name} (score: {ns:.2f})')
+    region_tag = model_bundle.get('region', 'us')
+    print(f'[NoiseHMM-{region_tag}] {today_str} → {PHASE_EMOJIS[hmm_phase]} {pred_name} (score: {ns:.2f})')
 
     return result
 
 
-def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> list[dict]:
+def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
+                          region: str = 'us') -> list[dict]:
     """과거 N일간의 noise regime 결과를 일괄 계산하여 반환합니다.
 
-    bundle 내 일별 시계열(residuals, stock_returns, amihud_frames, fred_raw, spy_ret)을
-    각 날짜별 20일 윈도우로 슬라이딩하며 8피처를 계산 → HMM 예측.
+    bundle 내 일별 시계열(residuals, stock_returns, amihud_frames,
+    fred_raw/macro_raw, spy_ret)을 각 날짜별 20일 윈도우로 슬라이딩하며
+    8피처를 계산 → HMM 예측.
 
     Args:
-        bundle: compute_monthly_features() 반환값 (일별 시계열 포함)
-        model_bundle: train_hmm() 반환값 (모델 + 스케일러)
+        bundle: compute_monthly_features[_kr]() 반환값 (일별 시계열 포함)
+        model_bundle: train_hmm() 반환값
         days: 백필할 최근 일수 (기본 60일)
+        region: 'us' 또는 'kr' — 종목 리스트와 raw 데이터 키 분기
 
     Returns:
         list[dict]: 날짜별 regime 결과 리스트
     """
-    from collector.noise_regime_data import SECTOR_STOCKS, ALL_STOCKS  # 순환 import 방지
+    if region == 'kr':
+        from collector.noise_regime_data_kr import (
+            SECTOR_STOCKS_KR as SECTOR_STOCKS,
+            ALL_STOCKS_KR as ALL_STOCKS,
+        )
+    else:
+        from collector.noise_regime_data import SECTOR_STOCKS, ALL_STOCKS
 
-    features_monthly = bundle['features']          # 월별 피처 DataFrame
-    residuals = bundle['residuals']                # 일별 베타 제거 잔차
-    stock_returns = bundle['stock_returns']        # 일별 종목 수익률
-    amihud_frames = bundle['amihud_frames']        # 티커별 OHLCV DataFrame
-    fred_raw = bundle['fred_raw']                  # FRED/Yahoo 원본 시계열
-    spy_ret = bundle['spy_ret']                    # SPY 일별 수익률
-    amihud_q01 = bundle['amihud_q01']              # Amihud 윈저 하한
-    amihud_q99 = bundle['amihud_q99']              # Amihud 윈저 상한
+    features_monthly = bundle['features']
+    residuals = bundle['residuals']
+    stock_returns = bundle['stock_returns']
+    amihud_frames = bundle['amihud_frames']
+    # KR bundle 은 'macro_raw' 키, US 는 'fred_raw' — 둘 다 호환되게
+    raw_dict = bundle.get('macro_raw') or bundle.get('fred_raw') or {}
+    spy_ret = bundle['spy_ret']
+    amihud_q01 = bundle['amihud_q01']
+    amihud_q99 = bundle['amihud_q99']
 
     model = model_bundle['model']                  # 학습된 HMM 모델
     scaler = model_bundle['scaler']                # RobustScaler
@@ -270,10 +294,27 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
     fg_monthly = features_monthly['fundamental_gap']  # 월별 펀더멘털 갭
     ez_monthly = features_monthly['erp_zscore']       # 월별 ERP Z-score
 
-    # VIX, VIX3M, HY 스프레드 일별 시계열
-    vix_daily = fred_raw['vix']['vix'].dropna()       # VIX 일별
-    vix3m_daily = fred_raw['vix3m']['vix3m'].dropna()  # VIX3M 일별
-    hy_daily = fred_raw['hy_spread']['hy_spread'].dropna()  # HY 스프레드 일별
+    # ⑥ vix_term 일별 시계열 (US: VIX/VIX3M, KR: VKOSPI/VKOSPI 60D)
+    # 빈 Series 도 DatetimeIndex 보장 — RangeIndex 와 Timestamp 비교 시 TypeError 회피
+    _empty_dt = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    if region == 'kr':
+        vk = raw_dict.get('vkospi')
+        if vk is not None and not vk.empty:
+            vk_series = vk['vkospi'].dropna()
+            vk_60d = vk_series.rolling(60, min_periods=20).mean()
+            vix_term_daily = (vk_series / vk_60d).replace([np.inf, -np.inf], np.nan).dropna()
+        else:
+            vix_term_daily = _empty_dt
+        vix_daily = vix_term_daily
+        vix3m_daily = pd.Series(1.0, index=vix_term_daily.index) if len(vix_term_daily) > 0 else _empty_dt
+    else:
+        vix_daily = raw_dict['vix']['vix'].dropna() if 'vix' in raw_dict else _empty_dt
+        vix3m_daily = raw_dict['vix3m']['vix3m'].dropna() if 'vix3m' in raw_dict else _empty_dt
+    hy_df = raw_dict.get('hy_spread')
+    if hy_df is not None and not hy_df.empty:
+        hy_daily = hy_df['hy_spread'].dropna()
+    else:
+        hy_daily = _empty_dt
 
     # Amihud 일별 평균 (전 종목 합산)
     amihud_daily_list = []                             # 티커별 Amihud 시리즈 모음
@@ -319,17 +360,23 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
             log_ami = np.log(ami_before.mean() + 1e-15) if len(ami_before) > 0 else 0.0  # 로그 변환
             ami_val = float(np.clip(log_ami, amihud_q01, amihud_q99))  # 윈저라이징
 
-            # ⑥ vix_term: 해당 날짜 기준 최신 VIX/VIX3M
-            vix_before = vix_daily[vix_daily.index <= date]    # 해당 날짜 이전 VIX
-            vix3m_before = vix3m_daily[vix3m_daily.index <= date]  # 해당 날짜 이전 VIX3M
-            if len(vix_before) > 0 and len(vix3m_before) > 0:  # 둘 다 있으면
-                vt_val = float(vix_before.iloc[-1]) / float(vix3m_before.iloc[-1])  # 비율 계산
+            # ⑥ vix_term: 해당 날짜 기준 최신 VIX/VIX3M (빈 시리즈면 1.0 fallback)
+            if len(vix_daily) > 0 and len(vix3m_daily) > 0:
+                vix_before = vix_daily[vix_daily.index <= date]
+                vix3m_before = vix3m_daily[vix3m_daily.index <= date]
+                if len(vix_before) > 0 and len(vix3m_before) > 0:
+                    vt_val = float(vix_before.iloc[-1]) / float(vix3m_before.iloc[-1])
+                else:
+                    vt_val = 1.0
             else:
-                vt_val = 1.0                           # 기본값
+                vt_val = 1.0
 
-            # ⑦ hy_spread: 해당 날짜 기준 최신값
-            hy_before = hy_daily[hy_daily.index <= date]       # 해당 날짜 이전 HY
-            hy_val = float(hy_before.iloc[-1]) if len(hy_before) > 0 else 0.0  # 최신값
+            # ⑦ hy_spread: 해당 날짜 기준 최신값 (빈 시리즈면 0.0)
+            if len(hy_daily) > 0:
+                hy_before = hy_daily[hy_daily.index <= date]
+                hy_val = float(hy_before.iloc[-1]) if len(hy_before) > 0 else 0.0
+            else:
+                hy_val = 0.0
 
             # ⑧ realized_vol: 해당 날짜 기준 20일 SPY 변동성
             spy_before = spy_ret[spy_ret.index <= date].iloc[-20:]  # 20일 SPY 수익률
@@ -390,5 +437,5 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60) -> l
             print(f'[NoiseHMM-Backfill] {date} 건너뜀: {e}')  # 개별 날짜 실패 시 계속
             continue
 
-    print(f'[NoiseHMM-Backfill] {len(records)}건 계산 완료')  # 완료 로그
+    print(f'[NoiseHMM-Backfill-{region}] {len(records)}건 계산 완료')
     return records

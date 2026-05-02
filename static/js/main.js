@@ -115,9 +115,23 @@ const SURGE_GRADE_STYLE = {
 function getTickerLabel(ticker) {                  // 티커명 번역 조회
   return t('ticker.' + ticker) || ticker;          // 번역 없으면 티커 코드 반환
 }
-const TICKER_LABELS_KEYS = ['SPY','QQQ','SOXX','BND','IWM','DIA']; // 티커 목록
-// 동적 getter: 매번 현재 언어의 라벨 반환
-function getTickerLabels() {                       // 티커 라벨 사전 생성
+// 시장 탭 컨베이어 — region 별 ticker 목록 (US: SPY/QQQ 등, KR: KODEX/TIGER)
+const TICKER_LABELS_KEYS_US = ['SPY','QQQ','SOXX','BND','IWM','DIA'];
+const TICKER_LABELS_KEYS_KR = ['069500','102110','232080','091160','266420','341850'];
+function _curRegion() { return (typeof window.getRegion === 'function') ? window.getRegion() : 'us'; }
+function TICKER_LABELS_KEYS_FN() {
+  return _curRegion() === 'kr' ? TICKER_LABELS_KEYS_KR : TICKER_LABELS_KEYS_US;
+}
+// 하위호환 — 일부 코드가 const 로 참조하는 경우 대비
+const TICKER_LABELS_KEYS = TICKER_LABELS_KEYS_US;
+// 동적 getter: 매번 현재 언어 + region 의 라벨 반환
+function getTickerLabels() {
+  if (_curRegion() === 'kr') {
+    return {
+      '069500': 'KODEX 200', '102110': 'TIGER 200', '232080': 'TIGER 코스닥150',
+      '091160': 'KODEX 반도체', '266420': 'KODEX 헬스케어', '341850': 'TIGER 리츠',
+    };
+  }
   return { SPY: 'S&P 500', QQQ: t('ticker.QQQ'), SOXX: t('ticker.SOXX'), BND: t('ticker.BND'), IWM: t('ticker.IWM'), DIA: t('ticker.DIA') };
 }
 
@@ -683,6 +697,19 @@ function deltaArrow(cur, prev, invert) {
   return `<span class="ind-delta" style="color:${color}">${arrow}</span>`;
 }
 
+// region 별 정적 라벨 텍스트 갱신 — KR 모드면 VIX→VKOSPI 등
+function _applyRegionMarketLabels() {
+  const isKr = _curRegion() === 'kr';
+  const vixCard = document.querySelector('.ind-card .ind-label');
+  // VIX 라벨 (첫 번째 ind-label)
+  document.querySelectorAll('.ind-card .ind-label').forEach(el => {
+    if (el.textContent.trim() === 'VIX') el.textContent = isKr ? 'VKOSPI' : 'VIX';
+    // VKOSPI → VIX 복원 (region 전환 안전망)
+    if (el.textContent.trim() === 'VKOSPI' && !isKr) el.textContent = 'VIX';
+  });
+}
+
+
 async function loadMacro() {
   let macro, fg;
   try {
@@ -694,6 +721,7 @@ async function loadMacro() {
     fg    = await fgRes.json();
   } catch (e) { console.error('loadMacro error:', e); return; }
   if (!macro || !fg) return;
+  _applyRegionMarketLabels();                         // VIX → VKOSPI 라벨 region 분기
 
   // VIX
   const vixVal = document.getElementById('vix-val');

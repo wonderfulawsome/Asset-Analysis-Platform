@@ -1,5 +1,5 @@
 import threading
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from database.repositories import (
     fetch_crash_surge_current, fetch_crash_surge_history,
     fetch_crash_surge_all, fetch_macro_closes, upsert_crash_surge,
@@ -7,6 +7,11 @@ from database.repositories import (
 import time                                              # 캐시 만료 체크용
 
 router = APIRouter()
+
+
+def _norm_region(region: str) -> str:
+    return region if region in ('us', 'kr') else 'us'
+
 
 # ── 수동 새로고침 상태 관리 ──
 _refresh_running = False
@@ -21,36 +26,42 @@ _CACHE_TTL = 1800                                        # 캐시 유효 시간 
 
 
 @router.get('/current')
-def get_current():
+def get_current(region: str = Query('us')):
     """최신 폭락/급등 전조 신호 조회."""
-    return fetch_crash_surge_current()
+    return fetch_crash_surge_current(region=_norm_region(region))
 
 
 @router.get('/history')
-def get_history(days: int = 30):
+def get_history(days: int = 30, region: str = Query('us')):
     """최근 N일 폭락/급등 전조 히스토리."""
-    return fetch_crash_surge_history(days)
+    return fetch_crash_surge_history(days, region=_norm_region(region))
 
 
 @router.get('/direction')
-def get_direction():
+def get_direction(region: str = Query('us')):
     """현재 net_score 기반 방향성 분석.
 
     과거에 비슷한 net_score 구간이었을 때 5/10/20일 후 실제 수익률 통계를 반환.
     """
     import numpy as np                                  # 수치 계산용
+    region = _norm_region(region)
 
     # 최신 결과 조회
-    current = fetch_crash_surge_current()               # 오늘의 crash/surge 결과
+    current = fetch_crash_surge_current(region=region)  # 오늘의 crash/surge 결과
     if not current or current.get('net_score') is None:
         return None
 
-    # 캐시가 만료되었으면 DB에서 다시 로드
+    # 캐시가 만료되었으면 DB에서 다시 로드 (region 별 캐시키 분리)
     now = time.time()                                    # 현재 시각
-    if _dir_cache['cs_data'] is None or (now - _dir_cache['loaded_at']) > _CACHE_TTL:
-        _dir_cache['cs_data'] = fetch_crash_surge_all()  # 전체 crash_surge 조회
-        _dir_cache['macro_data'] = fetch_macro_closes()  # 전체 SPY 종가 조회
-        _dir_cache['loaded_at'] = now                    # 로드 시각 갱신
+    cache_key = f'_dir_cache_{region}'
+    if (_dir_cache.get(f'cs_data_{region}') is None
+            or (now - _dir_cache.get(f'loaded_at_{region}', 0)) > _CACHE_TTL):
+        _dir_cache[f'cs_data_{region}'] = fetch_crash_surge_all(region=region)
+        _dir_cache[f'macro_data_{region}'] = fetch_macro_closes(region=region)
+        _dir_cache[f'loaded_at_{region}'] = now
+    _dir_cache['cs_data'] = _dir_cache[f'cs_data_{region}']
+    _dir_cache['macro_data'] = _dir_cache[f'macro_data_{region}']
+    _dir_cache['loaded_at'] = _dir_cache[f'loaded_at_{region}']
 
     all_data = _dir_cache['cs_data']                     # 캐시에서 가져옴
     if not all_data or len(all_data) < 30:

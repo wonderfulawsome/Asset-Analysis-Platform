@@ -13,9 +13,30 @@ _cache: dict = {}
 _lock = threading.Lock()
 _CACHE_SEC = 600  # 10분
 
-# 주요 ETF 목록
+# 주요 US ETF 목록 (yfinance)
 CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
                  'XLK', 'XLF', 'XLE', 'XLV', 'ARKK', 'GLD', 'TLT', 'SCHD']
+
+# 주요 KR ETF 목록 (pykrx, 6자리 종목코드)
+CHART_TICKERS_KR = [
+    '069500',  # KODEX 200
+    '102110',  # TIGER 200
+    '232080',  # TIGER 코스닥150
+    '229200',  # KODEX 코스닥150
+    '091160',  # KODEX 반도체
+    '139260',  # TIGER 200 IT
+    '091170',  # KODEX 은행
+    '266420',  # KODEX 헬스케어
+    '139250',  # TIGER 200 에너지화학
+    '091180',  # KODEX 자동차
+    '117680',  # KODEX 철강
+    '341850',  # TIGER 리츠부동산인프라
+]
+
+
+def _is_kr_ticker(ticker: str) -> bool:
+    """6자리 숫자만 있으면 KR ETF, 아니면 US."""
+    return ticker.isdigit() and len(ticker) == 6
 
 # yfinance interval → period 매핑
 INTERVAL_CONFIG = {
@@ -45,12 +66,53 @@ def _resample_daily_to(df, interval):
     return resampled
 
 
+def _download_kr(ticker: str, interval: str):
+    """pykrx 로 KR ETF OHLCV 다운로드.
+
+    pykrx 컬럼은 한글이라 영어로 리네임. interval='1d' 만 직접 지원,
+    '1wk'/'1mo' 는 일봉을 받아 리샘플링.
+    """
+    try:
+        from pykrx import stock
+        from datetime import date, timedelta
+        # period 결정 — interval 별 다른 길이
+        if interval == '1d':
+            period_days = 365 * 2  # 2년
+        elif interval == '1wk':
+            period_days = 365 * 5
+        else:
+            period_days = 365 * 10
+        end = date.today().strftime('%Y%m%d')
+        start = (date.today() - timedelta(days=period_days)).strftime('%Y%m%d')
+        df = stock.get_etf_ohlcv_by_date(start, end, ticker)
+        if df is None or df.empty:
+            return None
+        # 한글 컬럼 → 영어
+        df = df.rename(columns={
+            '시가': 'Open', '고가': 'High', '저가': 'Low', '종가': 'Close', '거래량': 'Volume',
+        })
+        # Index 가 datetime 인지 확인
+        if not pd.api.types.is_datetime64_any_dtype(df.index):
+            df.index = pd.to_datetime(df.index)
+        # 1wk / 1mo 리샘플
+        if interval in ('1wk', '1mo'):
+            df = _resample_daily_to(df, interval)
+        return df
+    except Exception as e:
+        print(f'[Chart-KR] {ticker} {interval}: 실패: {e}')
+        return None
+
+
 def _download_with_fallback(ticker, interval, max_retries=2):
-    """yfinance 다운로드 + 재시도 + 일봉 리샘플링 fallback.
+    """yfinance(US) / pykrx(KR) 자동 분기 다운로드.
 
     1차: 요청 interval로 직접 다운로드 (재시도 포함)
-    2차: 일봉 다운로드 → 주봉/월봉 리샘플링 (1wk, 1mo인 경우)
+    2차: 일봉 다운로드 → 주봉/월봉 리샘플링 (1wk, 1mo인 경우, US 만 적용)
     """
+    # KR 티커는 pykrx 경로
+    if _is_kr_ticker(ticker):
+        return _download_kr(ticker, interval)
+
     cfg = INTERVAL_CONFIG[interval]
 
     # 1차: 직접 다운로드 (재시도)
@@ -86,12 +148,15 @@ def _download_with_fallback(ticker, interval, max_retries=2):
 
 @router.get('/ohlc')
 def get_ohlc(
-    ticker: str = Query('SPY', description='ETF 티커'),
+    ticker: str = Query('SPY', description='ETF 티커 (US: SPY 등 / KR: 069500 등 6자리)'),
     interval: str = Query('1d', description='봉 간격: 1d, 1wk, 1mo'),
 ):
-    """캔들스틱 OHLC 데이터 반환"""
-    ticker = ticker.upper()
-    if ticker not in CHART_TICKERS:
+    """캔들스틱 OHLC 데이터 반환 — US (yfinance) / KR (pykrx) 자동 분기."""
+    # KR 6자리 숫자면 그대로, US 는 대문자 변환
+    if not _is_kr_ticker(ticker):
+        ticker = ticker.upper()
+    # 허용 ticker 검증
+    if ticker not in CHART_TICKERS and ticker not in CHART_TICKERS_KR:
         return {'error': 'unsupported ticker'}
     if interval not in INTERVAL_CONFIG:
         return {'error': 'unsupported interval'}
@@ -201,12 +266,18 @@ def _regenerate_in_background(ticker: str):
 @router.get('/predict')
 def get_prediction(ticker: str = Query('SPY', description='ETF 티커')):
     """5-모델 앙상블 30일 예측 결과를 DB에서 조회.
-    DB에 없으면 백그라운드 재생성 후 폴링하여 완료를 대기한다."""
+    DB에 없으면 백그라운드 재생성 후 폴링하여 완료를 대기한다.
+
+    KR 티커는 Stage 3 에서 모델 학습 추가 예정 — 현재는 'no model' 응답.
+    """
     from database.repositories import fetch_chart_predict
 
-    ticker = ticker.upper()
-    if ticker not in CHART_TICKERS:
+    if not _is_kr_ticker(ticker):
+        ticker = ticker.upper()
+    if ticker not in CHART_TICKERS and ticker not in CHART_TICKERS_KR:
         return {'error': 'unsupported ticker'}
+    if _is_kr_ticker(ticker):
+        return {'error': 'KR 예측 모델 미학습 — Stage 3 에서 제공 예정'}
 
     def _fetch_valid(t):
         r = fetch_chart_predict(t)

@@ -1,10 +1,27 @@
 // ── 캔들스틱 차트 탭 ──
-const CHART_MAIN_TICKERS = ['VOO','QQQ','DIA','IWM','SOXX','SMH','GLD','TLT','SCHD'];
+const CHART_MAIN_TICKERS_US = ['VOO','QQQ','DIA','IWM','SOXX','SMH','GLD','TLT','SCHD'];
+const CHART_MAIN_TICKERS_KR = ['069500','102110','232080','091160','139260','266420','091170','091180','117680'];
 const TICKER_NAMES = {
+  // US
   SPY:'S&P 500 ETF', QQQ:'Nasdaq 100', DIA:'Dow Jones', IWM:'Russell 2000',
   VOO:'S&P 500 (V)', SOXX:'Semiconductor', SMH:'Semiconductor (VN)',
   GLD:'Gold', TLT:'Treasury 20Y+', SCHD:'Dividend',
+  // KR (KODEX/TIGER 6자리 코드)
+  '069500':'KODEX 200', '102110':'TIGER 200',
+  '232080':'TIGER 코스닥150', '229200':'KODEX 코스닥150',
+  '091160':'KODEX 반도체', '139260':'TIGER 200 IT',
+  '091170':'KODEX 은행', '266420':'KODEX 헬스케어',
+  '139250':'TIGER 200 에너지화학', '091180':'KODEX 자동차',
+  '117680':'KODEX 철강', '341850':'TIGER 리츠',
 };
+
+// region 에 따라 티커 목록·기본 ticker 가 달라짐
+function _currentRegion() {
+  return (typeof window.getRegion === 'function') ? window.getRegion() : 'us';
+}
+function _chartTickers() {
+  return _currentRegion() === 'kr' ? CHART_MAIN_TICKERS_KR : CHART_MAIN_TICKERS_US;
+}
 
 // 이동평균선 설정 (기간, 색상)
 const MA_CONFIG = [
@@ -14,7 +31,10 @@ const MA_CONFIG = [
   { period: 120, color: '#6C5CE7', label: 'MA120' },
 ];
 
-let _chartTicker = 'VOO';
+// 초기 ticker — region 에 따라 결정 (kr 이면 KODEX 200)
+let _chartTicker = (typeof window !== 'undefined' && typeof window.getRegion === 'function' && window.getRegion() === 'kr')
+  ? '069500'
+  : 'VOO';
 let _chartInterval = '1d';
 let _chartData = null;
 let _maVisible = { 5: true, 20: true, 60: true, 120: false };
@@ -57,9 +77,15 @@ function setupZoomButtons() {
 function renderTickerChips() {
   const el = document.getElementById('chart-ticker-chips');
   if (!el) return;
-  el.innerHTML = CHART_MAIN_TICKERS.map(tk => {
+  const tickers = _chartTickers();
+  // 현재 _chartTicker 가 region 의 ticker 목록에 없으면 첫 ticker 로 리셋
+  if (!tickers.includes(_chartTicker)) {
+    _chartTicker = tickers[0];
+  }
+  el.innerHTML = tickers.map(tk => {
     const sel = tk === _chartTicker ? ' active' : '';
-    return `<button class="chart-tk-chip${sel}" data-tk="${tk}">${tk}</button>`;
+    const label = TICKER_NAMES[tk] && _currentRegion() === 'kr' ? TICKER_NAMES[tk] : tk;
+    return `<button class="chart-tk-chip${sel}" data-tk="${tk}" title="${TICKER_NAMES[tk] || tk}">${label}</button>`;
   }).join('');
   el.onclick = (e) => {
     const chip = e.target.closest('.chart-tk-chip');
@@ -978,10 +1004,12 @@ function hidePredictSection() {
   renderPredictLegend(false);
 }
 
-// 일봉일 때만 예측 버튼 표시
+// 일봉일 때만 예측 버튼 표시 (KR 은 모델 미학습이라 항상 숨김)
 function updatePredictBtnVisibility() {
   const wrap = document.getElementById('predict-toggle-btn')?.parentElement;
-  if (wrap) wrap.style.display = _chartInterval === '1d' ? '' : 'none';
+  if (!wrap) return;
+  const showable = _chartInterval === '1d' && _currentRegion() !== 'kr';
+  wrap.style.display = showable ? '' : 'none';
 }
 
 function showPredictDisclaimer() {

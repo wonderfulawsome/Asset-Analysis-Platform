@@ -22,3 +22,5 @@ groq
 arch
 xmltodict
 httpx
+pykrx
+finance-datareader
