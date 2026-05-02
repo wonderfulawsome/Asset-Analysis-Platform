@@ -97,20 +97,28 @@ def fetch_kospi_shiller_like(years: int = 7) -> pd.DataFrame:
 
 
 def fetch_kr_10y_monthly(years: int = 7) -> pd.Series:
-    """KR 10Y KTB monthly (FDR 'KR10YT=RR')."""
+    """KR 10Y KTB monthly. ECOS 1차, FDR 2차 폴백 — 결과는 소수(0.035 등) 단위."""
+    # 1차 ECOS
+    try:
+        from collector.ecos_macro import fetch_kr_treasury_yields
+        bundle = fetch_kr_treasury_yields(years=years)
+        s = bundle.get('kr_10y')
+        if s is not None and not s.empty:
+            return _strip_tz((s / 100.0).resample('MS').last().dropna())
+    except Exception as e:
+        print(f'[KR-Noise] ECOS KR 10Y 실패: {e}')
+    # 2차 FDR (Yahoo)
     try:
         import FinanceDataReader as fdr
         end = _dt.date.today()
         start = end - _dt.timedelta(days=years * 365 + 30)
         df = fdr.DataReader('KR10YT=RR', start, end)
-        if df is None or df.empty or 'Close' not in df.columns:
-            return pd.Series(dtype=float)
-        s = df['Close'].resample('MS').last().dropna()
-        s = s / 100.0                                    # 퍼센트 → 소수
-        return _strip_tz(s)
+        if df is not None and not df.empty and 'Close' in df.columns:
+            s = df['Close'].resample('MS').last().dropna() / 100.0
+            return _strip_tz(s)
     except Exception as e:
-        print(f'[KR-Noise] KR 10Y fetch 실패: {e}')
-        return pd.Series(dtype=float)
+        print(f'[KR-Noise] FDR KR 10Y 실패: {e}')
+    return pd.Series(dtype=float)
 
 
 def fetch_vkospi_daily(years: int = 7) -> pd.Series:
@@ -129,7 +137,20 @@ def fetch_vkospi_daily(years: int = 7) -> pd.Series:
 
 
 def fetch_us_hy_spread(years: int = 7) -> pd.Series:
-    """미국 ICE BofA HY OAS (FRED BAMLH0A0HYM2) — KR HY 데이터 부족 시 글로벌 신용 환경 대용."""
+    """KR 회사채(AA-3Y) 스프레드 1차, 미국 HY OAS (FRED) 2차 폴백.
+
+    KR 회사채 - KR 3Y 국고채 스프레드 (% 차이) 가 있으면 KR 신용 환경 정확히 반영.
+    실패 시 미국 ICE BofA HY OAS — 글로벌 신용 환경 대용.
+    """
+    # 1차 ECOS — KR 회사채 스프레드
+    try:
+        from collector.ecos_macro import fetch_kr_corp_spread
+        s = fetch_kr_corp_spread(years=years)
+        if s is not None and not s.empty:
+            return _strip_tz(s)
+    except Exception as e:
+        print(f'[KR-Noise] ECOS KR 회사채 스프레드 실패 → 미국 HY 폴백: {e}')
+    # 2차 미국 HY OAS (FRED)
     try:
         import requests
         url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=BAMLH0A0HYM2'

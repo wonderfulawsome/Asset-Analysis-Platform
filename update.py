@@ -6440,3 +6440,41 @@ def _bucheon_sub_top(client, ym):
 # 폴백 활성: PER 14.0, KR10Y 3.5%, VKOSPI=KOSPI RV proxy
 # 한계: ERP/yield 평탄 → z_erp/z_dd 분산 작아짐, z_comp 신호 약함
 #       KRX/ECOS 복구 후 정상 분포 회복
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [82] 2026-05-02 (UTC) — KR Stage 3.x: ECOS API 통합 (KR 10Y/3Y/회사채 정확도 회복)
+# ════════════════════════════════════════════════════════════════════════════
+# Yahoo 'KR10YT=RR' 가 404 로 막힌 환경에서 KR 매크로 정확도 회복 — 한국은행 ECOS
+# API 통계표 817Y002 (시장금리 일별) 활용. KR 신용 환경도 글로벌 미국 HY 대신
+# KR 회사채(AA-3Y) - 국고채 3Y 스프레드로 정확히 산출.
+#
+# [신규 SPECS — collector/ecos_macro.py]
+# - kr_10y_daily   : 817Y002 / 010210000 (일별)
+# - kr_3y_daily    : 817Y002 / 010200000 (일별)
+# - kr_corp_aa3y   : 817Y002 / 010320000 (일별, 회사채 3년 AA-)
+#
+# [신규 helpers]
+# - fetch_kr_treasury_yields(years) → {'kr_10y', 'kr_3y'}: pd.Series (% 단위)
+# - fetch_kr_corp_spread(years) → 회사채 - 국고채 3Y 스프레드 Series
+#
+# [수정 — ECOS 1차 폴백 추가]
+# - market_data_kr.fetch_kr_10y_treasury / fetch_kr_3y_treasury
+#     · ECOS → FDR(KR10YT=RR) → 3.5% 평탄 fallback 3단
+# - noise_regime_data_kr.fetch_kr_10y_monthly
+#     · ECOS → FDR 2단 (월말 resample)
+# - noise_regime_data_kr.fetch_us_hy_spread
+#     · KR 회사채 스프레드 (ECOS) 1차 → 미국 HY OAS (FRED) 2차 폴백
+#     · KR 신용 환경 정확 반영 (이전엔 항상 글로벌 미국 HY)
+# - valuation_signal_kr (3곳)
+#     · backfill / today / baseline_5y 모두 ECOS 1차 추가
+#
+# [효과]
+# - PER 만 KRX 의존 (pykrx 외 대안 없음, fallback 14.0)
+# - KR 10Y / 3Y / hy_spread 모두 ECOS 정확값 → erp_zscore / hy_spread feature
+#   분산 회복 → HMM 학습 정확도 ↑
+# - 다음 train_kr_hmm 재실행 시 정상 모델 (사용자 한 번 더 돌려야 효과 적용)
+#
+# [한계]
+# - ECOS 통계표 코드는 변경 가능 — 실패 시 자동 fallback 으로 안전망
+# - PER 정확값은 KRX/pykrx 복구 또는 별도 대체 (yfinance EWY 등) 필요

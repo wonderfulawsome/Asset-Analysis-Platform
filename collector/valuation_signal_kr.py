@@ -59,13 +59,23 @@ def _compute_kr_erp_baseline_5y() -> dict:
         ey = 1.0 / per
         ey_monthly = ey.resample('M').last().dropna()
 
-        # KR 10Y monthly
-        tnx_df = fdr.DataReader('KR10YT=RR',
-                                 date.today() - timedelta(days=365 * 5 + 30),
-                                 date.today())
-        if tnx_df is None or tnx_df.empty:
-            return _FALLBACK_ERP
-        tnx_monthly = (tnx_df['Close'] / 100.0).resample('M').last().dropna()
+        # KR 10Y monthly — ECOS 1차, FDR 2차
+        tnx_monthly = None
+        try:
+            from collector.ecos_macro import fetch_kr_treasury_yields
+            bundle = fetch_kr_treasury_yields(years=5)
+            s = bundle.get('kr_10y')
+            if s is not None and not s.empty:
+                tnx_monthly = (s / 100.0).resample('M').last().dropna()
+        except Exception as e:
+            print(f'[valuation_kr] ECOS KR 10Y 실패 → FDR: {e}')
+        if tnx_monthly is None:
+            tnx_df = fdr.DataReader('KR10YT=RR',
+                                     date.today() - timedelta(days=365 * 5 + 30),
+                                     date.today())
+            if tnx_df is None or tnx_df.empty:
+                return _FALLBACK_ERP
+            tnx_monthly = (tnx_df['Close'] / 100.0).resample('M').last().dropna()
 
         # 월별 ERP = EY - tnx (인덱스 정렬)
         joined = pd.concat([ey_monthly, tnx_monthly], axis=1, keys=['ey', 'tnx']).dropna()
@@ -251,16 +261,26 @@ def fetch_valuation_signal_today_kr() -> dict | None:
         kospi_60max = float(close.tail(60).max())
         dd_60d = kospi_today / kospi_60max - 1.0
 
-        # KR 10Y — FDR 실패시 3.5% fallback
+        # KR 10Y — ECOS 1차, FDR 2차, fallback 3차
         tnx_yield = None
         try:
-            import FinanceDataReader as fdr
-            tnx_df = fdr.DataReader('KR10YT=RR',
-                                     date.today() - timedelta(days=10), date.today())
-            if tnx_df is not None and not tnx_df.empty and 'Close' in tnx_df.columns:
-                tnx_yield = float(tnx_df['Close'].iloc[-1]) / 100.0
+            from collector.ecos_macro import fetch_kr_treasury_yields
+            bundle = fetch_kr_treasury_yields(years=1)
+            s = bundle.get('kr_10y')
+            if s is not None and not s.empty:
+                tnx_yield = float(s.iloc[-1]) / 100.0
+                print(f'[valuation_kr] ECOS KR 10Y today {tnx_yield*100:.2f}% 사용')
         except Exception as e:
-            print(f'[valuation_kr] KR 10Y FDR 실패: {e}')
+            print(f'[valuation_kr] ECOS KR 10Y 실패: {e}')
+        if tnx_yield is None:
+            try:
+                import FinanceDataReader as fdr
+                tnx_df = fdr.DataReader('KR10YT=RR',
+                                         date.today() - timedelta(days=10), date.today())
+                if tnx_df is not None and not tnx_df.empty and 'Close' in tnx_df.columns:
+                    tnx_yield = float(tnx_df['Close'].iloc[-1]) / 100.0
+            except Exception as e:
+                print(f'[valuation_kr] KR 10Y FDR 실패: {e}')
         if tnx_yield is None:
             tnx_yield = 0.035
             print('[valuation_kr] KR 10Y fallback 3.5% 사용')
@@ -343,16 +363,29 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
 
     ey = 1.0 / per_series
 
-    # KR 10Y — FDR → fallback 0.035 (3.5%)
+    # KR 10Y — ECOS 1차, FDR 2차, fallback 3차
+    tnx_yield = None
     try:
-        import FinanceDataReader as fdr
-        tnx_df = fdr.DataReader('KR10YT=RR', start, end)
-        if tnx_df is None or tnx_df.empty or 'Close' not in tnx_df.columns:
-            raise ValueError('empty')
-        tnx_yield = tnx_df['Close'] / 100.0
+        from collector.ecos_macro import fetch_kr_treasury_yields
+        years = max(1, (period_days // 365) + 1)
+        bundle = fetch_kr_treasury_yields(years=years)
+        s = bundle.get('kr_10y')
+        if s is not None and not s.empty:
+            tnx_yield = (s / 100.0)
+            print(f'[valuation_kr] ECOS KR 10Y {len(tnx_yield)}건 사용')
     except Exception as e:
-        print(f'[valuation_kr] KR 10Y FDR 실패 → fallback 3.5%: {e}')
+        print(f'[valuation_kr] ECOS KR 10Y 실패: {e}')
+    if tnx_yield is None:
+        try:
+            import FinanceDataReader as fdr
+            tnx_df = fdr.DataReader('KR10YT=RR', start, end)
+            if tnx_df is not None and not tnx_df.empty and 'Close' in tnx_df.columns:
+                tnx_yield = tnx_df['Close'] / 100.0
+        except Exception as e:
+            print(f'[valuation_kr] KR 10Y FDR 실패: {e}')
+    if tnx_yield is None:
         tnx_yield = pd.Series(0.035, index=close.index)
+        print('[valuation_kr] KR 10Y fallback 3.5% 사용')
 
     # VKOSPI — FDR → KOSPI RV proxy
     try:

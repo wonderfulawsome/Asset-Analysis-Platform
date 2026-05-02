@@ -1,4 +1,4 @@
-"""한국은행 ECOS API — 기준금리·주담대 금리·주담대 잔액 수집.
+"""한국은행 ECOS API — 기준금리·주담대 금리·주담대 잔액 + KR 국고채 / 회사채 수집.
 
 ECOS REST 엔드포인트 형식:
   https://ecos.bok.or.kr/api/StatisticSearch/{API_KEY}/json/kr/
@@ -12,10 +12,17 @@ cycle: D(일별), M(월별), Q(분기), A(연간).
   - 주담대 금리:        121Y006 / BECBLA0302  (cycle=M, 예금은행 신규취급 가중평균 - 주택담보대출)
   - 주담대 잔액:        151Y005 / 11110A0     (cycle=M, 예금은행 주택담보대출 잔액)
 
+KR 시장금리 (817Y002 일별 시장금리 통계표 — 2026-04 ECOS 검증 기준):
+  - 국고채(10년):       817Y002 / 010210000   (cycle=D)
+  - 국고채(3년):        817Y002 / 010200000   (cycle=D)
+  - 회사채(3년,AA-):    817Y002 / 010320000   (cycle=D)
+  ⚠️ ECOS 통계표 코드는 변경될 수 있어 fetch 실패 시 fallback 작동.
+
 위 코드는 ECOS 변경 시 깨질 수 있어 fetch_ecos_series 호출 시 SPECS 외부 override 가능.
 """
 import os
 from datetime import date, timedelta
+from typing import Optional
 
 import httpx
 
@@ -28,6 +35,10 @@ SPECS = {
     "base_rate":        {"table": "722Y001", "item": "0101000",    "cycle": "M"},
     "mortgage_rate":    {"table": "121Y006", "item": "BECBLA0302", "cycle": "M"},
     "mortgage_balance": {"table": "151Y005", "item": "11110A0",    "cycle": "M"},
+    # KR 시장금리 — 일별
+    "kr_10y_daily":     {"table": "817Y002", "item": "010210000",  "cycle": "D"},
+    "kr_3y_daily":      {"table": "817Y002", "item": "010200000",  "cycle": "D"},
+    "kr_corp_aa3y":     {"table": "817Y002", "item": "010320000",  "cycle": "D"},
 }
 
 
@@ -122,3 +133,61 @@ def fetch_macro_rate_kr(from_ym: str = "", months: int = 24) -> list[dict]:
 
     # date 기준 정렬
     return [by_date[d] for d in sorted(by_date)]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# KR 국고채 / 회사채 helpers — collector/market_data_kr 와 valuation_signal_kr 가 사용
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_kr_treasury_yields(years: int = 5):
+    """KR 10Y / 3Y 국고채 일별 yield 시계열 (단위: %).
+
+    Returns: dict[str, pandas.Series] — 'kr_10y' / 'kr_3y' 키. 빈 dict 면 ECOS 실패.
+    Series.index 는 DatetimeIndex.
+    """
+    import pandas as pd
+
+    end = date.today()
+    start = end - timedelta(days=years * 365 + 30)
+    from_ymd = start.strftime("%Y%m%d")
+    to_ymd = end.strftime("%Y%m%d")
+
+    out = {}
+    for metric, key in [("kr_10y_daily", "kr_10y"), ("kr_3y_daily", "kr_3y")]:
+        try:
+            rows = fetch_ecos_series(metric, from_ymd, to_ymd)
+            if not rows:
+                continue
+            idx = pd.to_datetime([r["date"] for r in rows])
+            vals = [r["value"] for r in rows]
+            out[key] = pd.Series(vals, index=idx).sort_index()
+        except Exception as e:
+            print(f"[ECOS] {metric} 실패: {e}")
+    return out
+
+
+def fetch_kr_corp_spread(years: int = 5) -> Optional["pd.Series"]:
+    """KR 회사채(AA- 3Y) - 국고채 3Y 스프레드 시계열 (% 차이).
+
+    HY 등가는 아니지만 KR 신용 환경 proxy. 실패 시 None.
+    """
+    import pandas as pd
+
+    end = date.today()
+    start = end - timedelta(days=years * 365 + 30)
+    from_ymd = start.strftime("%Y%m%d")
+    to_ymd = end.strftime("%Y%m%d")
+    try:
+        corp_rows = fetch_ecos_series("kr_corp_aa3y", from_ymd, to_ymd)
+        kr3y_rows = fetch_ecos_series("kr_3y_daily", from_ymd, to_ymd)
+    except Exception as e:
+        print(f"[ECOS] corp spread 실패: {e}")
+        return None
+    if not corp_rows or not kr3y_rows:
+        return None
+
+    corp = pd.Series([r["value"] for r in corp_rows],
+                     index=pd.to_datetime([r["date"] for r in corp_rows])).sort_index()
+    kr3y = pd.Series([r["value"] for r in kr3y_rows],
+                     index=pd.to_datetime([r["date"] for r in kr3y_rows])).sort_index()
+    return (corp - kr3y).dropna()

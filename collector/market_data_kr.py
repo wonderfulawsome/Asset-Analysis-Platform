@@ -148,26 +148,51 @@ def _fdr_close(symbol: str, days: int) -> pd.Series:
     return pd.Series(dtype=float)
 
 
+def _ecos_treasury(key: str, days: int) -> pd.Series:
+    """ECOS API → KR 국고채 yield 시계열. 실패 시 빈 Series."""
+    try:
+        from collector.ecos_macro import fetch_kr_treasury_yields
+        years = max(1, (days // 365) + 1)
+        bundle = fetch_kr_treasury_yields(years=years)
+        s = bundle.get(key)
+        if s is not None and not s.empty:
+            return s
+    except Exception as e:
+        print(f"[KR] ECOS {key} 실패: {e}")
+    return pd.Series(dtype=float)
+
+
 def fetch_kr_10y_treasury(days: int = 252) -> pd.Series:
-    """한국 10년 국고채 yield (%). FDR 'KR10YT=RR' 시도, 실패시 fallback 상수 시리즈."""
+    """한국 10년 국고채 yield (%). ECOS → FDR → fallback 3.5% 평탄."""
+    # 1차 ECOS (가장 정확)
+    s = _ecos_treasury('kr_10y', days)
+    if not s.empty:
+        return s
+    # 2차 FDR (Yahoo 'KR10YT=RR' — 2026 기준 404 빈도 높음)
     s = _fdr_close('KR10YT=RR', days)
     if not s.empty:
         return s
-    # fallback: KOSPI close 인덱스 기준으로 평탄한 fallback 시리즈
+    # 3차 fallback: KOSPI close 인덱스 기준 평탄 시리즈
     try:
         kospi = fetch_kospi_price_history(days=days * 2)
         if kospi is None or kospi.empty:
             return pd.Series(dtype=float)
-        return pd.Series(_KR_10Y_FALLBACK * 100, index=kospi.index)  # % 단위 (3.5)
+        return pd.Series(_KR_10Y_FALLBACK * 100, index=kospi.index)
     except Exception:
         return pd.Series(dtype=float)
 
 
 def fetch_kr_3y_treasury(days: int = 252) -> pd.Series:
-    """한국 3년 국고채 (yield_spread 계산용). FDR 실패시 fallback 상수."""
+    """한국 3년 국고채 yield (%). ECOS → FDR → fallback 3.0% 평탄."""
+    # 1차 ECOS
+    s = _ecos_treasury('kr_3y', days)
+    if not s.empty:
+        return s
+    # 2차 FDR
     s = _fdr_close('KR3YT=RR', days)
     if not s.empty:
         return s
+    # 3차 fallback
     try:
         kospi = fetch_kospi_price_history(days=days * 2)
         if kospi is None or kospi.empty:
