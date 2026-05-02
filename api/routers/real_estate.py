@@ -100,8 +100,103 @@ def get_geo(sgg_cd: str = Query(..., description='시군구 코드 5자리')):
     return fetch_geo_stdg(sgg_cd)
 
 
+REGION_DETAIL_CACHE_KEY_PREFIX = 'region_detail:'
+
+
+def compute_region_detail(sgg_cd: str) -> dict:
+    """RegionDetail 페이지 단일 응답 — summary + timeseries + signal 통합.
+
+    스케줄러가 sgg 별 109개 row 매일 적재 → endpoint 는 cache select 1번.
+    """
+    summary_rows = fetch_region_summary(sgg_cd, _default_ym())
+    timeseries_rows = _build_timeseries(sgg_cd)
+    signal_row = None
+    try:
+        from database.repositories import fetch_buy_signal
+        signal_row = fetch_buy_signal(sgg_cd)
+    except Exception as e:
+        print(f'[region_detail {sgg_cd}] signal 실패: {e}')
+    return {
+        'sgg_cd': sgg_cd,
+        'summary': summary_rows,
+        'timeseries': timeseries_rows,
+        'signal': signal_row,
+    }
+
+
+@router.get('/region-detail')
+def get_region_detail(sgg_cd: str = Query(..., description='시군구 코드 5자리')):
+    """app_cache 에서 사전 계산된 결과 select. miss 시 직접 계산 + 적재."""
+    cache_key = f'{REGION_DETAIL_CACHE_KEY_PREFIX}{sgg_cd}'
+    from database.supabase_client import get_client
+    client = get_client()
+    try:
+        r = (
+            client.table('app_cache')
+            .select('payload')
+            .eq('cache_key', cache_key)
+            .limit(1)
+            .execute()
+        )
+        if r.data:
+            return r.data[0]['payload']
+    except Exception as e:
+        print(f'[region-detail] cache read 실패: {e}')
+    payload = compute_region_detail(sgg_cd)
+    try:
+        client.table('app_cache').upsert(
+            {'cache_key': cache_key, 'payload': payload}, on_conflict='cache_key',
+        ).execute()
+    except Exception as e:
+        print(f'[region-detail] cache write 실패: {e}')
+    return payload
+
+
 # GET /timeseries — 시계열 차트용: 시군구의 월별 집계 시리즈 (과거→최근)
 #    프론트에서 월별 평단가/거래량/인구/전세가율을 라인차트로 렌더
+def _build_timeseries(sgg_cd: str) -> list[dict]:
+    """기존 get_timeseries 로직을 helper 로 추출 — region-detail cache 와 공유."""
+    rows = fetch_region_timeseries(sgg_cd)
+    by_ym: dict[str, dict] = {}
+    for r in rows:
+        ym = r['stats_ym']
+        d = by_ym.setdefault(ym, {
+            'ym': ym, 'trade_count': 0, 'jeonse_count': 0, 'wolse_count': 0,
+            'population': 0, '_price_sum': 0.0, '_price_n': 0,
+            'avg_deposit_sum': 0, 'avg_deposit_n': 0,
+            'avg_price_sum': 0, 'avg_price_n': 0,
+        })
+        d['trade_count']   += r.get('trade_count') or 0
+        d['jeonse_count'] += r.get('jeonse_count') or 0
+        d['wolse_count']  += r.get('wolse_count') or 0
+        d['population']   += r.get('population') or 0
+        if r.get('median_price_per_py'):
+            d['_price_sum'] += r['median_price_per_py']; d['_price_n'] += 1
+        if r.get('avg_deposit'):
+            d['avg_deposit_sum'] += r['avg_deposit']; d['avg_deposit_n'] += 1
+        if r.get('avg_price'):
+            d['avg_price_sum'] += r['avg_price']; d['avg_price_n'] += 1
+    out = []
+    for ym in sorted(by_ym):
+        d = by_ym[ym]
+        avg_pp = d['_price_sum'] / d['_price_n'] if d['_price_n'] else None
+        avg_dep = d['avg_deposit_sum'] / d['avg_deposit_n'] if d['avg_deposit_n'] else None
+        avg_pr = d['avg_price_sum'] / d['avg_price_n'] if d['avg_price_n'] else None
+        jeonse_rate = (avg_dep / avg_pr) if (avg_dep and avg_pr) else None
+        out.append({
+            'ym': ym,
+            'trade_count': d['trade_count'],
+            'jeonse_count': d['jeonse_count'],
+            'wolse_count': d['wolse_count'],
+            'population': d['population'],
+            'median_price_per_py': round(avg_pp, 0) if avg_pp else None,
+            'avg_deposit': round(avg_dep, 0) if avg_dep else None,
+            'avg_price': round(avg_pr, 0) if avg_pr else None,
+            'jeonse_rate': round(jeonse_rate, 4) if jeonse_rate else None,
+        })
+    return out
+
+
 @router.get('/timeseries')
 def get_timeseries(sgg_cd: str = Query(..., description='시군구 코드 5자리')):
     """시군구 월별 집계 배열 (법정동별이 아닌 구 전체 월별 rollup).

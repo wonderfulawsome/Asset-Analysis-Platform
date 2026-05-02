@@ -17,6 +17,7 @@ export const ENDPOINTS = {
     q(`/api/realestate/complex-compare`, { apt_seqs: aptSeqs.join(","), months: months?.toString() }),
   marketSummary:    () => `/api/realestate/market-summary`,
   ranking:          () => `/api/realestate/ranking`,
+  regionDetail:     (sggCd: string) => q(`/api/realestate/region-detail`, { sgg_cd: sggCd }),
 } as const;
 
 // undefined 파라미터는 URLSearchParams에서 "undefined" 문자열이 되므로 직접 걸러낸다.

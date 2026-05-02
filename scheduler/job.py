@@ -499,6 +499,34 @@ def run_pipeline(light: bool = False) -> None:
         except Exception as e:
             print(f'  [Cache] ranking 갱신 실패, 건너뜀: {e}')
 
+        # Step 5g: 부동산 region-detail 캐시 갱신 (sgg 별 summary+timeseries+signal 통합, ~70s/일)
+        print('\n[Step 5g] 부동산 region-detail 캐시 갱신...')
+        try:
+            from api.routers.real_estate import compute_region_detail, REGION_DETAIL_CACHE_KEY_PREFIX
+            from database.supabase_client import get_client as _get_c3
+            _sb = _get_c3()
+            _all_rows: list[dict] = []
+            _PAGE = 1000; _offset = 0
+            while True:
+                _r = _sb.table('region_summary').select('sgg_cd').order('id').range(_offset, _offset+_PAGE-1).execute()
+                _chunk = _r.data or []
+                _all_rows.extend(_chunk)
+                if len(_chunk) < _PAGE: break
+                _offset += _PAGE
+            _sgg_cds = sorted({row['sgg_cd'] for row in _all_rows})
+            for _sgg in _sgg_cds:
+                try:
+                    _payload = compute_region_detail(_sgg)
+                    _sb.table('app_cache').upsert(
+                        {'cache_key': f'{REGION_DETAIL_CACHE_KEY_PREFIX}{_sgg}', 'payload': _payload},
+                        on_conflict='cache_key',
+                    ).execute()
+                except Exception as _e_one:
+                    print(f'  [Cache] region_detail {_sgg} 실패: {_e_one}')
+            print(f'  [Cache] region_detail {len(_sgg_cds)} sgg 적재')
+        except Exception as e:
+            print(f'  [Cache] region_detail 갱신 실패, 건너뜀: {e}')
+
         # Step 5c: 경량 모드 Noise HMM 실시간 예측 (기존 모델 사용, 학습 없음)
         print('\n[Step 5c] Noise HMM 실시간 예측...')
         try:

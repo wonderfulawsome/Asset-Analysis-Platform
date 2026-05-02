@@ -18,18 +18,15 @@ export default function RegionDetailScreen() {
   useEffect(() => {
     if (!sggCd) return;
     let cancelled = false;
-    // 최근월 법정동 + 시계열 + 매수 시그널 3개 병렬 조회
-    Promise.all([
-      apiFetch<RegionSummary[]>(ENDPOINTS.summary(sggCd)),
-      apiFetch<TimeseriesPoint[]>(ENDPOINTS.timeseries(sggCd)),
-      apiFetch<BuySignal | {}>(ENDPOINTS.buySignal(sggCd)).catch(() => ({})),
-    ])
-      .then(([s, t, sg]) => {
+    // 통합 region-detail endpoint — summary + timeseries + signal 한 번에 (app_cache hit)
+    apiFetch<{ summary: RegionSummary[]; timeseries: TimeseriesPoint[]; signal: BuySignal | null }>(
+      ENDPOINTS.regionDetail(sggCd)
+    )
+      .then((d) => {
         if (cancelled) return;
-        setRows(s);
-        setTs(t);
-        // 빈 객체({})면 시그널 없음 → null 처리
-        setSignal((sg as BuySignal).signal ? (sg as BuySignal) : null);
+        setRows(d.summary || []);
+        setTs(d.timeseries || []);
+        setSignal(d.signal && (d.signal as BuySignal).signal ? d.signal : null);
       })
       .catch((e) => !cancelled && setErr(String(e)));
     return () => { cancelled = true; };
