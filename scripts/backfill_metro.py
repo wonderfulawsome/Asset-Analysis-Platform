@@ -70,6 +70,7 @@ def main() -> int:
     ap.add_argument("--sleep", type=float, default=0.4, help="호출 간 대기 (초)")
     ap.add_argument("--dry-run", action="store_true", help="대상만 출력, fetch/upsert 안 함")
     ap.add_argument("--start-from", default=None, help="특정 LAWD_CD 부터 재개 (예: 41271)")
+    ap.add_argument("--only", default=None, help="단일 LAWD_CD 만 실행 (예: 41194)")
     ap.add_argument("--max-minutes", type=int, default=0, help="0=무제한. N분 경과 시 현재 sgg 끝내고 종료 (분할 실행용)")
     args = ap.parse_args()
 
@@ -101,8 +102,9 @@ def main() -> int:
     rate_ts = fetch_macro_rate_kr(months=args.months) or []
 
     started = args.start_from is None
+    targets = [args.only] if args.only else METRO_NEW_LAWD_CDS
     t0 = time.time()
-    for i, sgg in enumerate(METRO_NEW_LAWD_CDS, 1):
+    for i, sgg in enumerate(targets, 1):
         if not started:
             if sgg == args.start_from:
                 started = True
@@ -115,17 +117,18 @@ def main() -> int:
                   f"다음 회차 명령: --start-from {sgg}", flush=True)
             return 0
         sgg_10 = sgg + "00000"
-        print(f"\n[{i}/{len(METRO_NEW_LAWD_CDS)}] LAWD_CD {sgg} ({elapsed:.0f}s 경과)", flush=True)
+        print(f"\n[{i}/{len(targets)}] LAWD_CD {sgg} ({elapsed:.0f}s 경과)", flush=True)
 
         # mapping 캐시 — sgg 당 1회만 fetch (행정구역 코드는 1년 단위 변경, 12mo 안에서 무시).
         # 동수 × 12 ym 호출 → 동수 × 1 호출로 감소 (sgg 당 mapping 단계 ~5분 → ~30초).
         sgg_mapping = None
 
-        # 부천(41194) 특수 — MOLIT 가 41194 (소사구 지역) 만 반환. 옛 일반구 LAWD_CD
-        # 41192 (원미)·41196 (오정) 도 추가 호출해서 거래 데이터 합쳐 sgg_cd=41194 로 통합.
+        # 부천(41194) 특수 — MOLIT/MOIS 가 41194 (소사구 지역) 만 반환. 옛 일반구 LAWD_CD
+        # 41192 (원미)·41196 (오정) 도 모두 호출해서 거래·인구·매핑 합쳐 sgg_cd=41194 로 통합.
         extra_lawd_cds: list[str] = []
         if sgg == '41194':
             extra_lawd_cds = ['41192', '41196']
+        extra_sgg_10s = [e + '00000' for e in extra_lawd_cds]
 
         for ym in yms:
             try:
@@ -144,12 +147,39 @@ def main() -> int:
                 trades = trades_all
                 rents = rents_all
 
-                pop = _re_norm_population(fetch_population(sgg_10, ym), ym)
+                # 인구 — 부천처럼 옛 일반구 LAWD_CD 를 따로 호출해야 전체 동이 잡힘
+                pop = list(_re_norm_population(fetch_population(sgg_10, ym), ym))
+                pop_seen: set[tuple] = {(r["stats_ym"], r["stdg_cd"]) for r in pop}
+                for extra_10 in extra_sgg_10s:
+                    try:
+                        for row in _re_norm_population(fetch_population(extra_10, ym), ym):
+                            k = (row["stats_ym"], row["stdg_cd"])
+                            if k in pop_seen:
+                                continue
+                            pop_seen.add(k)
+                            pop.append(row)
+                    except Exception as e_pop:
+                        print(f"     [{ym}] pop {extra_10} 실패: {e_pop}")
+                    time.sleep(args.sleep)
                 upsert_mois_population(pop)
                 time.sleep(args.sleep)
 
                 if sgg_mapping is None:
-                    sgg_mapping = _re_norm_mapping(build_mapping(sgg_10, ym))
+                    # 매핑도 동일 — extra LAWD_CD 별로 mapping 호출 후 stdg_cd 기준 dedupe
+                    base_map = list(_re_norm_mapping(build_mapping(sgg_10, ym)))
+                    map_seen: set[str] = {m["stdg_cd"] for m in base_map if m.get("stdg_cd")}
+                    for extra_10 in extra_sgg_10s:
+                        try:
+                            for m in _re_norm_mapping(build_mapping(extra_10, ym)):
+                                sc = m.get("stdg_cd")
+                                if not sc or sc in map_seen:
+                                    continue
+                                map_seen.add(sc)
+                                base_map.append(m)
+                        except Exception as e_map:
+                            print(f"     [{ym}] mapping {extra_10} 실패: {e_map}")
+                        time.sleep(args.sleep)
+                    sgg_mapping = base_map
                     upsert_stdg_admm_mapping(sgg_mapping)
                 mapping = sgg_mapping  # 모든 ym 의 region_summary 에 같은 mapping 재사용
 

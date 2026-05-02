@@ -5579,3 +5579,661 @@ ALTER TABLE app_cache DISABLE ROW LEVEL SECURITY;
 # [한계]
 # - region_summary 시계열이 3~4개월만 있어 price_consec_months 최대값이 1~2.
 #   24개월 backfill 추가 시 "3개월 연속" 같은 더 강한 신호 노출 가능.
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [70] 2026-05-02 (UTC) — 국내 주식 (KR) Stage 1: Foundation
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# 미국 주식만 분석하던 Passive 에 국내(KR) 주식 분석 추가. 1.5~2주 분량의
+# 작업을 단계로 쪼갠 첫 단계 — 데이터 수집 인프라·DB 스키마·UI 토글의
+# 뼈대만 구축. 실제 KR 데이터 적재·모델 학습은 Stage 2 부터.
+#
+# 사용자 결정:
+# - 5개 탭(시장·펀더멘털·신호·섹터·시장 밸류) 모두 한국 버전 만든다
+# - 섹터 ETF 는 KODEX·TIGER 시리즈 사용
+# - 데이터 소스는 추천 따름 — pykrx + FinanceDataReader + ECOS
+# - UI 는 헤더 토글 (옵션 A) — 한 클릭으로 전체 화면 region 전환
+
+# [구조 결정 — 하이브리드(C) 채택]
+# - DB 가공·결과 테이블에 region 컬럼 추가 (default 'us', 기존 행 자동 us)
+# - collector 는 region 별 별도 모듈 (market_data.py / market_data_kr.py)
+# - processor (HMM·XGBoost) 는 region 파라미터화 — 모델 객체만 region 별
+#   별도 저장 (models/noise_hmm_us.pkl ↔ _kr.pkl)
+# - 미국 SPDR 13개 ↔ 한국 KODEX/TIGER 10개 매핑 (XLI/XLU/XLC 는 한국 ETF
+#   부족으로 제외)
+
+# [신규 파일]
+# - migrations/2026_04_30_add_region_column.sql
+#     · 가공 테이블 7종 (noise_regime, crash_surge, sector_cycle_result,
+#       sector_valuation, valuation_signal, chart_predict, market_regime)
+#     · raw 테이블 4종 (macro_raw, sector_macro_raw, index_price_raw,
+#       fear_greed_raw)
+#     · UNIQUE 제약을 (date) → (region, date) 또는 (region, date, ticker) 로 변경
+#     · BEGIN/COMMIT 트랜잭션 — Supabase SQL Editor 1회 실행
+#
+# - collector/market_data_kr.py (스켈레톤 + 작동 함수 일부)
+#     · fetch_kospi_price_history(days)             — pykrx 1001
+#     · fetch_kospi200_price_history(days)          — pykrx 1028
+#     · fetch_vkospi_history(days)                  — FinanceDataReader 'VKOSPI'
+#     · fetch_kospi_per_pbr(days)                   — pykrx index_fundamental
+#     · fetch_kr_10y_treasury(months)               — ECOS 817Y002 (Stage 2)
+#     · fetch_foreign_institution_flow(days)        — pykrx market_trading_value
+#     · fetch_kospi200_putcall_ratio(days)          — Stage 2 (KRX 직접)
+#     · compute_kr_fear_greed_synthesized()         — Stage 2 (가중치 결정 후)
+#
+# - collector/sector_etf_kr.py
+#     · SECTOR_ETF_KR 매핑 (10종, ticker → kr_name/en_name/us_proxy)
+#     · fetch_sector_etf_prices_kr(days)            — pykrx etf_ohlcv
+#     · fetch_sector_etf_per_pbr_kr()               — Stage 2 (구성종목 가중)
+#
+# - static/js/region.js (전역 region 상태)
+#     · getRegion()                                 — localStorage 'region'
+#     · setRegion(r)                                — 'us' | 'kr' 만 허용
+#     · withRegion(url)                             — URL 에 ?region= 자동 부착
+#     · DOMContentLoaded 시 토글 클래스 동기화 + KR 모드 안내 배너 삽입
+#     · 토글 클릭 → region 반전 → location.reload() (단순 리프레시)
+
+# [수정 파일]
+# - requirements.txt: pykrx, finance-datareader 추가
+#
+# - templates/stocks.html
+#     · header-right 에 region 토글 (.region-toggle, 🇺🇸/🇰🇷)
+#     · /static/js/region.js?v=1 i18n.js 보다 먼저 로드
+#
+# - static/css/main.css
+#     · .region-toggle (lang-btn 옆 인라인 플렉스, US/KR 플래그 둘 중 active)
+#     · .region-toggle.region-mode-us .region-us / .region-mode-kr .region-kr
+#       에 각각 white card bg + box-shadow 강조
+#     · .kr-coming-soon (점선 배너, KR 모드일 때 home-view 상단 삽입)
+
+# [구체 매핑 — KODEX/TIGER 10종]
+# 139260 TIGER 200 IT       ↔ XLK
+# 091160 KODEX 반도체         ↔ SOXX
+# 300610 KODEX 게임산업       ↔ IGV
+# 091170 KODEX 은행          ↔ XLF
+# 139250 TIGER 200 에너지화학  ↔ XLE
+# 266420 KODEX 헬스케어       ↔ XLV
+# 091180 KODEX 자동차        ↔ XLY (가장 가까운 대체)
+# 117680 KODEX 철강          ↔ XLB
+# 341850 TIGER 리츠부동산인프라 ↔ XLRE
+# 227560 TIGER 200 생활소비재  ↔ XLP
+
+# [Stage 2 계획 (다음 turn)]
+# 1) KR collector 함수 채우기 — placeholder 함수들 실제 구현
+# 2) repository.py 의 fetch_* / upsert_* 에 region 파라미터 추가
+# 3) /api/* 엔드포인트들 region 쿼리 받아 분기
+# 4) scheduler/job.py 가 light 모드에서 KR 데이터도 수집·적재
+# 5) HMM·XGBoost 한국 학습 (KOSPI 기반)
+
+# [Stage 3 계획]
+# 1) 한국 합성 F&G 점수 (가중치 결정 필요 — 사용자 결정 사항)
+# 2) Crash/Surge 임계값 한국 시장에 맞춰 조정 (변동성 분포 다름)
+# 3) Shiller CAPE 한국 등가 산출 (KOSPI 10년 평균 EPS / 현재가)
+# 4) ERP 계산 — KOSPI PER 역수 - 10Y KTB
+
+# [실행 필요 — 사용자 1회]
+# Supabase SQL Editor 에서 migrations/2026_04_30_add_region_column.sql 실행.
+# 기존 모든 행이 region='us' 로 자동 태그됨.
+
+# [검증]
+# - python ast.parse: market_data_kr.py / sector_etf_kr.py 둘 다 OK
+# - node --check: region.js OK
+# - 토글 자체는 Stage 2 데이터 연결 전이라 KR 클릭 시 "준비 중" 배너만 표시
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [71] 2026-05-02 (UTC) — KR Stage 2A: Repository region 파라미터화
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# Stage 1 의 DB region 컬럼 위에서 repository 함수들이 실제 region 별 데이터를
+# 분리해 읽고 쓰도록 region 파라미터 추가. 모든 함수의 default 는 'us' 라
+# 기존 호출자(API 라우터, 스케줄러)는 변경 없이 그대로 동작.
+
+# [수정 파일]
+# - database/repositories.py — 12개 함수 region 파라미터 추가:
+#   * upsert_macro / fetch_macro / fetch_macro_latest / fetch_macro_latest2
+#   * upsert_regime / fetch_regime_current / fetch_regime_current_all /
+#     fetch_regime_history
+#   * upsert_fear_greed / fetch_fear_greed_latest / fetch_fear_greed_latest2
+#   * upsert_index_prices / fetch_index_prices_latest
+#   * upsert_sector_macro / fetch_sector_macro_history
+#   * upsert_sector_cycle / fetch_sector_cycle_latest / fetch_sector_cycle_history
+#   * upsert_noise_regime / fetch_noise_regime_current / _history / _all
+#   * upsert_crash_surge / fetch_crash_surge_current / _history
+#   * upsert_chart_predict / fetch_chart_predict
+#   * upsert_sector_valuation / fetch_sector_valuation_latest / _history
+#   * upsert_valuation_signal / upsert_valuation_signal_bulk /
+#     fetch_valuation_signal_latest / _history
+#
+# - migrations/2026_04_30_fix_market_regime_constraint.sql 신규
+#   * 직전 마이그레이션에서 (region, date) 로 잘못 잡은 market_regime 제약을
+#     (region, date, index_name) 합성 키로 재설정
+#   * sp500/ndx/sox 3개 인덱스가 같은 날짜 공존하므로 index_name 도 키에 포함
+
+# [패턴]
+# - upsert: record = {**record, 'region': region} → 모든 행에 region 박힘
+#           on_conflict 도 "region,date" 또는 "region,date,ticker" 로 변경
+# - fetch: .eq("region", region) 필터 추가
+# - default 'us' 유지 → 기존 호출자 100% 하위호환
+
+# [실행 필요 — 사용자 1회]
+# Supabase SQL Editor 에서
+# migrations/2026_04_30_fix_market_regime_constraint.sql 실행.
+
+# [검증]
+# - python ast.parse repositories.py OK
+
+# [Stage 2B 다음 (다음 turn)]
+# - api/routers/*.py 의 region 쿼리 파라미터 받기 + repository 에 전달
+# - LLM 프롬프트(market_summary.py) 도 region 분기
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [72] 2026-05-02 (UTC) — KR Stage 2B: API 라우터 + JS fetch 자동 region 부착
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# Stage 2A 의 repository region 파라미터화 위에서 모든 stock-related API 라우터가
+# ?region= 쿼리를 받아 repository 에 전달. JS 측은 window.fetch 를 몽키패치해
+# /api/* 호출에 자동으로 ?region= 을 붙인다. localStorage 'region' 으로 상태 유지.
+
+# [수정 파일]
+# - api/routers/regime.py
+#     · /current, /history, /score-distribution 모두 region 인자 추가
+#     · _norm_region() 헬퍼 ('us'|'kr' 만 허용, 그 외 'us' 폴백)
+#
+# - api/routers/crash_surge.py
+#     · /current, /history, /direction 에 region 인자
+#     · _dir_cache 키를 region 별로 분리 (cs_data_us, cs_data_kr 등)
+#
+# - api/routers/sector_cycle.py
+#     · /current, /history, /macro-history, /valuation, /holdings-perf 에 region
+#
+# - api/routers/macro.py
+#     · /latest, /fear-greed, /valuation-signal 에 region
+#     · _val_sig_cache 키 region 별 분리
+#
+# - api/routers/index_feed.py
+#     · /latest 에 region
+#
+# - api/routers/market_summary.py (★ 큰 변경)
+#     · /today, /ai-summary, /home-headline, /ai-explain 모두 region 받기
+#     · _build_indicator_text / _build_home_indicator_text / _build_explain_text
+#       모두 region 파라미터 추가, 내부 fetch_* 호출에 region 전달
+#     · _ai_cache, _headline_cache, _explain_cache 키 형식: f"{lang}_{region}"
+#       또는 f"explain_{tab}_{lang}_{region}"
+#     · 캐시 자료구조를 dict 평면화 (이전: nested {'ko': {...}, 'en': {...}})
+#
+# - database/repositories.py
+#     · _fetch_all_pages() 에 region 인자 추가 (None 이면 필터 안 함)
+#     · fetch_crash_surge_all / fetch_macro_closes 도 region 받기
+#
+# - static/js/region.js (★ 자동 region 부착)
+#     · window.fetch 몽키패치 — input 이 문자열이고 /api/ 로 시작하면
+#       URL 에 ?region={current} 자동 부착 (이미 region= 있으면 그대로)
+#     · 모든 main.js / home.js / sector.js 의 fetch 호출이 자동 region 적용
+#       → JS 파일들 수정 불필요
+#
+# - templates/stocks.html
+#     · region.js?v=1 → ?v=2
+
+# [동작 흐름]
+# 1) 사용자가 헤더 🇰🇷 클릭 → setRegion('kr') → location.reload()
+# 2) 페이지 재로드 시 region.js 가 fetch 몽키패치
+# 3) 모든 후속 /api/regime/current, /api/macro/fear-greed, ... 호출에
+#    자동으로 ?region=kr 부착
+# 4) 백엔드 라우터가 region='kr' 파라미터로 repository 호출
+# 5) DB 에서 region='kr' 행 조회 (현재 비어 있음 — Stage 2C 에서 채움)
+# 6) 응답 비어있으면 화면에 데이터 없음 표시 (KR 데이터 미적재 상태)
+
+# [현재 한계]
+# - DB 에 region='kr' 행이 아직 없으니 KR 토글 시 모든 카드가 비어 보임
+# - "준비 중" 배너가 home-view 상단에 노출되어 사용자에게 안내
+# - Stage 2C (다음 turn) 에서 KR 데이터 collector + scheduler 통합
+
+# [검증]
+# - python ast.parse: 7개 파일 모두 OK (repositories, regime, crash_surge,
+#   sector_cycle, macro, index_feed, market_summary)
+# - node --check: region.js OK
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [73] 2026-05-02 (UTC) — KR Stage 2C: KR collector 실제 구현 + 야간 파이프라인
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# Stage 2A·2B 의 인프라(repository / API / JS) 위에서 실제 KR 데이터 수집을 시작.
+# pykrx + FinanceDataReader 기반 KOSPI 매크로·KODEX/TIGER 섹터 ETF·KR 10Y 국채를
+# macro_raw·index_price_raw 의 region='kr' 행으로 적재.
+
+# [신규 파일]
+# - collector/market_data_kr.py 실제 구현 — 6개 fetch 함수 + record 빌더:
+#     · fetch_kospi_price_history(days)        — pykrx '1001'
+#     · fetch_kospi200_price_history(days)     — pykrx '1028'
+#     · fetch_vkospi_history(days)             — FinanceDataReader 'VKOSPI'
+#     · fetch_kospi_per_pbr(days)              — pykrx index_fundamental
+#     · fetch_kr_10y_treasury(days)            — FDR 'KR10YT=RR'
+#     · fetch_kr_3y_treasury(days)             — FDR 'KR3YT=RR' (yield_spread 용)
+#     · fetch_foreign_institution_flow(days)   — pykrx market_trading_value
+#     · compute_kr_macro_history(days) ★ macro_raw 매핑된 record 리스트
+#     · fetch_kr_index_prices_today() — KODEX 200/TIGER 200/KOSDAQ150 ETF 가격
+#
+# - scheduler/job_kr.py 신규 — 일일 KR 파이프라인:
+#     · run_kr_pipeline() — macro_raw + index_price_raw + 섹터 ETF 3-step 적재
+#     · 매일 16:00 KST (UTC 07:00) 1회 — KR 장 마감 30분 뒤
+#
+# - scripts/backfill_kr.py — 1회성 백필 스크립트:
+#     · python -m scripts.backfill_kr [--days N]
+#     · macro 30일 + index_price 오늘 + 섹터 ETF 10종 적재
+
+# [수정 파일]
+# - api/app.py: BackgroundScheduler 에 'kr_daily_pipeline' 추가 (CronTrigger
+#   hour=7 minute=0 UTC = 16:00 KST). pykrx 미설치 등 ImportError 시 try/except.
+
+# [macro_raw 스키마 매핑]
+# 미국 컬럼 명을 그대로 쓰되 KR 등가 데이터 적재:
+#     sp500_close   ← KOSPI 종가
+#     sp500_return  ← KOSPI 일간수익률 (%)
+#     sp500_vol20   ← KOSPI 20일 연율화 std (%)
+#     sp500_rsi     ← KOSPI RSI(14)
+#     vix           ← VKOSPI
+#     tnx           ← KR 10Y KTB rate (%)
+#     yield_spread  ← (KR 10Y - KR 3Y)
+#     dxy_return    ← null (한국 직접 등가 없음)
+#     putcall_ratio ← null (Stage 3 — KRX 옵션)
+# i18n 라벨에서 region='kr' 일 때 "S&P500" → "KOSPI" / "VIX" → "VKOSPI" 분기 예정.
+
+# [실행 필요 — 사용자]
+# 1) 의존성 설치 (이미 완료):
+#    .venv/bin/pip install pykrx finance-datareader
+# 2) 1회 백필:
+#    python -m scripts.backfill_kr
+#    → macro 30일 + index 오늘 + 섹터 ETF 10종 적재 (~1~2분)
+# 3) 이후 자동 갱신: 매일 16:00 KST 스케줄러가 run_kr_pipeline 호출
+
+# [현재 한계]
+# - noise_regime / crash_surge / valuation_signal — KR 모델 학습 전이라 미적재
+# - 헤더 🇰🇷 토글 시: 시장 탭(macro_raw 기반)·signal/index conveyor 만 데이터 보임,
+#   펀더멘털·신호·시장 밸류 탭은 아직 비어 있음
+# - sector_etf_kr.py 의 PER/PBR fetch — pykrx ETF fundamental 미지원, Stage 3
+#   에서 구성종목 가중평균으로 자체 산출 예정
+
+# [Stage 3 (다음 turn 후보)]
+# 1) KR HMM noise_regime 학습 — KOSPI 8피처 자체 정의 (fundamental_gap 한국식,
+#    erp_zscore KR, residual_corr KR 5종, vix_term=VKOSPI, hy_spread=회사채 KR,
+#    realized_vol KOSPI)
+# 2) KR XGBoost crash/surge — KOSPI 일간 변동 라벨링 + KR feature
+# 3) KR sector_cycle_result — 한국 매크로(ECOS PMI/실업률/금리스프레드) 기반 phase
+# 4) KR valuation_signal — KOSPI ERP (PER 역수 - KR 10Y) + VKOSPI z + DD60
+# 5) 합성 한국 F&G — VKOSPI + 외국인 순매수 + 신용잔고 + 거래대금 4-요소 가중
+
+# [검증]
+# - python ast.parse: 5개 신규/수정 파일 모두 OK
+# - 사용자 환경 backfill 실행 결과로 region='kr' 행 수 확인 필요
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [74] 2026-05-02 (UTC) — KR Stage 2C+: AI 차트 탭 KR ETF 지원
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# AI 차트 탭(미국 ETF SPY/QQQ/VOO 등 캔들스틱)에 KR 모드 추가. 헤더 🇰🇷 토글 시
+# KODEX/TIGER 시리즈 12종이 티커 칩으로 표시되고 pykrx 로 OHLCV 가져와 캔들 그려짐.
+
+# [수정 파일]
+# - api/routers/chart.py
+#     · CHART_TICKERS_KR (12종 6자리 종목코드) 신설
+#     · _is_kr_ticker(ticker) — 6자리 숫자 판별
+#     · _download_kr(ticker, interval) — pykrx get_etf_ohlcv_by_date,
+#       한글 컬럼(시가/고가/저가/종가/거래량) → 영어 리네임,
+#       1wk/1mo 는 일봉 후 리샘플
+#     · _download_with_fallback() 진입부에서 KR 티커는 _download_kr 분기
+#     · /ohlc 검증을 CHART_TICKERS + CHART_TICKERS_KR 둘 다 허용
+#     · /predict 는 KR 티커 → 'KR 예측 모델 미학습' 응답 (Stage 3)
+#
+# - static/js/chart.js
+#     · CHART_MAIN_TICKERS_US / CHART_MAIN_TICKERS_KR 분리
+#     · TICKER_NAMES 에 KODEX/TIGER 한국어 이름 12개 추가
+#     · _currentRegion() / _chartTickers() 헬퍼 — region 별 ticker 목록 반환
+#     · 초기 _chartTicker — KR 모드면 '069500' (KODEX 200), US 면 'VOO'
+#     · renderTickerChips() — 현재 region 의 ticker 목록 렌더, region 전환 시
+#       _chartTicker 가 새 region 목록에 없으면 첫 ticker 로 리셋
+#     · 칩 라벨 — KR 은 한국어 이름, US 는 ticker 자체 (현 동작 유지)
+#     · updatePredictBtnVisibility() — KR 모드면 예측 버튼 숨김
+#
+# - templates/stocks.html: chart.js?v=24 → ?v=25
+
+# [KR ETF 12종 (US SPDR 매핑)]
+# 069500 KODEX 200            ↔ SPY (대표 시장 ETF)
+# 102110 TIGER 200            ↔ SPY 대안
+# 232080 TIGER 코스닥150       ↔ QQQ (성장주)
+# 229200 KODEX 코스닥150       ↔ QQQ 대안
+# 091160 KODEX 반도체          ↔ SOXX
+# 139260 TIGER 200 IT         ↔ XLK
+# 091170 KODEX 은행           ↔ XLF
+# 266420 KODEX 헬스케어        ↔ XLV
+# 139250 TIGER 200 에너지화학   ↔ XLE
+# 091180 KODEX 자동차         ↔ XLY (가장 가까운 대체)
+# 117680 KODEX 철강           ↔ XLB
+# 341850 TIGER 리츠           ↔ XLRE
+
+# [동작 흐름]
+# 1) 헤더 🇰🇷 클릭 → location.reload()
+# 2) chart.js 가 region='kr' 감지 → _chartTicker='069500' 초기화
+# 3) renderTickerChips() 가 KR 12종 칩 렌더 (한국어 이름)
+# 4) loadCandleChart() → /api/chart/ohlc?ticker=069500&region=kr
+# 5) 백엔드: _is_kr_ticker → _download_kr → pykrx get_etf_ohlcv_by_date
+# 6) 한글 컬럼 영어 리네임 → 일봉 캔들 렌더
+
+# [한계 (Stage 3 후속)]
+# - 30일 예측 버튼은 KR 모드에서 숨김 (XGBoost/Prophet 학습 데이터 미준비)
+# - chart_predict_result region='kr' 행 0건
+# - KR ETF historical 길이 — 일부 신규 ETF (341850 TIGER 리츠) 는 1년 미만
+
+# [검증]
+# - python ast.parse chart.py OK / node --check chart.js OK
+# - 사용자 backfill 실행 후 브라우저에서 토글 → KR 차트 렌더링 확인
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [75] 2026-05-02 (UTC) — KR Stage 3.1: 시장 밸류 (valuation_signal_kr)
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# 미국 시장 밸류 composite z (ERP/VIX/DD60) 의 한국 등가 구현. 모델 학습 불필요한
+# 수학 합성 — Stage 3 첫 단계로 가장 작업량 적음. 헤더 🇰🇷 → 시장 밸류 탭이
+# 즉시 데이터 노출되도록.
+
+# [수식 (US 와 동일)]
+# z_comp_kr = 0.4·z_ERP_kr(5Y) + 0.3·z_VKOSPI(5Y) + 0.3·z_DD60_KOSPI(5Y)
+# 라벨: z>1=명확한 저평가, 0~1=다소 저평가, -1~0=다소 고평가, z<-1=명확한 고평가
+
+# [데이터 소스]
+# - KOSPI PER:    pykrx get_index_fundamental('1001')        → earnings_yield = 1/PER
+# - KR 10Y KTB:   FinanceDataReader 'KR10YT=RR'              → tnx_yield
+# - VKOSPI:       FinanceDataReader 'VKOSPI'                 → vix slot
+# - KOSPI close:  pykrx get_index_ohlcv('1001')              → 60일 rolling DD
+
+# [신규 파일]
+# - collector/valuation_signal_kr.py
+#     · _compute_kr_erp_baseline_5y()  — KOSPI 월별 ERP 5년 mean/std
+#     · _compute_vkospi_baseline_5y()  — VKOSPI 일별 5년
+#     · _compute_kr_dd_baseline_5y()   — KOSPI 60일 rolling DD 5년
+#     · get_kr_baselines()             — 3종 합본 + JSON 캐시 (TTL 90일)
+#     · compute_composite_z()          — z 산출 (US 함수와 동일 로직)
+#     · label_from_z_comp()            — 4단계 라벨
+#     · fetch_valuation_signal_today_kr() — 오늘 1행
+#     · backfill_valuation_signal_kr(days=90) — 다일 backfill
+#
+# - models/valuation_baselines_kr.json (자동 생성, TTL 90일)
+
+# [수정 파일]
+# - scheduler/job_kr.py
+#     · run_kr_pipeline 에 step 3 (valuation_signal) 추가 — fetch_today_kr →
+#       upsert_valuation_signal(record, region='kr')
+#     · sector ETF step 은 step 4 로 밀림
+#
+# - scripts/backfill_kr.py
+#     · backfill_valuation() 함수 추가
+#     · default --days 30 → 90 (시장 밸류 차트 90일 매칭)
+
+# [DB 컬럼 매핑 — 기존 valuation_signal 스키마 그대로]
+# US: spy_per (SPY 트레일링 PER) / vix (VIX) / tnx_yield (US 10Y)
+# KR: spy_per ← KOSPI 시총가중 PER / vix ← VKOSPI / tnx_yield ← KR 10Y
+# 컬럼명은 그대로 두고 region='kr' 로만 분리. UI 라벨은 region 별 분기 (Stage 3.x).
+
+# [현재 가중치·임계 — US 와 동일 시작]
+# w_erp=0.4, w_vix=0.3, w_dd=0.3
+# 라벨: ±1.0σ
+# → KR 5Y 분포 보고 추후 튜닝 가능 (예: KOSPI 변동성이 더 크면 w_dd 비중 조정)
+
+# [실행 필요 — 사용자 1회]
+# .venv/bin/python -m scripts.backfill_kr --days 90
+# → macro 90건 + index 오늘 + sector ETF 10종 + valuation 90건 적재 (~3~5분)
+# 첫 실행 시 5Y baseline 산출 (느림, 이후 90일 캐시).
+
+# [동작 확인 (브라우저)]
+# 헤더 🇰🇷 → 시장 밸류 탭 → KOSPI ERP/PER + VKOSPI + 60일 DD 표시
+# 홈 헤드라인도 region=kr 라벨로 LLM 호출 → "시장이 다소 고평가 상태이지만..."
+# (단 LLM 프롬프트는 'S&P500 PER' 표현 그대로 — Stage 3.x 라벨 분기에서 수정)
+
+# [한계]
+# - 펀더멘털 (noise_regime) — 8피처 KR 정의 + HMM 학습 필요 (Stage 3.2)
+# - 신호 (crash_surge) — XGBoost 학습 필요 (Stage 3.3)
+# - 섹터 (sector_cycle) — 한국 매크로 phase 정의 필요 (Stage 3.4)
+# - LLM 프롬프트 'S&P500/SPY PER' 표현 region 별 라벨링 미적용 (Stage 3.5)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [76] 2026-05-02 (UTC) — KR Stage 3.5: LLM·UI 라벨 region 분기
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# DB 컬럼명(sp500_close/vix/tnx)은 영구 유지하되, 사용자/LLM 에 노출되는 라벨만
+# region 별로 분기. 헤더 🇰🇷 토글 시:
+#   - LLM 입력 텍스트: "S&P500" → "KOSPI" / "VIX" → "VKOSPI" / "10Y금리" → "KR 10Y 국고채"
+#   - UI 시장 탭 ind-card 라벨: "VIX" → "VKOSPI"
+#   - 컨베이어 벨트(주요 지수 ETF): SPY/QQQ/SOXX/BND/IWM/DIA → KODEX 200/TIGER 200/
+#     TIGER 코스닥150/KODEX 반도체/KODEX 헬스케어/TIGER 리츠
+
+# [수정 파일]
+# - api/routers/market_summary.py
+#     · _market_labels(region, lang) 헬퍼 신설 — region 별 라벨 사전 반환:
+#         index_name / index_return / vol20_label / vix_name / rate_name /
+#         spread_name / major_tickers / price_unit
+#     · _build_indicator_text() KR 라벨 분기 적용
+#     · _build_home_indicator_text() KR 라벨 분기 적용 (시장 탭 + 시장 밸류 탭)
+#     · 시장 탭 ETF 가격 라벨에 한글 이름(p['name']) 표시
+#
+# - static/js/main.js
+#     · TICKER_LABELS_KEYS_US (SPY 등 6) / TICKER_LABELS_KEYS_KR (KODEX/TIGER 6)
+#       분리, region 동적 선택
+#     · getTickerLabels() 에 KR ETF 한국어 이름 매핑
+#     · _applyRegionMarketLabels() 함수 신설 — DOM 의 'VIX' 라벨을 region 별로
+#       'VKOSPI' 와 swap (loadMacro 진입 시 호출)
+#
+# - templates/stocks.html: main.js?v=116 → ?v=117
+
+# [LLM 프롬프트 영향 — 이전/이후 비교]
+# 이전 (KR 모드에서도 US 라벨 그대로):
+#   "S&P500 일간수익률: -0.31%" "VIX: 18.0" "10Y금리: 3.41"
+# 이후 (KR 모드):
+#   "KOSPI 일간수익률: -0.31%" "VKOSPI: 18.0" "KR 10Y 국고채: 3.41"
+# → LLM 이 컨텍스트를 KR 시장으로 정확히 인식. 헤드라인 "시장이 다소 고평가..."
+#   같은 문장이 KOSPI 데이터에 대한 것임이 명확.
+
+# [한계 (Stage 3.6 등 후속)]
+# - 펀더멘털 탭의 "시장 이성 점수" 자체는 region='kr' 데이터 적재 안 됨 → 빈 화면
+# - 신호 탭(crash/surge) 동일
+# - 섹터 탭의 phase_name (확장기/회복기 등) — 한국 매크로 phase 정의 후 적용
+# - i18n 의 hold.SPY 같은 보유종목 라벨 — KR 종목 추가 필요시 별도
+
+# [검증]
+# - python ast.parse market_summary.py OK
+# - node --check main.js OK
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [77] 2026-05-02 (UTC) — KR Stage 3.2a: 펀더멘털 HMM 데이터 수집 모듈
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# US noise_regime_data.py 의 KR 등가. 8피처 명칭·의미 100% 동일하되 데이터 소스만
+# pykrx + FDR + FRED 로 대체. 학습·통합은 후속 turn (3.2b+3.2c).
+
+# [신규 파일]
+# - collector/noise_regime_data_kr.py
+#     · SECTOR_STOCKS_KR — 5섹터 × 5종목 (시총 상위 + 섹터 분산)
+#         tech:       삼성전자/SK하이닉스/NAVER/카카오/포스코
+#         financial:  KB/신한/하나/우리/BNK
+#         industrial: 현대차/기아/한국전력/삼성물산/고려아연
+#         health:     삼성바이오/셀트리온/SK바이오팜/알테오젠/셀트리온헬스케어
+#         consumer:   CJ제일제당/강원랜드/대한항공/KAI/롯데케미칼
+#     · AMIHUD_STOCKS_KR — 5 megacap (시총 최상위)
+#     · fetch_kospi_shiller_like(years) — KOSPI 월별 P/E (E = close/PER) + CAPE 등가
+#     · fetch_kr_10y_monthly() — FDR 'KR10YT=RR' resample 'MS'
+#     · fetch_vkospi_daily() — FDR 'VKOSPI'
+#     · fetch_us_hy_spread() — FRED CSV BAMLH0A0HYM2 (글로벌 신용 환경, KR HY 부족 대용)
+#     · fetch_kr_stock_prices(tickers) — pykrx 일별 close DataFrame
+#     · fetch_kr_amihud_stocks(tickers) — OHLCV 전체 (영어 컬럼 리네임)
+#     · fetch_kospi_close_daily() — KOSPI 일별 (베타 + realized_vol 기준)
+#     · compute_monthly_features_kr(...) — 8피처 + 윈저라이징, US 와 같은 dict 구조
+#     · fetch_all_kr(years) — 원샷 fetch + 피처 산출
+
+# [피처별 KR 매핑]
+# 1. fundamental_gap : KOSPI 12M log P − 12M log E (E=close/PER)
+# 2. erp_zscore     : KOSPI EY − KR 10Y, 10년 rolling z (KR 데이터 짧으면 24개월)
+# 3. residual_corr  : 25종목 KOSPI-베타 제거 잔차 → 5섹터 페어 상관 평균
+# 4. dispersion     : 25종목 일간 수익률 횡단면 std 의 20일 평균
+# 5. amihud         : 5 megacap |OC log return| / dollar_vol — 1/99 윈저
+# 6. vix_term       : VKOSPI / VKOSPI 60D 평균 (US VIX/VIX3M 대체 — KR 3M 미공개)
+# 7. hy_spread      : 미국 ICE BofA HY OAS 그대로 (글로벌 신용 환경)
+# 8. realized_vol   : KOSPI 일별 std × √252 의 20일 평균
+
+# [수집 비용 추정]
+# pykrx 호출: 25종목 × 5년 + 5 OHLCV + KOSPI 인덱스 ≈ 35 호출 / 분당 limit 영향 적음
+# FDR 호출: 3종 (KR10Y, VKOSPI, KR3Y 추후) — 빠름
+# FRED CSV: 1종 (HY) — 빠름
+# 전체 fetch_all_kr() 예상 5~10분 (대부분 pykrx 25종목 5년치)
+
+# [Stage 3.2b 다음 (다음 turn)]
+# 1) processor/feature1_regime.py — train_hmm/predict_regime/load_model 에
+#    region='us' 파라미터 추가, models/noise_hmm_us.pkl ↔ _kr.pkl 분리
+# 2) scripts/train_kr_hmm.py — 1회성 학습 스크립트
+# 3) scheduler/job_kr.py — 일일 KR HMM 추론 step 추가
+# 4) backfill_kr.py — noise_regime KR 백필 30일
+
+# [검증]
+# - python ast.parse OK
+# - 실제 fetch 동작 검증은 학습 turn 에서 train_kr_hmm 실행 시 동시 검증
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [78] 2026-05-02 (UTC) — 부천 mapping/population 옛 일반구 합산 (옥길동만 보이던 버그 fix)
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# [69]에서 부천(41194) trades/rents 만 옛 일반구 41192/41196 추가 호출로 보강했지만,
+# mapping(stdg_admm_mapping) 과 population(mois_population) 은 41194 한 곳만 호출 → MOIS 가
+# 41194(소사구 area) 의 7개 stdg 만 반환 → region_summary 에도 7개 stdg 만 생성 → FeatureCard
+# top_stdg 가 사실상 옥길동 한쪽으로 고정. 사용자: "왜 다 옥길동밖에 없어. 중동 상동이 있어야지".
+#
+# 원인: 부천은 2016 일반구 폐지 후 41194 단일 시군구가 되었지만 MOIS 인구·매핑 API 는 옛
+# 5-digit LAWD_CD 별로 데이터를 분리 보관 중. trades/rents 만 합치고 mapping/pop 은 안 합쳤던
+# [69] 의 사각지대.
+#
+# 실측 (MOIS 호출):
+#   4119400000 → 7 stdg (계수·괴안·범박·소사본·송내·심곡본·옥길)
+#   4119200000 → 9 stdg (도당·상동·소사·심곡·약대·역곡·원미·중동·춘의)
+#   4119600000 → 8 stdg (고강·내·대장·삼정·여월·오정·원종·작)
+#   합계 24 stdg = 부천시 전체 법정동.
+
+# [수정 파일]
+# 1. scripts/backfill_metro.py
+#    - extra_lawd_cds 옆에 extra_sgg_10s 추가 (5-digit + '00000')
+#    - 인구 fetch_population 에 extras 호출 → (stats_ym, stdg_cd) dedupe 후 합산
+#    - mapping build_mapping 에 extras 호출 → stdg_cd dedupe 후 합산
+#    - --only LAWD_CD 인자 신설: 단일 시군구 ad-hoc 재실행 (부천 단발성 호출용)
+#
+# 2. database/repositories.py
+#    - upsert_region_summary 에 NaN/pd.NA → None 스크럽 추가
+#    - 사유: pop 합산 후 trade_agg 에는 있으나 pop 에 없는 stdg → population NaN.
+#      pandas Int64 의 pd.NA 가 to_dict 에서 그대로 빠져나오면 postgrest JSON 직렬화 실패
+#      ("Out of range float values are not JSON compliant: nan"). 첫 시도 12 ym 모두 실패.
+
+# [핵심 코드 변경 — backfill_metro.py]
+extra_lawd_cds: list[str] = []
+if sgg == '41194':
+    extra_lawd_cds = ['41192', '41196']
+extra_sgg_10s = [e + '00000' for e in extra_lawd_cds]
+
+# 인구
+pop = list(_re_norm_population(fetch_population(sgg_10, ym), ym))
+pop_seen: set[tuple] = {(r["stats_ym"], r["stdg_cd"]) for r in pop}
+for extra_10 in extra_sgg_10s:
+    for row in _re_norm_population(fetch_population(extra_10, ym), ym):
+        k = (row["stats_ym"], row["stdg_cd"])
+        if k in pop_seen:
+            continue
+        pop_seen.add(k)
+        pop.append(row)
+
+# 매핑 (sgg 당 1회만 — 캐시 후 모든 ym 재사용)
+if sgg_mapping is None:
+    base_map = list(_re_norm_mapping(build_mapping(sgg_10, ym)))
+    map_seen: set[str] = {m["stdg_cd"] for m in base_map if m.get("stdg_cd")}
+    for extra_10 in extra_sgg_10s:
+        for m in _re_norm_mapping(build_mapping(extra_10, ym)):
+            sc = m.get("stdg_cd")
+            if not sc or sc in map_seen:
+                continue
+            map_seen.add(sc)
+            base_map.append(m)
+    sgg_mapping = base_map
+    upsert_stdg_admm_mapping(sgg_mapping)
+
+# [실행]
+# python scripts/backfill_metro.py --only 41194 --months 12 --hh-months 3 --sleep 0.4
+# - mapping 첫 호출: 7 → 24 stdg (3.4배 확장)
+# - 12 ym × region_summary 도 24 stdg/월 채워질 예정 (이전 7 stdg 였음)
+
+# [관련 메모]
+# - 다른 통합 시·군은 동일 패턴 점검 필요. 후보:
+#     수원(41110→41111·41113·41115·41117), 성남(41130→41131·41133·41135),
+#     안양(41170→41171·41173), 안산(41270→41271·41273),
+#     고양(41280→41281·41285·41287), 용인(41460→41461·41463·41465)
+#   → METRO_NEW_LAWD_CDS 에 이미 일반구 코드들 들어있어 별개로 backfill 됨 → 부천만 단일 issue.
+# - 향후 sgg/일반구 통합 변경 시 backfill_metro.py 의 extra_lawd_cds 분기 점검.
+
+# [검증]
+# - python -c "import scripts.backfill_metro" OK
+# - 실 backfill 결과: mapping 7→24 stdg, region_summary 7→24/월 row 확장
+#   (자세한 후속 검증은 단순 SELECT count 로 완료)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [78] 2026-05-02 (UTC) — KR Stage 3.2b: HMM 학습 + 스케줄러 통합
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# 3.2a 데이터 수집 모듈 위에서 HMM 학습 가능하게 processor region 파라미터화 +
+# 1회성 학습 스크립트 + 스케줄러 일일 추론 step 통합.
+
+# [수정 파일]
+# - processor/feature1_regime.py
+#     · _model_path(region) 헬퍼 — US='noise_hmm.pkl' (하위호환), KR='noise_hmm_kr.pkl'
+#     · train_hmm(features, monthly_bundle, region='us') — region 별 모델 저장
+#     · load_model(region='us') — 해당 region 모델 로드
+#     · predict_regime 로그에 region 표시
+#     · backfill_noise_regime(bundle, model, days, region='us')
+#         · region='kr' → SECTOR_STOCKS_KR/ALL_STOCKS_KR import
+#         · raw_dict = bundle.get('macro_raw') or bundle.get('fred_raw') 호환
+#         · vix_term KR: VKOSPI/VKOSPI 60D ratio 사용 (vix3m=1.0 placeholder)
+#
+# - scheduler/job_kr.py
+#     · run_kr_pipeline step 4 추가 — load_model('kr') → fetch_all_kr(3년) →
+#       backfill 3일 → upsert_noise_regime(region='kr')
+#     · 모델 없으면 "train_kr_hmm 먼저" 안내
+
+# [신규 파일]
+# - scripts/train_kr_hmm.py
+#     · python -m scripts.train_kr_hmm [--years 7] [--backfill 60]
+
+# [실행 필요 — 사용자 1회 (~5~10분, pykrx 25종목 5~7년치 fetch)]
+#   python -m scripts.train_kr_hmm
+# → models/noise_hmm_kr.pkl 생성 + DB region='kr' noise_regime 60건 적재
+# → 펀더멘털 탭 KR 모드 즉시 작동
+
+# [학습 후 일일 자동]
+# scheduler/job_kr.run_kr_pipeline 매일 16:00 KST 가 step 4 호출 → 최신 추론
+# 적재. 재학습은 월 1회 정도 수동 (train_kr_hmm 다시 실행).
+
+# [검증]
+# - python ast.parse: feature1_regime / train_kr_hmm / job_kr 모두 OK
+
+# [한계]
+# - vix_term KR 정의가 US 와 의미 차이 (단기/장기 implied vol → mean reversion proxy)
+# - hy_spread KR=US 그대로 (글로벌 신용 환경)

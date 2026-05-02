@@ -108,7 +108,7 @@ Passive-Financial-Data-Analysis/
 ├─ scripts/
 │   ├─ build_frontend.sh        npm install + vite build
 │   ├─ build_metro_geojson.py   ★ southkorea-maps → 수도권 metro-sgg.geojson 변환 (이름→행안부 LAWD_CD 매핑)
-│   ├─ backfill_metro.py        ★ 수도권 신규 52 LAWD_CD × 24개월 부동산 backfill (job.py Step 9 다월 버전)
+│   ├─ backfill_metro.py        ★ 수도권 77 LAWD_CD × N개월 backfill — 부천(41194)은 옛 일반구 41192/41196 합산 (mapping/pop/trade/rent), --only/--start-from 분할 실행 지원
 │   ├─ flip_noise_score_sign.py noise_score 부호 일괄 반전 (1회성)
 │   └─ upload_dim.py
 ├─ models/                     pkl 학습 모델 (HMM, XGBoost, ensemble)
@@ -658,4 +658,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-02 (부동산 지속성 + 랭킹 신규 — buy_signal feature_breakdown 에 price/trade_consec_months + trade_vs_long_ratio. RankingScreen 신규 + 4번째 탭 "랭킹" 등록. compute_ranking() + app_cache 'ranking' + scheduler [Step 5f]. update.py [72])
+마지막 갱신 시점: 2026-05-02 (부천 mapping/population 옛 일반구(41192/41196) 합산 — backfill_metro.py 의 부천 분기 확장(stdg 7→24, region_summary 7→9 stdg 활성), database/repositories.py upsert_region_summary 에 NaN/pd.NA→None + INT 컬럼 float→int 캐스팅 스크럽 추가. app_cache 3종(sgg_overview, region_detail:41194, ranking) 즉시 재계산. update.py [78])
