@@ -18,6 +18,10 @@ export const ENDPOINTS = {
   marketSummary:    () => `/api/realestate/market-summary`,
   ranking:          () => `/api/realestate/ranking`,
   regionDetail:     (sggCd: string) => q(`/api/realestate/region-detail`, { sgg_cd: sggCd }),
+  // 상단 ticker bar 용 — KOSPI 등 KR 인덱스 가격
+  indexLatest:      (region: 'us' | 'kr' = 'kr') => q(`/api/index/latest`, { region }),
+  // base_rate / mortgage_rate 시계열 — ticker bar 의 BASE 항목용 (가장 최근)
+  macroRate:        () => `/api/realestate/macro-rate`,
 } as const;
 
 // undefined 파라미터는 URLSearchParams에서 "undefined" 문자열이 되므로 직접 걸러낸다.

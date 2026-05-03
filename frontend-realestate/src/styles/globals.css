@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Bloomberg Terminal 스타일 기반 — 본문 검정 + mono 폰트 */
+html, body, #root {
+  background-color: #0a0a0a;
+  color: #e8e8e8;
+  font-family: "JetBrains Mono", "Noto Sans KR", ui-monospace, monospace;
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* scrollbar — 터미널 느낌 (얇은 회색) */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #0a0a0a; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 0; }
+::-webkit-scrollbar-thumb:hover { background: #555; }
