@@ -6530,3 +6530,89 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # [한계]
 # - ECOS 통계표 코드는 변경 가능 — 실패 시 자동 fallback 으로 안전망
 # - PER 정확값은 KRX/pykrx 복구 또는 별도 대체 (yfinance EWY 등) 필요
+
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [83] 2026-05-03 (UTC) — Bloomberg Terminal 스타일 부동산 frontend 5-phase 재설계
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# 사용자가 보낸 4개 모킹 스크린샷 (지도 메인 / 지역 선택 / HOMELENS DAILY / 시군구
+# 종합점수) 을 보고 부동산 React SPA 를 블룸버그 터미널 스타일로 전면 재설계.
+# 옵션 B (1→5 순서 진행) 채택. 각 phase 끝에 commit + 빌드 검증.
+#
+# 결정사항:
+# - 폰트: JetBrains Mono + Noto Sans KR (CDN preconnect)
+# - 색: term.{bg #0a0a0a, panel #111, border #222, orange #ff8800, up #ff4444,
+#       down #4488ff, dim #666, text #e8e8e8, green #00cc66}
+# - USD/KRW 제외 (사용자: "이런게 있었나?" — 부동산 앱에 환율 부적합)
+# - 폴리곤 위 +N.N% 라벨 미구현 (사용자 결정)
+# - ticker bar = KOSPI + BASE 2개 항목만 (60s polling)
+
+# [Phase 1 — 5774940] 테마 기반 + TickerBar + MobileLayout
+# - tailwind.config.ts: term.* + fontFamily.mono = ["JetBrains Mono", "Noto Sans KR"]
+# - globals.css: bg #0a0a0a + mono + tabular nums + 터미널식 scrollbar
+# - index.html: Google Fonts CDN preconnect/preload
+# - TickerBar.tsx 신규 — KOSPI(/api/index/latest?region=kr) + BASE(/api/realestate/macro-rate)
+# - TerminalSection.tsx 신규 — 오렌지 ▓ 헤더 + 본문 패널 공용
+# - MobileLayout.tsx — 검정 배경, TickerBar 마운트, 4 tab 이모지→모노크롬 SVG
+#   (MAP/SRCH/WTCH/RANK 대문자), 활성 탭 오렌지 + 상단 막대
+# - endpoints.ts: indexLatest/macroRate 추가
+
+# [Phase 2 — 6fa90d9] MapScreen MARKET BRIEF + FeatureCard
+# - MarketSummaryCard: TerminalSection 사용, BUY/HOLD/WATCH chips + BASE 우측,
+#   ▼ 더보기 / ▲ 접기 토글
+# - SignalCounters.tsx 신규 (재사용 가능 카운터, 추후 다른 화면에서)
+# - MapScreen: 검색 줄 → 모노 panel + SVG 검색 + [/] 단축키 힌트,
+#   CHOROPLETH·{N} DST·1M Δ 캡션 + 5단계 색상 범례
+# - FeatureCard: 검정 panel + 오렌지 헤더 (▓ RGN {sgg_cd}) + TXNS/MoM Δ/SIG +
+#   ◄ PREV SGG OVERVIEW / FULL ANALYSIS [G] CTA
+
+# [Phase 3 — 496e795] RegionDetailScreen 재구성
+# - TerminalMetric.tsx 신규 — LABEL/VALUE 공용 (large 옵션)
+# - RegionCodeHeader.tsx 신규 — ▓ RGN {code} · {parts} · DETAIL-SUMMARY + back ◄
+# - RegionDetailScreen: NavBar 제거, RGN 헤더, top stdg narrative 카드 (TXNS/MoM Δ/SIG),
+#   AVG W/PY · TXNS/MO · JEONSE/WOLSE · JEONSE Ri 4-요약, 4종 시계열 차트
+#   (W/PY 오렌지 / VOL 그린 / JEONSE 앰버 / POPULATION 다운블루),
+#   SUB-REGIONS · BY W/PY 리스트
+# - SignalCard: COMPOSITE SIGNAL terminal + BUY/HOLD/WATCH 영문 + VOL/PRC/POP/RATE/FLOW
+# - TimeSeriesChart: 검정 panel + ▓ 오렌지 헤더 + LO/LAST/HI
+
+# [Phase 4 — b0f1de9] StdgDetail/ComplexDetail token swap
+# - StdgDetailScreen (newspaper 구조 유지) + ComplexDetail/ComplexCompare:
+#   bg-black → bg-term-bg, border-gray-800 → border-term-border, text-gray-* →
+#   text-term-{text,dim}, text-orange-400 → text-term-orange
+# - 그 외 component (AiInsight/AiReport/BottomBar/BottomSheet/MultiSeriesChart/MetricGrid)
+#   일괄 token swap
+
+# [Phase 5 — 111f203] ScoreBox + MiniChart + RankingScreen
+# - MiniChart.tsx 신규 — 라벨/축 없는 콤팩트 SVG 라인 (height=28~36, 단일 색)
+# - ScoreBox.tsx 신규 — 큰 SCORE/BUY 박스 + 5-cell breakdown (VOL/PRC/POP/RATE/MIGR)
+# - RegionDetailScreen: SignalCard → ScoreBox 교체, W/PY+VOL+JEONSE 3종을
+#   MiniChart strip row 로 압축 (3-column), POPULATION 만 큰 차트 유지
+# - RankingScreen: 카드 list → terminal table (rank/sgg/value/sub 4-column),
+#   헤더 클릭 정렬 (rank/name/value asc/desc 토글 ▲▼), 이모지 📈🔥 제거,
+#   TerminalSection wrapping
+
+# [최종 산출물]
+# 신규 7 component: TickerBar, TerminalSection, TerminalMetric, RegionCodeHeader,
+#                  SignalCounters, ScoreBox, MiniChart
+# 수정: tailwind.config.ts, globals.css, index.html, MobileLayout, KakaoMap,
+#       MarketSummaryCard, FeatureCard, SignalCard, TimeSeriesChart,
+#       MapScreen/RegionDetail/StdgDetail/ComplexDetail/ComplexCompare/Ranking,
+#       lib/color.ts (변경 없음 — 호환), api/endpoints.ts (indexLatest/macroRate)
+# 번들: 207KB → 216KB JS / 21KB → 20KB CSS (gzip 67→68 KB) — 50KB 증가 이내 목표 달성
+
+# [검증 — 각 phase]
+# 1. cd frontend-realestate && npm run build (TypeScript + Vite 모두 성공)
+# 2. dev server (uvicorn api.app:app --reload --port 8000)
+# 3. 브라우저로 6 화면 (지도/지역/법정동/단지/단지비교/랭킹) 접속, 모킹과 비교
+# 4. 모바일 너비 (Chrome DevTools 428×844) overflow 없음
+# 5. console error 없음
+
+# [다음 작업 후보]
+# - USD/KRW 추가 (yfinance collector) — 사용자 결정시
+# - polygon 위 +N.N% 라벨 — 사용자 결정시
+# - Search/Favorite 화면 (현재 placeholder)
+# - StdgDetailScreen 의 ANALYST NOTE 도 ScoreBox 와 같은 sectional 스타일

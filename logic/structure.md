@@ -94,9 +94,14 @@ Passive-Financial-Data-Analysis/
 │   │   ├─ App.tsx             라우터
 │   │   ├─ main.tsx
 │   │   ├─ vite-env.d.ts       import.meta.env 타입
-│   │   ├─ screens/            MapScreen / RegionDetail / StdgDetail / ComplexDetail
+│   │   ├─ screens/            MapScreen / RegionDetail / StdgDetail / ComplexDetail / ComplexCompare / Ranking
 │   │   ├─ components/         KakaoMap / NavBar / SignalCard / AiInsightCard /
-│   │   │                      BottomBar / TimeSeriesChart / MetricGrid / MobileLayout / BottomSheet
+│   │   │                      BottomBar / TimeSeriesChart / MetricGrid / MobileLayout / BottomSheet /
+│   │   │                      ★ Bloomberg Terminal 재설계 (update.py [83]):
+│   │   │                      TickerBar (KOSPI+BASE 60s polling) / TerminalSection (오렌지 ▓ 헤더) /
+│   │   │                      TerminalMetric (LABEL/VALUE) / RegionCodeHeader (▓ RGN {code}) /
+│   │   │                      SignalCounters (BUY/HOLD/WATCH) / ScoreBox (큰 SCORE/BUY + 5-cell) /
+│   │   │                      MiniChart (콤팩트 strip)
 │   │   ├─ store/mapStore.ts   Zustand
 │   │   ├─ api/                client.ts + endpoints.ts
 │   │   ├─ types/api.ts
@@ -658,4 +663,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-03 (cold-start 후속 fix — api/app.py 에 4분 주기 supabase_keepalive 잡 추가(idle TLS 닫힘 방지), database/supabase_client.py 의 threading.local() → 프로세스 단일 client 로 통합(worker thread 마다 새 pool 만들던 것을 하나로 공유), KakaoMap.tsx 가 지도 인스턴스 생성 후 requestAnimationFrame 로 relayout() 1회 호출(detail 진입→복귀 시 컨테이너 0×0 그려지던 버그 fix). 직전 작업: 부천 폴리곤 sub-area 별 top_stdg(소사→옥길/원미→약대/오정→여월). update.py [83])
+마지막 갱신 시점: 2026-05-03 (Bloomberg Terminal 스타일 부동산 frontend 5-phase 재설계 — JetBrains Mono + 검정/오렌지 테마, TickerBar (KOSPI+BASE), MARKET BRIEF + CHOROPLETH 캡션 + 모노크롬 SVG tab (MAP/SRCH/WTCH/RANK), RGN 코드 헤더 + TXNS/MoM Δ/SIG TerminalMetric, COMPOSITE SIGNAL ScoreBox (VOL/PRC/POP/RATE/MIGR 5-cell), MiniChart strip, RankingScreen 정렬 가능 terminal table. 신규 7 component (TickerBar/TerminalSection/TerminalMetric/RegionCodeHeader/SignalCounters/ScoreBox/MiniChart). USD/KRW + 폴리곤 위 라벨 미구현(사용자 결정). 5 phase commit: 5774940 6fa90d9 496e795 b0f1de9 111f203. update.py [83])
