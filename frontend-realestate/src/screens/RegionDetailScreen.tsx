@@ -175,8 +175,13 @@ function buildNarrative(top: RegionSummary | null, latest: TimeseriesPoint | und
   const parts: string[] = [];
   const fb = signal?.feature_breakdown;
   if (fb?.price_mom_pct != null) {
-    const dir = fb.price_mom_pct >= 0 ? "반등" : "하락";
-    parts.push(`매매가 ${fb.price_mom_pct >= 0 ? "+" : ""}${fb.price_mom_pct.toFixed(1)}% 전월 대비 ${dir}`);
+    const pct = fb.price_mom_pct;
+    if (Math.abs(pct) < 0.5) {
+      parts.push(`매매가 보합 (전월 대비 거의 변동 없음)`);
+    } else {
+      const dir = pct >= 0 ? "반등" : "하락";
+      parts.push(`매매가 ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% 전월 대비 ${dir}`);
+    }
   }
   if (fb?.trade_vs_long_ratio != null) {
     const r = fb.trade_vs_long_ratio;

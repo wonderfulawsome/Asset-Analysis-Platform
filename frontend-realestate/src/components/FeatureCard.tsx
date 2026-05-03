@@ -173,11 +173,21 @@ function buildSummary(
     const dir = priceConsec > 0 ? "상승" : "하락";
     sentences.push(`매매가는 ${Math.abs(priceConsec)}개월 연속 ${dir} 중입니다`);
   } else if (fb?.price_mom_pct != null) {
-    const dir = fb.price_mom_pct >= 0 ? "반등" : "하락";
-    sentences.push(`매매가는 ${baseLabel} 대비 ${fb.price_mom_pct >= 0 ? "+" : ""}${fb.price_mom_pct.toFixed(1)}% ${dir}`);
+    // 0.5% 미만 = "보합" (반올림 시 +0.0% 가 "반등"으로 보이는 어색함 방지)
+    const pct = fb.price_mom_pct;
+    if (Math.abs(pct) < 0.5) {
+      sentences.push(`매매가는 ${baseLabel}과 거의 같은 보합세`);
+    } else {
+      const dir = pct >= 0 ? "반등" : "하락";
+      sentences.push(`매매가는 ${baseLabel} 대비 ${pct >= 0 ? "+" : ""}${pct.toFixed(1)}% ${dir}`);
+    }
   } else if (change != null) {
-    const dir = change >= 0 ? "상승" : "하락";
-    sentences.push(`3개월 가격 변화 ${change >= 0 ? "+" : ""}${change.toFixed(1)}% ${dir}`);
+    if (Math.abs(change) < 0.5) {
+      sentences.push(`최근 3개월 가격 변동 거의 없음`);
+    } else {
+      const dir = change >= 0 ? "상승" : "하락";
+      sentences.push(`3개월 가격 변화 ${change >= 0 ? "+" : ""}${change.toFixed(1)}% ${dir}`);
+    }
   }
 
   // ② 거래량 — 12개월 평균 대비 (trade_vs_long_ratio 는 fix 12)
