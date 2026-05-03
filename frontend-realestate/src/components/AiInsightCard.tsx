@@ -21,25 +21,25 @@ export default function AiInsightCard({ signal, changePct }: Props) {
           AI 분석
         </span>
         {changePct != null && (
-          <span className="text-[11px] text-gray-400">
+          <span className="text-[11px] text-term-dim">
             3M {changePct >= 0 ? "+" : ""}{changePct.toFixed(1)}%
           </span>
         )}
       </div>
-      <p className="text-sm leading-relaxed text-gray-100">
+      <p className="text-sm leading-relaxed text-term-text">
         {narrative ?? "시그널 산출에 필요한 데이터가 누적되면 AI 해설이 표시됩니다."}
       </p>
       {(strengths.length > 0 || risks.length > 0) && (
         <div className="grid grid-cols-2 gap-2 mt-3">
           <div className="rounded-lg bg-blue-500/10 p-2.5">
             <div className="text-[10px] text-blue-300 font-semibold mb-1">강점</div>
-            <div className="text-[11px] text-gray-200 leading-tight">
+            <div className="text-[11px] text-term-text leading-tight">
               {strengths.length ? strengths.join(", ") : "—"}
             </div>
           </div>
           <div className="rounded-lg bg-red-500/10 p-2.5">
             <div className="text-[10px] text-red-300 font-semibold mb-1">리스크</div>
-            <div className="text-[11px] text-gray-200 leading-tight">
+            <div className="text-[11px] text-term-text leading-tight">
               {risks.length ? risks.join(", ") : "—"}
             </div>
           </div>

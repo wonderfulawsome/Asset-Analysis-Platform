@@ -47,29 +47,29 @@ export default function ComplexDetailScreen() {
     : "최근";
 
   return (
-    <div className="min-h-full bg-black text-gray-100 font-serif pb-24">
+    <div className="min-h-full bg-term-bg text-term-text font-serif pb-24">
       {/* 헤더 */}
-      <header className="px-5 pt-3 border-b border-gray-700">
+      <header className="px-5 pt-3 border-b border-term-border">
         <div className="flex items-center justify-between">
-          <button onClick={() => navigate(-1)} className="text-gray-400 text-base">‹</button>
-          <div className="text-[10px] tracking-[0.3em] text-gray-500 font-bold">
+          <button onClick={() => navigate(-1)} className="text-term-dim text-base">‹</button>
+          <div className="text-[10px] tracking-[0.3em] text-term-dim font-bold">
             {issueNo} · 거래 타임
           </div>
-          <div className="text-gray-300">♡</div>
+          <div className="text-term-text">♡</div>
         </div>
         <div className="h-2" />
       </header>
 
       {/* 타이틀 영역 */}
       <section className="px-5 mt-6">
-        <div className="text-[10px] tracking-[0.25em] text-orange-400 font-bold mb-2">
+        <div className="text-[10px] tracking-[0.25em] text-term-orange font-bold mb-2">
           DOSSIER{buildYear ? ` · 골목 · ${buildYear}` : ""}
         </div>
-        <h1 className="text-[28px] leading-[1.2] font-bold tracking-tight text-white">
+        <h1 className="text-[28px] leading-[1.2] font-bold tracking-tight text-term-text">
           {aptNm}
         </h1>
         {umdNm && (
-          <p className="text-[14px] italic text-gray-400 mt-2">
+          <p className="text-[14px] italic text-term-dim mt-2">
             {umdNm}
           </p>
         )}
@@ -77,11 +77,11 @@ export default function ComplexDetailScreen() {
 
       {err && <div className="px-5 mt-6 text-red-400 text-sm">{err}</div>}
       {!allTrades && !err && (
-        <div className="px-5 mt-10 text-center text-gray-500 text-sm">로딩 중…</div>
+        <div className="px-5 mt-10 text-center text-term-dim text-sm">로딩 중…</div>
       )}
 
       {allTrades && trades.length === 0 && (
-        <div className="px-5 mt-10 text-center text-gray-500 text-sm">
+        <div className="px-5 mt-10 text-center text-term-dim text-sm">
           이번 달 해당 단지 거래가 없습니다.
         </div>
       )}
@@ -89,9 +89,9 @@ export default function ComplexDetailScreen() {
       {/* 거래 메타 */}
       {trades.length > 0 && (
         <>
-          <div className="px-5 mt-5 flex items-center justify-between text-[11px] text-gray-500">
+          <div className="px-5 mt-5 flex items-center justify-between text-[11px] text-term-dim">
             <span>
-              {monthLabel}의 거래 <span className="text-gray-200 font-semibold">{trades.length}건</span>
+              {monthLabel}의 거래 <span className="text-term-text font-semibold">{trades.length}건</span>
             </span>
             <span className="font-mono">{dateRange}</span>
           </div>
@@ -99,13 +99,13 @@ export default function ComplexDetailScreen() {
           {/* 타임라인 */}
           <section className="px-5 mt-6 relative">
             {/* 세로 라인 (왼쪽) */}
-            <div className="absolute left-[26px] top-2 bottom-2 w-px bg-gray-800" />
+            <div className="absolute left-[26px] top-2 bottom-2 w-px bg-term-panel" />
 
             <ul className="space-y-1">
               {trades.map((t, i) => (
                 <li
                   key={i}
-                  className="relative pl-12 py-3 border-b border-gray-900 flex justify-between items-center"
+                  className="relative pl-12 py-3 border-b border-term-border flex justify-between items-center"
                 >
                   {/* 점 (왼쪽) */}
                   <span
@@ -114,19 +114,19 @@ export default function ComplexDetailScreen() {
                   />
                   {/* 날짜 + 면적/층 */}
                   <div>
-                    <div className="text-[13px] text-gray-200 font-mono">
+                    <div className="text-[13px] text-term-text font-mono">
                       {formatDealDate(t.deal_date)}
                     </div>
-                    <div className="text-[11px] text-gray-500 mt-0.5">
+                    <div className="text-[11px] text-term-dim mt-0.5">
                       전용 {t.exclu_use_ar.toFixed(1)}㎡ · {t.floor ?? "-"}층
                     </div>
                   </div>
                   {/* 가격 (억 단위) */}
                   <div className="text-right">
-                    <span className="text-[20px] font-bold text-white tracking-tight">
+                    <span className="text-[20px] font-bold text-term-text tracking-tight">
                       {(t.deal_amount / 10000).toFixed(2)}
                     </span>
-                    <span className="text-[11px] text-gray-400 ml-0.5">억</span>
+                    <span className="text-[11px] text-term-dim ml-0.5">억</span>
                   </div>
                 </li>
               ))}
@@ -135,7 +135,7 @@ export default function ComplexDetailScreen() {
         </>
       )}
 
-      <p className="text-[10px] text-gray-600 text-center mt-10 italic">
+      <p className="text-[10px] text-term-dim text-center mt-10 italic">
         ⚠️ 본 분석은 참고용이며 투자 권유가 아닙니다.
       </p>
     </div>

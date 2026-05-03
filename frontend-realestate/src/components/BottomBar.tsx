@@ -31,18 +31,18 @@ export default function BottomBar({ selected, onTap }: Props) {
       <button
         disabled={disabled}
         onClick={() => selected?.topStdgCd && onTap(selected.topStdgCd)}
-        className="w-full bg-gray-900/95 backdrop-blur-md ring-1 ring-gray-700
+        className="w-full bg-term-panel/95 backdrop-blur-md ring-1 border-term-border
                    rounded-2xl shadow-xl px-4 py-3 flex items-center gap-3
-                   active:bg-gray-800 transition disabled:opacity-50"
+                   active:bg-term-panel transition disabled:opacity-50"
       >
         <div className="flex-1 min-w-0 text-left">
           <div className="text-sm font-semibold truncate">
             {selected?.sggNm}
             {selected?.topStdgNm && (
-              <span className="text-gray-400 ml-1">· {selected.topStdgNm}</span>
+              <span className="text-term-dim ml-1">· {selected.topStdgNm}</span>
             )}
           </div>
-          <div className="text-[11px] text-gray-400 mt-0.5">
+          <div className="text-[11px] text-term-dim mt-0.5">
             {selected?.medianPricePerPy != null
               ? `평단가 ${formatPriceMan(selected.medianPricePerPy)}`
               : "데이터 없음"}
@@ -60,7 +60,7 @@ export default function BottomBar({ selected, onTap }: Props) {
             {change.toFixed(1)}%
           </span>
         )}
-        <span className="text-gray-400 text-lg">›</span>
+        <span className="text-term-dim text-lg">›</span>
       </button>
     </div>
   );

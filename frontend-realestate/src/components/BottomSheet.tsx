@@ -33,7 +33,7 @@ export default function BottomSheet({ snap, onSnapChange, children }: Props) {
         className="w-full flex justify-center py-2"
         aria-label="바텀시트 전환"
       >
-        <span className="block h-1 w-10 rounded-full bg-gray-300" />
+        <span className="block h-1 w-10 rounded-full bg-term-dim" />
       </button>
       <div className="overflow-y-auto h-[calc(90vh-2rem)]">{children}</div>
     </div>

@@ -35,7 +35,7 @@ export default function ComplexCompareScreen() {
   }, [seqsParam]);
 
   if (err) return <div className="p-6 text-red-400 text-sm">{err}</div>;
-  if (!items) return <div className="p-10 text-center text-gray-500 text-sm">로딩 중…</div>;
+  if (!items) return <div className="p-10 text-center text-term-dim text-sm">로딩 중…</div>;
 
   // 시리즈 변환 — 각 metric 마다 모든 단지의 라인을 합쳐 하나의 차트
   const priceSeries: Series[] = items.map((it, i) => ({
@@ -55,7 +55,7 @@ export default function ComplexCompareScreen() {
   }));
 
   return (
-    <div className="min-h-full bg-gray-900">
+    <div className="min-h-full bg-term-panel">
       <NavBar title="단지 비교" subtitle={`${items.length}개 단지 · 12M`} />
 
       <section className="p-3 space-y-3">
@@ -67,17 +67,17 @@ export default function ComplexCompareScreen() {
               onClick={() =>
                 navigate(`/complex/${it.apt_seq}?sgg_cd=${sggCd || it.sgg_cd || ""}`)
               }
-              className="rounded-xl bg-gray-800/80 active:bg-gray-700 p-3 text-left"
+              className="bg-term-panel border border-term-border active:border-term-orange p-3 text-left"
             >
               <div className="flex items-center gap-1 mb-1">
                 <span
                   className="inline-block w-2.5 h-2.5 rounded"
                   style={{ backgroundColor: SERIES_COLORS[i % SERIES_COLORS.length] }}
                 />
-                <span className="text-[10px] text-gray-400">{it.umd_nm ?? ""}</span>
+                <span className="text-[10px] text-term-dim">{it.umd_nm ?? ""}</span>
               </div>
               <div className="font-semibold text-sm truncate">{it.apt_nm ?? it.apt_seq}</div>
-              <div className="text-[10px] text-gray-400">
+              <div className="text-[10px] text-term-dim">
                 {it.build_year ? `${it.build_year}년` : ""}
               </div>
             </button>

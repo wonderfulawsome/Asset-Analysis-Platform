@@ -29,9 +29,9 @@ export default function MultiSeriesChart({
     .filter((v): v is number => v != null);
   if (allValues.length < 2 || allDates.length < 2) {
     return (
-      <div className="rounded-xl bg-gray-800/50 p-3">
-        <div className="text-xs text-gray-400 mb-1">{title}</div>
-        <div className="h-32 flex items-center justify-center text-[11px] text-gray-500">
+      <div className="rounded-xl bg-term-panel/50 p-3">
+        <div className="text-xs text-term-dim mb-1">{title}</div>
+        <div className="h-32 flex items-center justify-center text-[11px] text-term-dim">
           비교 가능한 데이터가 부족합니다.
         </div>
       </div>
@@ -53,10 +53,10 @@ export default function MultiSeriesChart({
   const fmtYm = (ym: string) => (ym.length === 6 ? `${ym.slice(2, 4)}.${ym.slice(4)}` : ym);
 
   return (
-    <div className="rounded-xl bg-gray-800/50 p-3">
+    <div className="rounded-xl bg-term-panel/50 p-3">
       <div className="flex items-baseline justify-between mb-1">
-        <div className="text-xs text-gray-400">{title}</div>
-        <div className="text-[11px] text-gray-500">
+        <div className="text-xs text-term-dim">{title}</div>
+        <div className="text-[11px] text-term-dim">
           {fmtYm(allDates[0])} → {fmtYm(allDates[allDates.length - 1])}
         </div>
       </div>
@@ -85,8 +85,8 @@ export default function MultiSeriesChart({
           return (
             <div key={si} className="flex items-center gap-1.5">
               <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: s.color }} />
-              <span className="text-gray-300 font-medium truncate max-w-[120px]">{s.label}</span>
-              <span className="text-gray-500">{last?.value != null ? format(last.value) : "-"}</span>
+              <span className="text-term-text font-medium truncate max-w-[120px]">{s.label}</span>
+              <span className="text-term-dim">{last?.value != null ? format(last.value) : "-"}</span>
             </div>
           );
         })}

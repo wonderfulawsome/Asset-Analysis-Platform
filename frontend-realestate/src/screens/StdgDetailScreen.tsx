@@ -23,14 +23,14 @@ export default function StdgDetailScreen() {
   }, [stdgCd]);
 
   if (err) return <div className="p-6 text-red-400 text-sm">{err}</div>;
-  if (!data) return <div className="p-10 text-center text-gray-500 text-sm">로딩 중…</div>;
+  if (!data) return <div className="p-10 text-center text-term-dim text-sm">로딩 중…</div>;
 
   const s = data.summary;
   if (!s) {
     return (
-      <div className="min-h-full bg-black text-gray-100 font-serif">
+      <div className="min-h-full bg-term-bg text-term-text font-serif">
         <DailyHeader stdgCd={stdgCd ?? ""} ym={null} sggCd={null} />
-        <div className="p-10 text-center text-gray-500 text-sm">
+        <div className="p-10 text-center text-term-dim text-sm">
           이번 달 집계된 데이터가 없습니다.
         </div>
       </div>
@@ -45,7 +45,7 @@ export default function StdgDetailScreen() {
   const issueNo = ymToIssueNo(s.stats_ym);
 
   return (
-    <div className="min-h-full bg-black text-gray-100 font-serif pb-24">
+    <div className="min-h-full bg-term-bg text-term-text font-serif pb-24">
       <DailyHeader stdgCd={stdgCd ?? ""} ym={ymLabel} sggCd={s.sgg_cd ?? null} issueNo={issueNo} />
 
       {/* 큰 제목 + 부제 */}
@@ -53,28 +53,28 @@ export default function StdgDetailScreen() {
         <h1 className="text-[28px] leading-[1.2] font-bold tracking-tight text-white">
           {headline}
         </h1>
-        <p className="text-[14px] italic text-gray-400 mt-3 leading-relaxed">
+        <p className="text-[14px] italic text-term-dim mt-3 leading-relaxed">
           {subhead}
         </p>
       </section>
 
       {/* 본문 — 2단 컬럼 (신문 스타일) */}
       <section className="px-5 mt-6">
-        <p className="text-[13px] leading-[1.7] text-gray-300 columns-2 gap-4">
+        <p className="text-[13px] leading-[1.7] text-term-text columns-2 gap-4">
           {body}
         </p>
       </section>
 
       {/* TABLE 01 — 핵심 지표 */}
       <section className="px-5 mt-8">
-        <div className="border-t border-b border-gray-700 py-2 mb-2">
-          <div className="text-[10px] tracking-[0.2em] text-gray-500 font-bold">
+        <div className="border-t border-b border-term-border py-2 mb-2">
+          <div className="text-[10px] tracking-[0.2em] text-term-dim font-bold">
             TABLE 01 · 핵심 지표
           </div>
         </div>
         <table className="w-full text-[13px]">
           <thead>
-            <tr className="text-[10px] tracking-wider text-gray-500 uppercase border-b border-gray-800">
+            <tr className="text-[10px] tracking-wider text-term-dim uppercase border-b border-term-border">
               <th className="text-left py-2 font-normal">METRIC</th>
               <th className="text-right py-2 font-normal">VALUE</th>
               <th className="text-right py-2 font-normal w-16">Δ 3M</th>
@@ -117,11 +117,11 @@ export default function StdgDetailScreen() {
 
       {/* EDITOR'S NOTE */}
       <section className="px-5 mt-8">
-        <div className="border-t-2 border-orange-500/60 pt-3">
-          <div className="text-[10px] tracking-[0.2em] text-orange-400 font-bold mb-2">
+        <div className="border-t-2 border-term-orange pt-3">
+          <div className="text-[10px] tracking-[0.2em] text-term-orange font-bold mb-2">
             EDITOR'S NOTE
           </div>
-          <p className="text-[13px] italic text-gray-200 leading-relaxed">
+          <p className="text-[13px] italic text-term-text leading-relaxed">
             "{editorNote}"
           </p>
         </div>
@@ -130,27 +130,27 @@ export default function StdgDetailScreen() {
       {/* 단지 리스트 (작게) */}
       {data.complexes.length > 0 && (
         <section className="px-5 mt-8">
-          <div className="border-t border-b border-gray-700 py-2 mb-3">
-            <div className="text-[10px] tracking-[0.2em] text-gray-500 font-bold">
+          <div className="border-t border-b border-term-border py-2 mb-3">
+            <div className="text-[10px] tracking-[0.2em] text-term-dim font-bold">
               TABLE 02 · 주요 단지
             </div>
           </div>
-          <ul className="divide-y divide-gray-800">
+          <ul className="divide-y divide-term-border">
             {data.complexes.slice(0, 5).map((c) => (
               <li
                 key={c.apt_seq}
                 onClick={() =>
                   navigate(`/complex/${c.apt_seq}?sgg_cd=${(s.sgg_cd ?? stdgCd?.slice(0, 5)) ?? ""}`)
                 }
-                className="flex justify-between items-center py-3 cursor-pointer active:bg-gray-900"
+                className="flex justify-between items-center py-3 cursor-pointer active:bg-term-panel"
               >
                 <div className="min-w-0">
-                  <div className="text-[13px] font-semibold truncate text-gray-100">{c.apt_nm ?? c.apt_seq}</div>
-                  <div className="text-[10px] text-gray-500">
+                  <div className="text-[13px] font-semibold truncate text-term-text">{c.apt_nm ?? c.apt_seq}</div>
+                  <div className="text-[10px] text-term-dim">
                     {c.build_year ? `${c.build_year}년` : ""}{c.build_year ? " · " : ""}거래 {c.trade_count}건
                   </div>
                 </div>
-                <div className="text-[13px] font-mono font-semibold text-gray-100 shrink-0 ml-3">
+                <div className="text-[13px] font-mono font-semibold text-term-text shrink-0 ml-3">
                   {Math.round(c.median_price_per_py).toLocaleString()}만/평
                 </div>
               </li>
@@ -159,7 +159,7 @@ export default function StdgDetailScreen() {
         </section>
       )}
 
-      <p className="text-[10px] text-gray-600 text-center mt-10 italic">
+      <p className="text-[10px] text-term-dim text-center mt-10 italic">
         ⚠️ 본 분석은 참고용이며 투자 권유가 아닙니다.
       </p>
     </div>
@@ -176,16 +176,16 @@ function DailyHeader({
   const dayLabel = ym ? toDayLabel(ym) : "";
   const sggLabel = sggCd ? sggCdToName(sggCd) : "";
   return (
-    <header className="px-5 pt-3 border-b border-gray-700">
+    <header className="px-5 pt-3 border-b border-term-border">
       <div className="flex items-center justify-between">
-        <button onClick={() => navigate(-1)} className="text-gray-400 text-base">‹</button>
-        <div className="text-gray-300">♡</div>
+        <button onClick={() => navigate(-1)} className="text-term-dim text-base">‹</button>
+        <div className="text-term-text">♡</div>
       </div>
       <div className="text-center mt-2">
-        <div className="text-[10px] tracking-[0.4em] text-gray-500 font-bold">
+        <div className="text-[10px] tracking-[0.4em] text-term-dim font-bold">
           HOMELENS · DAILY
         </div>
-        <div className="text-[10px] tracking-[0.2em] text-gray-500 mt-1">
+        <div className="text-[10px] tracking-[0.2em] text-term-dim mt-1">
           {dayLabel}{issueNo ? ` · ${issueNo}` : ""}{sggLabel ? ` · ${sggLabel.toUpperCase()}` : ""}
         </div>
       </div>
@@ -209,9 +209,9 @@ function Row({
     }
   }
   return (
-    <tr className="border-b border-gray-900">
-      <td className="py-2.5 text-gray-300">{label}</td>
-      <td className="py-2.5 text-right font-mono text-gray-100 font-semibold">{value}</td>
+    <tr className="border-b border-term-border">
+      <td className="py-2.5 text-term-text">{label}</td>
+      <td className="py-2.5 text-right font-mono text-term-text font-semibold">{value}</td>
       <td className="py-2.5 text-right font-mono text-[12px]" style={{ color: deltaColor }}>
         {deltaStr}
       </td>

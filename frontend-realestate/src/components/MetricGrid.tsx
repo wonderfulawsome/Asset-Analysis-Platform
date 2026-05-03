@@ -13,11 +13,11 @@ export default function MetricGrid({ metrics }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3 p-4">
       {metrics.map((m) => (
-        <div key={m.label} className="rounded-lg bg-gray-50 p-3">
-          <p className="text-xs text-gray-500">{m.label}</p>
+        <div key={m.label} className="rounded-lg bg-term-panel p-3">
+          <p className="text-xs text-term-dim">{m.label}</p>
           <p className="text-lg font-semibold">
             {m.value}
-            {m.unit && <span className="text-sm font-normal text-gray-400"> {m.unit}</span>}
+            {m.unit && <span className="text-sm font-normal text-term-dim"> {m.unit}</span>}
           </p>
         </div>
       ))}
