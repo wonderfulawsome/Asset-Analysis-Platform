@@ -762,6 +762,77 @@ _MARKET_SUMMARY_PROMPT = """/no_think
 - 줄바꿈 가능"""
 
 
+# ── 검색 endpoint ────────────────────────────────────────────────────────────
+# 시군구명 + 법정동명 통합 검색. 클라이언트가 q 입력하면 substring 매칭으로 결과 반환.
+# 모듈 캐시: stdg 목록을 region_summary 의 distinct stdg_nm 으로 1회 빌드 후 재사용.
+
+_STDG_INDEX_CACHE: list[dict] | None = None  # [{stdg_cd, stdg_nm, sgg_cd}, ...]
+
+
+def _build_stdg_index() -> list[dict]:
+    """region_summary 의 distinct stdg_cd → 검색 인덱스. 모듈 수명 동안 캐시.
+    스케줄러가 매일 새 stdg 추가 시 서버 재시작으로만 갱신 (감수)."""
+    global _STDG_INDEX_CACHE
+    if _STDG_INDEX_CACHE is not None:
+        return _STDG_INDEX_CACHE
+    from database.supabase_client import get_client
+    client = get_client()
+    PAGE = 1000
+    offset = 0
+    seen: set[str] = set()
+    out: list[dict] = []
+    while True:
+        chunk = (
+            client.table('region_summary')
+            .select('stdg_cd,stdg_nm,sgg_cd')
+            .range(offset, offset + PAGE - 1)
+            .execute().data or []
+        )
+        for r in chunk:
+            cd = r.get('stdg_cd')
+            if not cd or cd in seen:
+                continue
+            seen.add(cd)
+            out.append({
+                'stdg_cd': cd,
+                'stdg_nm': r.get('stdg_nm') or '',
+                'sgg_cd': r.get('sgg_cd') or '',
+            })
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
+    _STDG_INDEX_CACHE = out
+    return out
+
+
+@router.get('/search')
+def get_search(q: str = Query(..., description='검색어 — 시군구명 / 법정동명')):
+    """시군구·법정동 통합 검색. q 길이 ≥1, 결과 최대 30개. 시군구 우선 + 법정동.
+    응답: [{type, code, name, sgg_nm, sgg_cd}, ...]"""
+    q = (q or '').strip()
+    if len(q) < 1:
+        return []
+    results: list[dict] = []
+    # 1) 시군구 매칭 (한글명 또는 코드)
+    for cd, nm in _SGG_KO_NAMES.items():
+        if q in nm or q in cd:
+            results.append({'type': 'sgg', 'code': cd, 'name': nm, 'sgg_nm': nm, 'sgg_cd': cd})
+            if len(results) >= 30:
+                return results
+    # 2) 법정동 매칭
+    for r in _build_stdg_index():
+        nm = r['stdg_nm']
+        if q in nm:
+            sgg_nm = _SGG_KO_NAMES.get(r['sgg_cd'], r['sgg_cd'])
+            results.append({
+                'type': 'stdg', 'code': r['stdg_cd'], 'name': nm,
+                'sgg_nm': sgg_nm, 'sgg_cd': r['sgg_cd'],
+            })
+            if len(results) >= 30:
+                break
+    return results
+
+
 @router.get('/market-summary')
 def get_market_summary():
     """오늘의 서울 부동산 시장 LLM 요약 (24h 캐시).

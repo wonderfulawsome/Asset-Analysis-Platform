@@ -22,6 +22,8 @@ export const ENDPOINTS = {
   indexLatest:      (region: 'us' | 'kr' = 'kr') => q(`/api/index/latest`, { region }),
   // base_rate / mortgage_rate 시계열 — ticker bar 의 BASE 항목용 (가장 최근)
   macroRate:        () => `/api/realestate/macro-rate`,
+  // 시군구·법정동 통합 검색 — 검색 탭
+  search:           (query: string) => q(`/api/realestate/search`, { q: query }),
 } as const;
 
 // undefined 파라미터는 URLSearchParams에서 "undefined" 문자열이 되므로 직접 걸러낸다.

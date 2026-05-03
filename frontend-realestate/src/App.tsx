@@ -5,6 +5,8 @@ import ComplexDetailScreen from "./screens/ComplexDetailScreen";
 import StdgDetailScreen from "./screens/StdgDetailScreen";
 import ComplexCompareScreen from "./screens/ComplexCompareScreen";
 import RankingScreen from "./screens/RankingScreen";
+import SearchScreen from "./screens/SearchScreen";
+import FavoriteScreen from "./screens/FavoriteScreen";
 import MobileLayout from "./components/MobileLayout";
 
 // basename="/realestate" — 백엔드가 /realestate/* 로 서빙하므로 prefix 맞춤.
@@ -19,20 +21,11 @@ export default function App() {
           <Route path="/stdg/:stdgCd" element={<StdgDetailScreen />} />
           <Route path="/compare" element={<ComplexCompareScreen />} />
           <Route path="/complex/:aptSeq" element={<ComplexDetailScreen />} />
-          <Route path="/search" element={<Placeholder title="검색" />} />
-          <Route path="/favorite" element={<Placeholder title="찜" />} />
+          <Route path="/search" element={<SearchScreen />} />
+          <Route path="/favorite" element={<FavoriteScreen />} />
           <Route path="/ranking" element={<RankingScreen />} />
         </Routes>
       </MobileLayout>
     </BrowserRouter>
-  );
-}
-
-// 탭만 만들어두고 내용은 추후. 빈 화면 대신 안내 문구.
-function Placeholder({ title }: { title: string }) {
-  return (
-    <div className="h-full flex items-center justify-center text-gray-500 text-sm">
-      {title} 화면은 준비 중입니다.
-    </div>
   );
 }

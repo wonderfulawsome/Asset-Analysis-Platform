@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 import { changePctColor, formatPriceMan } from "../lib/color";
+import { useFavorites } from "../lib/favorites";
 import type { StdgDetail } from "../types/api";
 
 // "HOMELENS · DAILY" 신문 스타일 — 첨부 이미지 매칭.
@@ -46,7 +47,7 @@ export default function StdgDetailScreen() {
 
   return (
     <div className="min-h-full bg-term-bg text-term-text font-mono pb-24">
-      <DailyHeader stdgCd={stdgCd ?? ""} ym={ymLabel} sggCd={s.sgg_cd ?? null} issueNo={issueNo} />
+      <DailyHeader stdgCd={stdgCd ?? ""} stdgNm={s.stdg_nm} ym={ymLabel} sggCd={s.sgg_cd ?? null} issueNo={issueNo} />
 
       {/* 큰 제목 + 부제 */}
       <section className="px-5 mt-6">
@@ -170,16 +171,25 @@ export default function StdgDetailScreen() {
 // 헤더 (HOMELENS · DAILY)
 // ─────────────────────────────────────────────────────────────────────
 function DailyHeader({
-  ym, sggCd, issueNo,
-}: { stdgCd: string; ym: string | null; sggCd: string | null; issueNo?: string }) {
+  stdgCd, stdgNm, ym, sggCd, issueNo,
+}: { stdgCd: string; stdgNm?: string | null; ym: string | null; sggCd: string | null; issueNo?: string }) {
   const navigate = useNavigate();
+  const { isFavorite, toggleFavorite } = useFavorites();
   const dayLabel = ym ? toDayLabel(ym) : "";
   const sggLabel = sggCd ? sggCdToName(sggCd) : "";
+  const favName = stdgNm || stdgCd;
+  const isFav = stdgCd ? isFavorite("stdg", stdgCd) : false;
   return (
     <header className="px-5 pt-3 border-b border-term-border">
       <div className="flex items-center justify-between">
         <button onClick={() => navigate(-1)} className="text-term-dim text-base">‹</button>
-        <div className="text-term-text">♡</div>
+        <button
+          onClick={() => stdgCd && toggleFavorite({ type: "stdg", code: stdgCd, name: favName, sgg_cd: sggCd ?? undefined, sgg_nm: sggLabel || undefined })}
+          aria-label={isFav ? "관심 해제" : "관심 추가"}
+          className={`text-base leading-none ${isFav ? "text-term-up" : "text-term-text hover:text-term-up"}`}
+        >
+          {isFav ? "♥" : "♡"}
+        </button>
       </div>
       <div className="text-center mt-2">
         <div className="text-[10px] tracking-[0.4em] text-term-dim font-bold">

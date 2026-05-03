@@ -1,4 +1,5 @@
 import type { BuySignal, RegionSummary } from "../types/api";
+import { useFavorites } from "../lib/favorites";
 
 interface SelectedRegion {
   sggCd: string;
@@ -29,7 +30,14 @@ function Spinner() {
 }
 
 export default function FeatureCard({ selected, signal, topStdgSummary, loading, onTap, onTapSgg, onClose }: Props) {
+  const { isFavorite, toggleFavorite } = useFavorites();
   if (!selected) return null;
+  // 관심 대상 = 시군구 (sgg) — 카드는 sgg 단위 카드라 favorite 도 sgg 코드로 저장
+  const favItem = {
+    type: "sgg" as const, code: selected.sggCd, name: selected.sggNm,
+    sgg_cd: selected.sggCd, sgg_nm: selected.sggNm,
+  };
+  const isFav = isFavorite("sgg", selected.sggCd);
 
   const change = selected.changePct;
   const changeStr = change != null ? `${change >= 0 ? "+" : ""}${change.toFixed(1)}%` : null;
@@ -59,12 +67,21 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
           className="bg-term-panel border border-term-border cursor-pointer hover:border-term-orange/50 transition"
           onClick={onTap}
         >
-          {/* 헤더 — 오렌지 RGN {sgg_cd} ·{stdg_nm} */}
+          {/* 헤더 — 오렌지 RGN {sgg_cd} ·{stdg_nm} + 관심 ♡ 토글 */}
           <div className="flex justify-between items-center px-3 py-1.5 border-b border-term-border bg-black/40">
             <span className="text-[10px] tracking-widest font-bold text-term-orange uppercase">
               ▓ RGN {selected.sggCd} · 상세 요약
             </span>
-            <span className="text-[9px] text-term-dim tracking-wider">{ymLabel} · 갱신</span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={(e) => { e.stopPropagation(); toggleFavorite(favItem); }}
+                aria-label={isFav ? "관심 해제" : "관심 추가"}
+                className={`text-sm leading-none px-1 ${isFav ? "text-term-up" : "text-term-dim hover:text-term-up"}`}
+              >
+                {isFav ? "♥" : "♡"}
+              </button>
+              <span className="text-[9px] text-term-dim tracking-wider">{ymLabel} · 갱신</span>
+            </div>
           </div>
 
           <div className="p-4">

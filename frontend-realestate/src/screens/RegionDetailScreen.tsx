@@ -49,6 +49,7 @@ export default function RegionDetailScreen() {
         code={sggCd ?? "—"}
         parts={[top?.stdg_nm ?? null]}
         right="상세 요약"
+        fav={sggCd ? { type: "sgg", code: sggCd, name: top?.stdg_nm ?? sggCd, sgg_cd: sggCd, sgg_nm: top?.stdg_nm ?? sggCd } : undefined}
       />
 
       {err && <div className="p-3 text-term-up text-[11px]">{err}</div>}
