@@ -47,7 +47,7 @@ export default function ComplexDetailScreen() {
     : "최근";
 
   return (
-    <div className="min-h-full bg-term-bg text-term-text font-serif pb-24">
+    <div className="min-h-full bg-term-bg text-term-text font-mono pb-24">
       {/* 헤더 */}
       <header className="px-5 pt-3 border-b border-term-border">
         <div className="flex items-center justify-between">

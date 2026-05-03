@@ -28,7 +28,7 @@ export default function StdgDetailScreen() {
   const s = data.summary;
   if (!s) {
     return (
-      <div className="min-h-full bg-term-bg text-term-text font-serif">
+      <div className="min-h-full bg-term-bg text-term-text font-mono">
         <DailyHeader stdgCd={stdgCd ?? ""} ym={null} sggCd={null} />
         <div className="p-10 text-center text-term-dim text-sm">
           이번 달 집계된 데이터가 없습니다.
@@ -45,7 +45,7 @@ export default function StdgDetailScreen() {
   const issueNo = ymToIssueNo(s.stats_ym);
 
   return (
-    <div className="min-h-full bg-term-bg text-term-text font-serif pb-24">
+    <div className="min-h-full bg-term-bg text-term-text font-mono pb-24">
       <DailyHeader stdgCd={stdgCd ?? ""} ym={ymLabel} sggCd={s.sgg_cd ?? null} issueNo={issueNo} />
 
       {/* 큰 제목 + 부제 */}
