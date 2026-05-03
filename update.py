@@ -6616,3 +6616,114 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - polygon 위 +N.N% 라벨 — 사용자 결정시
 # - Search/Favorite 화면 (현재 placeholder)
 # - StdgDetailScreen 의 ANALYST NOTE 도 ScoreBox 와 같은 sectional 스타일
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [84] 2026-05-03 (UTC) — KR 펀더멘털 탭 A+C+D: 게이지 범위 / PER 동적 fallback / UI 정리
+# ════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자가 펀더멘털 탭 스크린샷을 보여주며 문제점 진단 요청. 6 가지 이슈:
+#   ① noise score 가 -7.7 ~ -19 극단값 (US 게이지 -10~+5 범위 벗어남)
+#   ② 모든 시점이 "감정" 우세 — 51개월 학습/fundamental_gap fallback 영향
+#   ③ HMM "Model is not converging" 경고 — 학습 부족
+#   ④ 카드 제목 "Noise vs Signal" 영문 (KR 컨텍스트 부적합)
+#   ⑤ 게이지 라벨 (Fundamental·Price) 중복 표시
+#   ⑥ PER 가 14.0 평탄 fallback → ERP 일정 → composite z 신호 약함
+#
+# 추천 조합 A+C+D 채택 (B = HMM 재학습은 사용자가 직접 train_kr_hmm 재실행).
+#
+# [A] 게이지 범위 region 분기 — static/js/main.js loadRegime
+#   const isKrRegime = _curRegion() === 'kr';
+#   const G_LO = isKrRegime ? -25 : -10;  // KR 분포 깊음 (51개월 + fallback)
+#   const G_HI = isKrRegime ? 5 : 5;
+#   pos = ns <= 0 ? 5 + ((ns - G_LO)/(0 - G_LO)) * 45
+#                 : 50 + ((ns - 0)/(G_HI - 0)) * 45;
+#   pos = Math.max(5, Math.min(95, pos));
+#   왜: -19 score 도 게이지 좌단 안에 들어와야 시각적 의미 있음
+#
+# [D] 카드 제목 region 분기 + 중복 라벨 제거 — main.js + templates/stocks.html
+#   - templates/stocks.html: <span class="card-label" id="nr-card-title">Noise vs Signal</span>
+#   - main.js loadRegime: titleEl.textContent = isKrRegime ? '시장 이성 점수' : 'Noise vs Signal'
+#   - main.js loadRegime: <div class="nr-gap-ticks"> 중복 ticks 제거 (gap-labels 만 유지)
+#   왜: KR 모드에서 영문 제목 어색 + ticks/labels 중복으로 혼란
+#
+# [C] PER 동적 fallback — collector/valuation_signal_kr.py + collector/noise_regime_data_kr.py
+#   사용자 선택: "마지막 정상 PER 캐싱" (yfinance EWY 외부호출 X)
+#   - valuation_signal_kr 에 신규 헬퍼:
+#       _load_last_known_per()  → models/valuation_baselines_kr.json 의 last_known_per 읽기
+#       _save_last_known_per()  → 정상 PER 머지 저장 (last_known_per_updated_at 동시)
+#       _HARD_FALLBACK_PER = 14.0  (캐시 첫 실행 보호)
+#   - fetch_valuation_signal_today_kr / backfill_valuation_signal_kr:
+#       pykrx 성공 시 → _save_last_known_per
+#       pykrx 실패 시 → _load_last_known_per → 없으면 14.0
+#   - noise_regime_data_kr.fetch_kospi_shiller_like (HMM 학습용)
+#       동일 패턴 적용 + valuation_signal_kr 의 캐시 공유 (동일 JSON)
+#   왜: 사용자 환경 KRX 복구되면 자동으로 캐시 채워지고 다음 실패 시 그 값 재사용
+#       → 14.0 평탄 시리즈가 만드는 ERP 일정 문제 완화 (단, 같은 값 평탄은 동일 분포)
+#
+# [수정 파일]
+# - templates/stocks.html
+#     · <span class="card-label" id="nr-card-title">Noise vs Signal</span> 추가
+#     · main.js?v=123 → ?v=124
+# - static/js/main.js
+#     · loadRegime: G_LO/G_HI region 분기, nr-gap-ticks 제거, 카드 제목 region 분기
+# - collector/valuation_signal_kr.py
+#     · _HARD_FALLBACK_PER 상수, _load_last_known_per/_save_last_known_per 헬퍼
+#     · today/backfill 양쪽에서 캐시 우선 fallback 적용
+# - collector/noise_regime_data_kr.py
+#     · fetch_kospi_shiller_like 에서 valuation_signal_kr 의 헬퍼 import 후 사용
+#
+# [검증]
+# - python -c "from collector.valuation_signal_kr import *; ..." imports OK
+# - fetch_valuation_signal_today_kr 실행 → '캐시 없음' fallback 메시지 정상
+# - fetch_kospi_shiller_like(years=2) 실행 → 14.0 평탄 사용 메시지, shape (14,3) OK
+# - node --check static/js/main.js → OK
+#
+# [한계]
+# - 이 환경 (KRX 로그인 차단) 에선 캐시 영원히 안 채워짐 — 사용자 production 환경에서만 효과
+# - 학습된 KR HMM (51개월) 자체의 score 분포는 데이터 재학습 (B) 없이는 변하지 않음
+#   → 사용자가 별도로 train_kr_hmm 다시 돌려야 -7.7~-19 분포가 정상화될 수 있음
+#
+# [다음 작업 후보]
+# - B (KR HMM 재학습) — 사용자가 ECOS/PER 캐시 채워진 후 train_kr_hmm.py 재실행
+# - Stage 3.3 KR Crash/Surge XGBoost — 신호 탭
+# - Stage 3.4 KR sector_cycle phase 정의
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [85] 2026-05-03 (UTC) — 화성시(41590) MOLIT 옛 일반구 4코드 합산 backfill
+# ════════════════════════════════════════════════════════════════════════════
+
+# [개요]
+# 사용자: "화성시는 데이터가 없는데". 진단 결과 MOLIT 가 LAWD_CD=41590 (행안부
+# 표준 화성시 코드) 에 대해 모든 월 totalCount=0 반환. 옛 일반구 코드로 분할되어
+# 있음 — 부천(41194 → 41192/41196) 과 동일 패턴.
+#
+# 실측 (MOLIT 202604):
+#   41591 (새솔동 등): 99건
+#   41593 (기안동 등): 158건
+#   41595 (반정동 등): 214건
+#   41597 (산척동·동탄): 792건
+#   합계 1,263건/월
+
+# [수정 파일]
+# 1. scripts/backfill_metro.py
+#    - 부천 분기 옆에 화성시 분기 추가:
+#        elif sgg == '41590':
+#            extra_lawd_cds = ['41591', '41593', '41595', '41597']
+#    - mapping/pop 도 4 sgg_10 모두 합산해 sgg_cd=41590 으로 통합 (기존 부천 로직 재사용)
+
+# [실행]
+# python scripts/backfill_metro.py --only 41590 --months 12 --hh-months 3 --sleep 0.4
+# - 5 LAWD_CD × 12 ym (base 41590 0건 호출 포함) ≈ 20.7분 소요
+# - region_summary 30~35 stdg/월 적재
+# - buy_signal: 매수 (점수 39.3, 평단가 1,811만/평, top stdg=송동)
+
+# [캐시 갱신]
+# - app_cache sgg_overview · region_detail:41590 · ranking 모두 즉시 재계산
+
+# [관련 메모]
+# - 다른 통합/분할 시·군 동일 점검 필요 — 수원/성남/안양/안산/고양/용인 일반구는
+#   이미 별도 LAWD_CD (41111·41113·41115·41117 등) 로 list 에 들어있음
+# - 화성·부천 외에 추가로 분할된 시 (전국 단위로 보면 청주·천안 등) 도 같은 패턴 가능

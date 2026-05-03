@@ -113,7 +113,7 @@ Passive-Financial-Data-Analysis/
 ├─ scripts/
 │   ├─ build_frontend.sh        npm install + vite build
 │   ├─ build_metro_geojson.py   ★ southkorea-maps → 수도권 metro-sgg.geojson 변환 (이름→행안부 LAWD_CD 매핑)
-│   ├─ backfill_metro.py        ★ 수도권 77 LAWD_CD × N개월 backfill — 부천(41194)은 옛 일반구 41192/41196 합산 (mapping/pop/trade/rent), --only/--start-from 분할 실행 지원
+│   ├─ backfill_metro.py        ★ 수도권 77 LAWD_CD × N개월 backfill — 부천(41194)은 41192/41196 / 화성(41590)은 41591/41593/41595/41597 합산 (mapping/pop/trade/rent), --only/--start-from 분할 실행
 │   ├─ flip_noise_score_sign.py noise_score 부호 일괄 반전 (1회성)
 │   └─ upload_dim.py
 ├─ models/                     pkl 학습 모델 (HMM, XGBoost, ensemble)
@@ -629,6 +629,7 @@ RUN_SCHEDULER=true                        # false=스케줄러 비활성
 - **상세 페이지 전월세 흐름·평형별 가격·거래량 변화**: `/trades?ym=` 여러 월 호출 또는 시계열 endpoint 추가
 - **알림 (시그널 매수 전환)**: 사용자 favorite 시군구의 signal 변화 push
 - **시장 밸류 composite z (적용 완료, 2026-04-29)**: `collector/valuation_signal.py` 가 `z_comp = 0.4·z_ERP(5Y) + 0.3·z_VIX(5Y) + 0.3·z_DD60(5Y)` 산출 → `valuation_signal` 테이블에 6개 컬럼(vix/dd_60d/z_erp/z_vix/z_dd/z_comp) 추가. `/api/macro/valuation-signal` 응답에 `baselines_5y={erp,vix,dd,weights}` + 각 행 `z_*` 포함. 부호 컨벤션: 양수=저평가/공포 (DD 부호 반전). Baseline 캐시: `models/valuation_baselines.json` (TTL 90일). 한계: mild 충격은 max +0.84σ 가 천장 — 임계 완화 / EWMA / VIX intraday high 가 후보.
+- **KR 등가 (적용 완료, 2026-05-02 ~ 05-03)**: `collector/valuation_signal_kr.py` (KOSPI PER + KR 10Y + VKOSPI + DD60), `collector/noise_regime_data_kr.py` (KOSPI Shiller-like). 데이터 소스 3-tier: pykrx → FDR → yfinance(.KS). KR 10Y/3Y/회사채는 ECOS API 1차. PER 동적 fallback (2026-05-03): pykrx 성공 시 `models/valuation_baselines_kr.json#last_known_per` 자동 캐싱, 실패 시 캐시 → 없으면 14.0. valuation_signal_kr 와 noise_regime_data_kr 가 같은 캐시 공유. Baseline JSON: `models/valuation_baselines_kr.json` (TTL 90일). 펀더멘털 탭 KR 모드: 게이지 범위 -25~+5 (US -10~+5 vs KR 깊은 분포), 카드 제목 region 분기 ('Noise vs Signal' ↔ '시장 이성 점수'), gap-ticks 중복 제거 — `static/js/main.js loadRegime`, `templates/stocks.html#nr-card-title`.
 
 ### 15.3 인프라
 - Supabase 유료 전환 (1GB 초과 시)
@@ -663,4 +664,4 @@ Stage 2: python:3.11-slim
 
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
-마지막 갱신 시점: 2026-05-03 (Bloomberg Terminal 스타일 부동산 frontend 5-phase 재설계 — JetBrains Mono + 검정/오렌지 테마, TickerBar (KOSPI+BASE), MARKET BRIEF + CHOROPLETH 캡션 + 모노크롬 SVG tab (MAP/SRCH/WTCH/RANK), RGN 코드 헤더 + TXNS/MoM Δ/SIG TerminalMetric, COMPOSITE SIGNAL ScoreBox (VOL/PRC/POP/RATE/MIGR 5-cell), MiniChart strip, RankingScreen 정렬 가능 terminal table. 신규 7 component (TickerBar/TerminalSection/TerminalMetric/RegionCodeHeader/SignalCounters/ScoreBox/MiniChart). USD/KRW + 폴리곤 위 라벨 미구현(사용자 결정). 5 phase commit: 5774940 6fa90d9 496e795 b0f1de9 111f203. update.py [83])
+마지막 갱신 시점: 2026-05-03 (화성시(41590) backfill — MOLIT 가 41590 0건 반환, 옛 일반구 4코드(41591 새솔/41593 기안/41595 반정/41597 산척·동탄) 합산 후 sgg_cd=41590 normalize. backfill_metro.py 부천 분기 옆에 elif sgg=='41590' 추가, 5 LAWD_CD × 12 ym 20.7분, region_summary 30~35 stdg/월 (1585 trades 202603), buy_signal 매수(39.3), top_stdg=송동(평단가 1811만/평). app_cache 3종(sgg_overview·region_detail:41590·ranking) 즉시 재계산. update.py [85])

@@ -123,11 +123,14 @@ def main() -> int:
         # 동수 × 12 ym 호출 → 동수 × 1 호출로 감소 (sgg 당 mapping 단계 ~5분 → ~30초).
         sgg_mapping = None
 
-        # 부천(41194) 특수 — MOLIT/MOIS 가 41194 (소사구 지역) 만 반환. 옛 일반구 LAWD_CD
-        # 41192 (원미)·41196 (오정) 도 모두 호출해서 거래·인구·매핑 합쳐 sgg_cd=41194 로 통합.
+        # 부천(41194)·화성(41590) 특수 — MOLIT/MOIS 가 base sgg 0건 반환, 옛 일반구 LAWD_CD 별로 데이터 분할.
+        # 41194 → 41192(원미)·41196(오정) / 41590 → 41591(새솔)·41593(기안)·41595(반정)·41597(산척) 합산
+        # 후 sgg_cd 는 base 로 통합 (geojson 폴리곤 1개 = base sgg 1개).
         extra_lawd_cds: list[str] = []
         if sgg == '41194':
             extra_lawd_cds = ['41192', '41196']
+        elif sgg == '41590':
+            extra_lawd_cds = ['41591', '41593', '41595', '41597']
         extra_sgg_10s = [e + '00000' for e in extra_lawd_cds]
 
         for ym in yms:
