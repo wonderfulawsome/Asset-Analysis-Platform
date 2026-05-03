@@ -398,9 +398,11 @@ def compute_sgg_overview(ym: str = '') -> list[dict]:
 
 
 def _bucheon_sub_top(client, ym: str) -> dict[str, dict]:
-    """raw trade 에서 부천 umd_nm 별 평단가 median 산출 → sub-area 별 top stdg.
+    """raw trade 에서 부천 umd_nm 별 거래수 + 평단가 산출 → sub-area 별 top stdg.
     MOLIT API 가 부천 동을 stdg_cd 9개에 묶어 region_summary 가 부정확 (옛 41192/41196
-    동들이 41194 stdg_cd 에 합산됨). raw 에서 umd_nm (동 이름) 그대로 그룹핑."""
+    동들이 41194 stdg_cd 에 합산됨). raw 에서 umd_nm (동 이름) 그대로 그룹핑.
+    선정 기준: **거래량 1위** — 평단가 1위는 약대(2559)>중동(2457) 같이 작은 luxury
+    동이 뽑혀 사용자 직관 ('그 영역의 대표 동') 과 어긋남. 거래량 = 활성도 = 대표성."""
     PAGE = 1000
     offset = 0
     rows: list[dict] = []
@@ -425,16 +427,18 @@ def _bucheon_sub_top(client, ym: str) -> dict[str, dict]:
         by_nm[nm].append(py)
     sub_top: dict[str, dict] = {}
     for sub in ('sosa', 'wonmi', 'ojeong'):
-        cands = [(nm, sorted(vals)[len(vals)//2]) for nm, vals in by_nm.items()
+        cands = [(nm, vals) for nm, vals in by_nm.items()
                  if BUCHEON_STDG_SUB.get(nm) == sub]
         if not cands:
             continue
-        nm, med = max(cands, key=lambda x: x[1])
+        # 거래량 (vals 길이) 기준 1위
+        nm, vals = max(cands, key=lambda x: len(x[1]))
+        med = sorted(vals)[len(vals)//2]
         sub_top[sub] = {
             'top_stdg_cd': nm,    # raw 기반이라 stdg_cd 가 정확 매핑 안 됨 → umd_nm 으로 대체
             'top_stdg_nm': nm,
             'median_price_per_py': round(med, 0),
-            'trade_count': len(by_nm[nm]),    # raw 동별 거래수 (region_summary 에 동이 없을 수 있어 직접 제공)
+            'trade_count': len(vals),
         }
     return sub_top
 
