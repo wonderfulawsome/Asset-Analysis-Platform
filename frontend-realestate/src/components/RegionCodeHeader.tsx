@@ -9,7 +9,7 @@ interface Props {
   back?: boolean;          // 뒤로가기 ◄ 표시
 }
 
-export default function RegionCodeHeader({ code, parts, right = "DETAIL-SUMMARY", back = true }: Props) {
+export default function RegionCodeHeader({ code, parts, right = "상세 요약", back = true }: Props) {
   const nav = useNavigate();
   const cleanParts = parts.filter((x): x is string => !!x && x.length > 0);
   return (
@@ -25,13 +25,13 @@ export default function RegionCodeHeader({ code, parts, right = "DETAIL-SUMMARY"
         </button>
       )}
       <span className="text-[10px] tracking-widest font-bold font-mono text-term-orange uppercase">
-        ▓ RGN {code}
+        ▓ 시군구 {code}
       </span>
       <span className="text-[10px] font-mono text-term-dim">·</span>
       <span className="text-[11px] font-mono text-term-text truncate flex-1">
         {cleanParts.join(" · ")}
       </span>
-      <span className="text-[9px] text-term-dim font-mono uppercase tracking-widest shrink-0">
+      <span className="text-[9px] text-term-dim font-mono tracking-widest shrink-0">
         {right}
       </span>
     </header>

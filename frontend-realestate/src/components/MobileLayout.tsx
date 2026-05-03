@@ -41,10 +41,10 @@ function IconRanking(_a: boolean) {
 }
 
 const TABS: Tab[] = [
-  { id: "map",      label: "MAP",   path: "/",         icon: IconMap },
-  { id: "search",   label: "SRCH",  path: "/search",   icon: IconSearch },
-  { id: "favorite", label: "WTCH",  path: "/favorite", icon: IconHeart },
-  { id: "ranking",  label: "RANK",  path: "/ranking",  icon: IconRanking },
+  { id: "map",      label: "지도",  path: "/",         icon: IconMap },
+  { id: "search",   label: "검색",  path: "/search",   icon: IconSearch },
+  { id: "favorite", label: "관심",  path: "/favorite", icon: IconHeart },
+  { id: "ranking",  label: "랭킹",  path: "/ranking",  icon: IconRanking },
 ];
 
 export default function MobileLayout({ children }: Props) {

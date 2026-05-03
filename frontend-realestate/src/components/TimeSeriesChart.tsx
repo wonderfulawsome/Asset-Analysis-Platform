@@ -20,11 +20,11 @@ export default function TimeSeriesChart({
   if (valid.length < 2) {
     return (
       <div className="bg-term-panel border border-term-border p-2">
-        <div className="text-[10px] uppercase tracking-widest text-term-orange font-bold mb-1">
+        <div className="text-[10px] tracking-widest text-term-orange font-bold mb-1">
           ▓ {label}
         </div>
         <div className="h-24 flex items-center justify-center text-[11px] text-term-dim font-mono">
-          {valid.length === 1 ? `· single (${format(valid[0].value)})` : "· no data"}
+          {valid.length === 1 ? `· 단일 월 (${format(valid[0].value)})` : "· 데이터 없음"}
         </div>
       </div>
     );
@@ -56,7 +56,7 @@ export default function TimeSeriesChart({
   return (
     <div className="bg-term-panel border border-term-border p-2 font-mono">
       <div className="flex items-baseline justify-between mb-1">
-        <div className="text-[10px] uppercase tracking-widest text-term-orange font-bold">
+        <div className="text-[10px] tracking-widest text-term-orange font-bold">
           ▓ {label}
         </div>
         <div className="text-[9px] text-term-dim tracking-wider">
@@ -70,12 +70,12 @@ export default function TimeSeriesChart({
           <circle key={i} cx={p.x} cy={p.y} r="2" fill={color} />
         ))}
       </svg>
-      <div className="flex justify-between text-[9px] text-term-dim mt-1 uppercase tracking-wider">
-        <span>LO {format(dataMin)}</span>
+      <div className="flex justify-between text-[9px] text-term-dim mt-1 tracking-wider">
+        <span>최저 {format(dataMin)}</span>
         <span className="text-term-text font-bold">
-          LAST {format(values[values.length - 1])}
+          최근 {format(values[values.length - 1])}
         </span>
-        <span>HI {format(dataMax)}</span>
+        <span>최고 {format(dataMax)}</span>
       </div>
     </div>
   );

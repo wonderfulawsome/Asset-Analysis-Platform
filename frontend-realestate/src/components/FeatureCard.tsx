@@ -62,9 +62,9 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
           {/* 헤더 — 오렌지 RGN {sgg_cd} ·{stdg_nm} */}
           <div className="flex justify-between items-center px-3 py-1.5 border-b border-term-border bg-black/40">
             <span className="text-[10px] tracking-widest font-bold text-term-orange uppercase">
-              ▓ RGN {selected.sggCd} · DETAIL-SUMMARY
+              ▓ RGN {selected.sggCd} · 상세 요약
             </span>
-            <span className="text-[9px] text-term-dim tracking-wider">{ymLabel} · UPD</span>
+            <span className="text-[9px] text-term-dim tracking-wider">{ymLabel} · 갱신</span>
           </div>
 
           <div className="p-4">
@@ -82,7 +82,7 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
             <p className="text-[12px] text-term-text leading-relaxed mb-4 min-h-[3em]">
               {loading && !signal && !topStdgSummary ? (
                 <span className="inline-flex items-center gap-2 text-term-dim">
-                  <Spinner /> · loading…
+                  <Spinner /> · 데이터 불러오는 중…
                 </span>
               ) : summary}
             </p>
@@ -90,19 +90,19 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
             {/* 메트릭 3개 — 터미널 스타일 */}
             <div className="grid grid-cols-3 gap-2 mb-4">
               <Metric
-                label="TXNS"
+                label="거래량"
                 value={tradeCount != null ? tradeCount.toLocaleString() : null}
                 unit={tradeCount != null ? "건" : undefined}
                 loading={loading && tradeCount == null}
               />
               <Metric
-                label="MoM Δ"
+                label="전월 대비"
                 value={changeStr}
                 valueColor={changeColor}
                 loading={loading && changeStr == null}
               />
               <Metric
-                label="SIG"
+                label="신호"
                 value={signalLabel}
                 valueColor={signalColor}
                 loading={loading && signalLabel == null}
@@ -110,16 +110,16 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
             </div>
 
             {/* CTA */}
-            <div className="border-t border-term-border pt-2.5 flex justify-between items-center gap-2 text-[11px] uppercase tracking-widest">
+            <div className="border-t border-term-border pt-2.5 flex justify-between items-center gap-2 text-[11px] tracking-wider">
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onTapSgg?.(); }}
                 disabled={!onTapSgg}
                 className="text-term-text px-2 py-1 border border-term-border hover:border-term-orange disabled:opacity-30"
               >
-                ◄ PREV SGG OVERVIEW
+                ◄ 시군구 개요로
               </button>
-              <span className="text-term-orange font-bold">FULL ANALYSIS [G] →</span>
+              <span className="text-term-orange font-bold">전체 분석 →</span>
             </div>
           </div>
         </div>

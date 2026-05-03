@@ -182,20 +182,20 @@ export default function MapScreen() {
             onFocus={() => navigate("/search")}
             readOnly
           />
-          <span className="text-[9px] text-term-dim font-mono uppercase tracking-widest">[/]</span>
+          <span className="text-[9px] text-term-dim font-mono tracking-widest">검색</span>
         </div>
 
         {/* MARKET BRIEF (시그널 분포 + LLM 요약) */}
         <MarketSummaryCard />
 
         {/* CHOROPLETH 캡션 + 색상 범례 — 한 줄 */}
-        <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-widest
+        <div className="flex items-center gap-2 text-[9px] font-mono tracking-widest
                         bg-term-panel border border-term-border px-2 py-1">
-          <span className="text-term-orange font-bold">CHOROPLETH</span>
+          <span className="text-term-orange font-bold">시군구 색칠</span>
           <span className="text-term-dim">·</span>
-          <span className="text-term-text">{polygons.length} DST</span>
+          <span className="text-term-text">{polygons.length}개</span>
           <span className="text-term-dim">·</span>
-          <span className="text-term-text">1M Δ</span>
+          <span className="text-term-text">전월 대비</span>
           <span className="ml-auto flex items-center gap-1.5">
             <Legend color="#dc2626" label="+5↑" />
             <Legend color="#f87171" label="+1" />

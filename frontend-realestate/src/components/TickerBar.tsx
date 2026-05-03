@@ -53,8 +53,8 @@ export default function TickerBar() {
       className="flex items-center gap-4 px-3 py-1 text-[10px] font-mono tracking-wider
                  bg-black border-b border-term-border overflow-x-auto whitespace-nowrap"
     >
-      <Item label="KOSPI" value={fmt(data?.kospi?.close)} delta={data?.kospi?.change_pct ?? null} />
-      <Item label="BASE" value={data?.base != null ? `${data.base.toFixed(3)}` : "—"} delta={null} flat />
+      <Item label="코스피" value={fmt(data?.kospi?.close)} delta={data?.kospi?.change_pct ?? null} />
+      <Item label="기준금리" value={data?.base != null ? `${data.base.toFixed(2)}%` : "—"} delta={null} flat />
       <span className="ml-auto text-term-dim">{nowHHMM()}</span>
     </div>
   );
@@ -66,7 +66,7 @@ function Item({ label, value, delta, flat = false }: {
   const color = delta == null
     ? "text-term-dim"
     : delta > 0 ? "text-term-up" : delta < 0 ? "text-term-down" : "text-term-dim";
-  const sign = delta == null ? (flat ? "FLAT" : "—") : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}%`;
+  const sign = delta == null ? (flat ? "변동 없음" : "—") : `${delta >= 0 ? "+" : ""}${delta.toFixed(2)}%`;
   return (
     <span className="flex items-center gap-1.5">
       <span className="text-term-dim">{label}</span>

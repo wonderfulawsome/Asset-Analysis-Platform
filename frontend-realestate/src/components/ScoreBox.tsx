@@ -8,9 +8,9 @@ interface Props {
 }
 
 const META: Record<BuySignal["signal"], { en: string; color: string; copy: string }> = {
-  매수: { en: "BUY",   color: "text-term-green", copy: "거래 · 가격 · 인구 · 금리 · 이동 종합" },
-  관망: { en: "HOLD",  color: "text-term-dim",   copy: "지표 혼조 · 추세 확인 필요" },
-  주의: { en: "WATCH", color: "text-term-up",    copy: "거래 · 가격 · 인구 · 금리 · 이동 종합 약세" },
+  매수: { en: "매수", color: "text-term-green", copy: "거래 · 가격 · 인구 · 금리 · 이동 종합" },
+  관망: { en: "관망", color: "text-term-dim",   copy: "지표 혼조 · 추세 확인 필요" },
+  주의: { en: "주의", color: "text-term-up",    copy: "거래 · 가격 · 인구 · 금리 · 이동 종합 약세" },
 };
 
 export default function ScoreBox({ signal }: Props) {
@@ -19,8 +19,8 @@ export default function ScoreBox({ signal }: Props) {
   const fb = signal.feature_breakdown ?? {};
   return (
     <TerminalSection
-      title="COMPOSITE SIGNAL"
-      right={`SCORE ${signal.score >= 0 ? "+" : ""}${signal.score.toFixed(1)}`}
+      title="종합 신호"
+      right={`점수 ${signal.score >= 0 ? "+" : ""}${signal.score.toFixed(1)}`}
     >
       {/* 큰 BUY/HOLD/WATCH 라벨 + 카피 */}
       <div className="flex items-baseline gap-3 mb-3">
@@ -30,11 +30,11 @@ export default function ScoreBox({ signal }: Props) {
 
       {/* 5-cell breakdown */}
       <div className="grid grid-cols-5 gap-1">
-        <Cell label="VOL"   pct={fb.trade_chg_pct ?? null} />
-        <Cell label="PRC"   pct={fb.price_mom_pct ?? null} />
-        <Cell label="POP"   pct={fb.pop_chg_pct ?? null} />
-        <Cell label="RATE"  pct={fb.base_rate_drop_pct ?? null} />
-        <Cell label="MIGR"  raw={fb.net_flow ?? null} />
+        <Cell label="거래" pct={fb.trade_chg_pct ?? null} />
+        <Cell label="가격" pct={fb.price_mom_pct ?? null} />
+        <Cell label="인구" pct={fb.pop_chg_pct ?? null} />
+        <Cell label="금리" pct={fb.base_rate_drop_pct ?? null} />
+        <Cell label="이동" raw={fb.net_flow ?? null} />
       </div>
     </TerminalSection>
   );

@@ -31,27 +31,27 @@ export default function MarketSummaryCard() {
   if (err) return null;
 
   const today = new Date().toISOString().slice(0, 10);  // 2026-05-03
-  const right = data ? `${data.as_of.slice(5)} · UPD` : `${today.slice(5)} · LOAD`;
+  const right = data ? `${data.as_of.slice(5)} 갱신` : `${today.slice(5)} 로딩중`;
 
   if (!data) {
     return (
-      <TerminalSection title="MARKET BRIEF" right={right} dense>
-        <div className="text-[11px] text-term-dim">· loading…</div>
+      <TerminalSection title="시장 요약" right={right} dense>
+        <div className="text-[11px] text-term-dim">· 데이터 불러오는 중…</div>
       </TerminalSection>
     );
   }
 
   return (
-    <TerminalSection title="MARKET BRIEF" right={right} dense>
+    <TerminalSection title="시장 요약" right={right} dense>
       <div onClick={() => setExpanded((v) => !v)} className="cursor-pointer">
         {/* 시그널 분포 + 기준금리 chips — 같은 줄 */}
-        <div className="flex gap-1 items-center text-[10px] font-mono uppercase tracking-wider mb-1.5">
-          <Chip label="BUY"   count={data.signal_distribution.매수} color="text-term-green" />
-          <Chip label="HOLD"  count={data.signal_distribution.관망} color="text-term-dim"   />
-          <Chip label="WATCH" count={data.signal_distribution.주의} color="text-term-up"    />
+        <div className="flex gap-1 items-center text-[10px] font-mono tracking-wider mb-1.5">
+          <Chip label="매수" count={data.signal_distribution.매수} color="text-term-green" />
+          <Chip label="관망" count={data.signal_distribution.관망} color="text-term-dim"   />
+          <Chip label="주의" count={data.signal_distribution.주의} color="text-term-up"    />
           {data.base_rate_latest != null && (
             <span className="ml-auto text-term-dim">
-              BASE <span className="text-term-text font-bold">{data.base_rate_latest.toFixed(3)}</span>
+              기준금리 <span className="text-term-text font-bold">{data.base_rate_latest.toFixed(2)}%</span>
             </span>
           )}
         </div>
@@ -61,7 +61,7 @@ export default function MarketSummaryCard() {
           {data.summary}
         </p>
 
-        <div className="text-[9px] text-term-orange mt-1 font-bold tracking-widest uppercase">
+        <div className="text-[9px] text-term-orange mt-1 font-bold tracking-widest">
           {expanded ? "▲ 접기" : "▼ 더 보기"}
         </div>
       </div>

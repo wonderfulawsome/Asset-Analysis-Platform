@@ -46,12 +46,12 @@ export default function RankingScreen() {
       {/* SECTION 01 — 거래량 회복 */}
       <div className="mb-2">
         <TerminalSection
-          title="TRADE RECOVERY · TOP 5"
-          right={data?.updated_at ? `UPD ${data.updated_at.slice(5)}` : "LOADING"}
+          title="거래량 회복 · TOP 5"
+          right={data?.updated_at ? `${data.updated_at.slice(5)} 갱신` : "로딩 중"}
           dense
         >
-          <p className="text-[9px] text-term-dim uppercase tracking-widest mb-1">
-            t-1 거래량 ÷ 직전 12M 평균
+          <p className="text-[9px] text-term-dim tracking-wider mb-1">
+            전월 거래량 ÷ 직전 12개월 평균
           </p>
           {loading ? <SkeletonTable cols={4} /> : (
             <RankTable
@@ -60,12 +60,12 @@ export default function RankingScreen() {
                 sggCd: r.sgg_cd,
                 name: r.sgg_nm,
                 value: r.trade_vs_long_ratio,
-                valueFmt: `${r.trade_vs_long_ratio.toFixed(2)}x`,
+                valueFmt: `${r.trade_vs_long_ratio.toFixed(2)}배`,
                 sub: r.trade_count ? `${r.trade_count.toLocaleString()}건` : "—",
                 color: r.trade_vs_long_ratio >= 1 ? "text-term-up" : "text-term-down",
               }))}
-              valueLabel="RATIO"
-              subLabel="VOL"
+              valueLabel="배율"
+              subLabel="거래"
               onClick={(sggCd) => navigate(`/region/${sggCd}`)}
             />
           )}
@@ -74,12 +74,12 @@ export default function RankingScreen() {
 
       {/* SECTION 02 — 가격 상승률 */}
       <TerminalSection
-        title="PRICE 3M Δ · TOP 5"
-        right={data?.updated_at ? `UPD ${data.updated_at.slice(5)}` : "LOADING"}
+        title="가격 3개월 변화 · TOP 5"
+        right={data?.updated_at ? `${data.updated_at.slice(5)} 갱신` : "로딩 중"}
         dense
       >
-        <p className="text-[9px] text-term-dim uppercase tracking-widest mb-1">
-          3개월 변화율 (sgg-overview)
+        <p className="text-[9px] text-term-dim tracking-wider mb-1">
+          시군구 단위 3개월 변화율
         </p>
         {loading ? <SkeletonTable cols={4} /> : (
           <RankTable
@@ -92,8 +92,8 @@ export default function RankingScreen() {
               sub: r.median_price_per_py ? `${r.median_price_per_py.toLocaleString()}만/평` : "—",
               color: r.change_pct_3m >= 0 ? "text-term-up" : "text-term-down",
             }))}
-            valueLabel="3M Δ"
-            subLabel="W/PY"
+            valueLabel="3개월 변화"
+            subLabel="평단가"
             onClick={(sggCd) => navigate(`/region/${sggCd}`)}
           />
         )}
@@ -136,15 +136,15 @@ function RankTable({ rows, valueLabel, subLabel, onClick }: {
   }
 
   if (rows.length === 0) {
-    return <div className="text-[11px] text-term-dim text-center py-3">· no data</div>;
+    return <div className="text-[11px] text-term-dim text-center py-3">· 데이터 없음</div>;
   }
 
   return (
     <table className="w-full text-[11px]">
       <thead>
-        <tr className="text-[9px] uppercase tracking-widest text-term-dim border-b border-term-border">
+        <tr className="text-[9px] tracking-widest text-term-dim border-b border-term-border">
           <Th onClick={() => toggle("rank")} active={key === "rank"} dir={dir}>#</Th>
-          <Th onClick={() => toggle("name")} active={key === "name"} dir={dir} align="left">SGG</Th>
+          <Th onClick={() => toggle("name")} active={key === "name"} dir={dir} align="left">시군구</Th>
           <Th onClick={() => toggle("value")} active={key === "value"} dir={dir} align="right">{valueLabel}</Th>
           <th className="text-right py-1.5 pl-2 font-normal text-term-dim">{subLabel}</th>
         </tr>
