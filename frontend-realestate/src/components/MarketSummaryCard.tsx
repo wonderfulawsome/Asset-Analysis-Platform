@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
+import TerminalSection from "./TerminalSection";
+
+// MARKET BRIEF — 모킹 1 의 상단 박스. 시군구 BUY/HOLD/주의 분포 + 기준금리 + LLM 요약.
+// expanded=true 시 전체 텍스트, false 시 첫 줄만.
 
 interface MarketSummaryResponse {
   summary: string;
@@ -25,68 +29,51 @@ export default function MarketSummaryCard() {
   }, []);
 
   if (err) return null;
+
+  const today = new Date().toISOString().slice(0, 10);  // 2026-05-03
+  const right = data ? `${data.as_of.slice(5)} · UPD` : `${today.slice(5)} · LOAD`;
+
   if (!data) {
     return (
-      <div className="bg-gray-900/95 backdrop-blur-md rounded-2xl border border-gray-800 px-4 py-3 mt-2">
-        <div className="text-[10px] tracking-[0.2em] text-orange-400 font-bold mb-1">
-          TODAY · 시장 요약
-        </div>
-        <div className="text-[12px] text-gray-500">로딩 중…</div>
-      </div>
+      <TerminalSection title="MARKET BRIEF" right={right} dense>
+        <div className="text-[11px] text-term-dim">· loading…</div>
+      </TerminalSection>
     );
   }
 
-  const dist = data.signal_distribution;
-
   return (
-    <div
-      className="bg-gray-900/95 backdrop-blur-md rounded-2xl border border-gray-800 px-4 py-3 mt-2 cursor-pointer active:scale-[0.99] transition"
-      onClick={() => setExpanded((v) => !v)}
-    >
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] tracking-[0.2em] text-orange-400 font-bold">
-          TODAY · 시장 요약
-        </span>
-        <span className="text-[9px] text-gray-500 font-mono">{data.as_of.slice(5)}</span>
-      </div>
+    <TerminalSection title="MARKET BRIEF" right={right} dense>
+      <div onClick={() => setExpanded((v) => !v)} className="cursor-pointer">
+        {/* 시그널 분포 + 기준금리 chips — 같은 줄 */}
+        <div className="flex gap-1 items-center text-[10px] font-mono uppercase tracking-wider mb-1.5">
+          <Chip label="BUY"   count={data.signal_distribution.매수} color="text-term-green" />
+          <Chip label="HOLD"  count={data.signal_distribution.관망} color="text-term-dim"   />
+          <Chip label="WATCH" count={data.signal_distribution.주의} color="text-term-up"    />
+          {data.base_rate_latest != null && (
+            <span className="ml-auto text-term-dim">
+              BASE <span className="text-term-text font-bold">{data.base_rate_latest.toFixed(3)}</span>
+            </span>
+          )}
+        </div>
 
-      {/* 시그널 분포 chips */}
-      <div className="flex gap-1.5 mb-2">
-        <Chip label="매수" count={dist.매수} color="#10b981" />
-        <Chip label="관망" count={dist.관망} color="#9ca3af" />
-        <Chip label="주의" count={dist.주의} color="#ef4444" />
-        {data.base_rate_latest != null && (
-          <span className="text-[10px] text-gray-400 ml-auto self-center">
-            기준금리 {data.base_rate_latest}%
-          </span>
-        )}
-      </div>
+        {/* LLM 요약 — 첫 줄 또는 전체 */}
+        <p className={`text-[11.5px] leading-snug text-term-text ${expanded ? "" : "line-clamp-2"}`}>
+          {data.summary}
+        </p>
 
-      {/* LLM 요약 */}
-      <p
-        className={`text-[12.5px] leading-relaxed text-gray-200 ${
-          expanded ? "" : "line-clamp-2"
-        }`}
-      >
-        {data.summary}
-      </p>
-
-      {/* 더 보기 */}
-      <div className="text-[10px] text-orange-400 mt-1 font-semibold">
-        {expanded ? "접기 ▲" : "더 보기 ▼"}
+        <div className="text-[9px] text-term-orange mt-1 font-bold tracking-widest uppercase">
+          {expanded ? "▲ 접기" : "▼ 더 보기"}
+        </div>
       </div>
-    </div>
+    </TerminalSection>
   );
 }
 
 function Chip({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <span
-      className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-      style={{ backgroundColor: `${color}22`, color }}
-    >
-      {label} {count}
+    <span className="flex items-center gap-1 px-1.5 py-0.5 border border-term-border bg-term-bg">
+      <span className={`${color} font-bold`}>{label}</span>
+      <span className="text-term-text font-bold">{count}</span>
     </span>
   );
 }

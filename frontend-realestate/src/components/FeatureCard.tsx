@@ -52,76 +52,75 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
   return (
     <>
       {/* backdrop */}
-      <div
-        className="fixed inset-0 bg-black/50 z-30"
-        onClick={onClose}
-      />
-      {/* card */}
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 w-[90%] max-w-md">
+      <div className="fixed inset-0 bg-black/70 z-30" onClick={onClose} />
+      {/* card — 터미널 스타일 (검정 패널 + 오렌지 헤더 + mono) */}
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 w-[92%] max-w-md font-mono">
         <div
-          className="bg-gray-950 rounded-2xl shadow-2xl border border-gray-800 p-5 cursor-pointer hover:border-gray-700 active:scale-[0.99] transition"
+          className="bg-term-panel border border-term-border cursor-pointer hover:border-term-orange/50 transition"
           onClick={onTap}
         >
-          {/* 헤더 */}
-          <div className="flex justify-between items-center text-[10px] uppercase tracking-wider text-gray-500 mb-3">
-            <span className="font-semibold">FEATURES · 요약</span>
-            <span>{ymLabel} · UPD</span>
-          </div>
-
-          {/* 시군구 (작게 위) + 동 이름 (큼) */}
-          {selected.topStdgNm && (
-            <div className="text-xs text-gray-400 mb-1">{selected.sggNm}</div>
-          )}
-          <h2 className="text-2xl font-bold mb-3 text-white">
-            {selected.topStdgNm ?? selected.sggNm}
-          </h2>
-
-          {/* 요약 문장 */}
-          <p className="text-sm text-gray-300 leading-relaxed mb-4 min-h-[3em]">
-            {loading && !signal && !topStdgSummary ? (
-              <span className="inline-flex items-center gap-2 text-gray-500"><Spinner /> 데이터 불러오는 중…</span>
-            ) : summary}
-          </p>
-
-          {/* 메트릭 3개 */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
-            <Metric
-              label="거래량"
-              value={tradeCount != null ? tradeCount.toLocaleString() : null}
-              unit={tradeCount != null ? "건" : undefined}
-              loading={loading && tradeCount == null}
-            />
-            <Metric
-              label="전월 대비"
-              value={changeStr}
-              valueColor={changeColor}
-              loading={loading && changeStr == null}
-            />
-            <Metric
-              label="신호"
-              value={signalLabel}
-              valueColor={signalColor}
-              loading={loading && signalLabel == null}
-            />
-          </div>
-
-          {/* CTA — 카드 본체 = 법정동 상세 / "구 전체" = 시군구 시계열 차트 */}
-          <div className="border-t border-gray-800 pt-3 flex justify-between items-center gap-3">
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTapSgg?.();
-              }}
-              disabled={!onTapSgg}
-              className="text-xs text-gray-300 px-3 py-1 rounded-md bg-gray-800 hover:bg-gray-700 disabled:opacity-40"
-            >
-              구 전체 추이 →
-            </button>
-            <span className="text-sm text-gray-400 ml-auto">전체 분석</span>
-            <span className="text-orange-400 font-semibold text-sm tracking-wide">
-              READ →
+          {/* 헤더 — 오렌지 RGN {sgg_cd} ·{stdg_nm} */}
+          <div className="flex justify-between items-center px-3 py-1.5 border-b border-term-border bg-black/40">
+            <span className="text-[10px] tracking-widest font-bold text-term-orange uppercase">
+              ▓ RGN {selected.sggCd} · DETAIL-SUMMARY
             </span>
+            <span className="text-[9px] text-term-dim tracking-wider">{ymLabel} · UPD</span>
+          </div>
+
+          <div className="p-4">
+            {/* 시군구 (작게 위) + 동 이름 (큼) */}
+            {selected.topStdgNm && (
+              <div className="text-[10px] uppercase tracking-widest text-term-dim mb-1">
+                {selected.sggNm}
+              </div>
+            )}
+            <h2 className="text-2xl font-bold mb-3 text-term-text tracking-tight">
+              {selected.topStdgNm ?? selected.sggNm}
+            </h2>
+
+            {/* 요약 문장 */}
+            <p className="text-[12px] text-term-text leading-relaxed mb-4 min-h-[3em]">
+              {loading && !signal && !topStdgSummary ? (
+                <span className="inline-flex items-center gap-2 text-term-dim">
+                  <Spinner /> · loading…
+                </span>
+              ) : summary}
+            </p>
+
+            {/* 메트릭 3개 — 터미널 스타일 */}
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <Metric
+                label="TXNS"
+                value={tradeCount != null ? tradeCount.toLocaleString() : null}
+                unit={tradeCount != null ? "건" : undefined}
+                loading={loading && tradeCount == null}
+              />
+              <Metric
+                label="MoM Δ"
+                value={changeStr}
+                valueColor={changeColor}
+                loading={loading && changeStr == null}
+              />
+              <Metric
+                label="SIG"
+                value={signalLabel}
+                valueColor={signalColor}
+                loading={loading && signalLabel == null}
+              />
+            </div>
+
+            {/* CTA */}
+            <div className="border-t border-term-border pt-2.5 flex justify-between items-center gap-2 text-[11px] uppercase tracking-widest">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onTapSgg?.(); }}
+                disabled={!onTapSgg}
+                className="text-term-text px-2 py-1 border border-term-border hover:border-term-orange disabled:opacity-30"
+              >
+                ◄ PREV SGG OVERVIEW
+              </button>
+              <span className="text-term-orange font-bold">FULL ANALYSIS [G] →</span>
+            </div>
           </div>
         </div>
       </div>
@@ -143,11 +142,11 @@ function Metric({
   loading?: boolean;
 }) {
   return (
-    <div>
-      <div className="text-[10px] text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-      <div className="text-base font-bold" style={{ color: valueColor ?? "#fff" }}>
-        {loading ? <Spinner /> : (value ?? "-")}
-        {unit && !loading && <span className="text-[10px] text-gray-400 ml-0.5 font-normal">{unit}</span>}
+    <div className="bg-black/40 border border-term-border px-2 py-1.5">
+      <div className="text-[9px] text-term-dim uppercase tracking-widest mb-0.5">{label}</div>
+      <div className="text-base font-bold font-mono" style={{ color: valueColor ?? "#e8e8e8" }}>
+        {loading ? <Spinner /> : (value ?? "—")}
+        {unit && !loading && <span className="text-[9px] text-term-dim ml-0.5 font-normal">{unit}</span>}
       </div>
     </div>
   );

@@ -167,31 +167,42 @@ export default function MapScreen() {
         maxLevel={11}
       />
 
-      {/* 플로팅 상단 검색바 */}
-      <div className="absolute top-3 left-3 right-3 z-10">
-        <div className="bg-gray-900/95 backdrop-blur-md rounded-2xl shadow-xl
-                        border border-gray-800 flex items-center gap-2 px-4 py-3">
-          <span className="text-gray-400">🔍</span>
+      {/* 플로팅 상단 — 터미널 스타일 검색 + MARKET BRIEF + CHOROPLETH 캡션 */}
+      <div className="absolute top-2 left-2 right-2 z-10 space-y-1.5">
+        {/* 검색 줄 — 모노 + 검정 패널 + 모노크롬 SVG */}
+        <div className="bg-term-panel border border-term-border flex items-center gap-2 px-3 py-2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-term-dim">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-3.5-3.5" />
+          </svg>
           <input
             type="text"
-            placeholder="지역·단지·지하철역 검색"
-            className="flex-1 bg-transparent outline-none text-sm placeholder-gray-500"
+            placeholder="지역 · 단지 · 지하철역 검색"
+            className="flex-1 bg-transparent outline-none text-[11px] font-mono text-term-text placeholder-term-dim"
             onFocus={() => navigate("/search")}
             readOnly
           />
+          <span className="text-[9px] text-term-dim font-mono uppercase tracking-widest">[/]</span>
         </div>
-        {/* 오늘의 시장 요약 LLM 카드 */}
+
+        {/* MARKET BRIEF (시그널 분포 + LLM 요약) */}
         <MarketSummaryCard />
 
-        {/* 색상 범례 */}
-        <div className="mt-2 flex items-center gap-2 text-[10px] text-gray-300
-                        bg-gray-900/80 backdrop-blur rounded-lg px-3 py-1.5 w-fit">
-          <span>3M 변화율:</span>
-          <Legend color="#dc2626" label="+5↑" />
-          <Legend color="#f87171" label="+1~5" />
-          <Legend color="#9ca3af" label="±1" />
-          <Legend color="#60a5fa" label="-1~-5" />
-          <Legend color="#2563eb" label="-5↓" />
+        {/* CHOROPLETH 캡션 + 색상 범례 — 한 줄 */}
+        <div className="flex items-center gap-2 text-[9px] font-mono uppercase tracking-widest
+                        bg-term-panel border border-term-border px-2 py-1">
+          <span className="text-term-orange font-bold">CHOROPLETH</span>
+          <span className="text-term-dim">·</span>
+          <span className="text-term-text">{polygons.length} DST</span>
+          <span className="text-term-dim">·</span>
+          <span className="text-term-text">1M Δ</span>
+          <span className="ml-auto flex items-center gap-1.5">
+            <Legend color="#dc2626" label="+5↑" />
+            <Legend color="#f87171" label="+1" />
+            <Legend color="#9ca3af" label="0" />
+            <Legend color="#60a5fa" label="-1" />
+            <Legend color="#2563eb" label="-5↓" />
+          </span>
         </div>
       </div>
 
@@ -218,9 +229,9 @@ export default function MapScreen() {
 
 function Legend({ color, label }: { color: string; label: string }) {
   return (
-    <span className="flex items-center gap-1">
-      <span className="inline-block w-3 h-3 rounded" style={{ backgroundColor: color }} />
-      {label}
+    <span className="flex items-center gap-0.5">
+      <span className="inline-block w-2 h-2" style={{ backgroundColor: color }} />
+      <span className="text-term-dim">{label}</span>
     </span>
   );
 }
