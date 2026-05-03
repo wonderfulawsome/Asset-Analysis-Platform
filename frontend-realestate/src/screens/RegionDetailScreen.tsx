@@ -4,7 +4,6 @@ import RegionCodeHeader from "../components/RegionCodeHeader";
 import TerminalSection from "../components/TerminalSection";
 import TerminalMetric from "../components/TerminalMetric";
 import TimeSeriesChart from "../components/TimeSeriesChart";
-import MiniChart from "../components/MiniChart";
 import ScoreBox from "../components/ScoreBox";
 import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
@@ -109,23 +108,29 @@ export default function RegionDetailScreen() {
         </section>
       )}
 
-      {/* MiniChart strip — 평단가/거래량/전세가율 3종 row */}
-      {latest && ts && ts.length >= 2 && (
-        <section className="px-2 pb-2 grid grid-cols-3 gap-1">
-          <MiniSlot label="평단가 만원/평" data={ts.map((p) => ({ date: p.ym, value: p.median_price_per_py }))}
-            color="#ff8800" last={ts[ts.length - 1].median_price_per_py} fmt={(n) => Math.round(n).toLocaleString()} />
-          <MiniSlot label="월 거래량" data={ts.map((p) => ({ date: p.ym, value: p.trade_count }))}
-            color="#00cc66" last={ts[ts.length - 1].trade_count} fmt={(n) => n.toLocaleString()} />
-          <MiniSlot label="전세가율" data={ts.map((p) => ({ date: p.ym, value: p.jeonse_rate }))}
-            color="#ffaa00" last={ts[ts.length - 1].jeonse_rate} fmt={(n) => `${(n * 100).toFixed(1)}%`} />
-        </section>
-      )}
-
-      {/* 인구 — 큰 차트 별도 (위 3종은 MiniChart 로 압축) */}
+      {/* 시계열 차트 — 단일 행 풀폭 4종 (사용자 요청 모킹 4 와 일치) */}
       {latest && (
-        <section className="px-2 pb-3">
+        <section className="px-2 pb-3 space-y-2">
           <TimeSeriesChart
-            label="인구 추이"
+            label="평단가 (만원/평)"
+            data={ts!.map((p) => ({ date: p.ym, value: p.median_price_per_py }))}
+            format={(n) => `${Math.round(n).toLocaleString()}`}
+            color="#ff8800"
+          />
+          <TimeSeriesChart
+            label="월 거래량 (건)"
+            data={ts!.map((p) => ({ date: p.ym, value: p.trade_count }))}
+            format={(n) => n.toLocaleString()}
+            color="#00cc66"
+          />
+          <TimeSeriesChart
+            label="전세가율 (%)"
+            data={ts!.map((p) => ({ date: p.ym, value: p.jeonse_rate }))}
+            format={(n) => `${(n * 100).toFixed(1)}%`}
+            color="#ffaa00"
+          />
+          <TimeSeriesChart
+            label="인구"
             data={ts!.map((p) => ({ date: p.ym, value: p.population }))}
             format={(n) => n.toLocaleString()}
             color="#4488ff"
@@ -202,23 +207,3 @@ function fmtPct(n: number | null | undefined): string {
   return n == null ? "—" : `${(n * 100).toFixed(1)}%`;
 }
 
-// MiniChart + 라벨 + LAST 한 줄 조합 — 3-column strip row 안의 한 칸.
-function MiniSlot({ label, data, color, last, fmt }: {
-  label: string;
-  data: { date: string; value: number | null }[];
-  color: string;
-  last: number | null;
-  fmt: (n: number) => string;
-}) {
-  return (
-    <div className="bg-term-panel border border-term-border p-1.5 font-mono">
-      <div className="text-[8px] uppercase tracking-widest text-term-orange font-bold truncate">
-        ▓ {label}
-      </div>
-      <MiniChart data={data} color={color} height={28} />
-      <div className="text-[9px] text-term-text font-bold text-right">
-        {last != null ? fmt(last) : "—"}
-      </div>
-    </div>
-  );
-}
