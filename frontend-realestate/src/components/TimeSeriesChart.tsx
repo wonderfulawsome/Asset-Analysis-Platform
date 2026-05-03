@@ -12,17 +12,19 @@ interface Props {
 }
 
 // 외부 차트 라이브러리 없이 순수 SVG — recharts 의존을 피해 번들 크기 최소화.
-// 축 라벨(시작·끝 월, min·max 값)만 간단히 붙임.
+// 축 라벨(시작·끝 월, min·max 값)만 간단히 붙임. 터미널 스타일 (검정 panel + 오렌지 색).
 export default function TimeSeriesChart({
-  data, label, format = (n) => n.toLocaleString(), color = "#3b82f6",
+  data, label, format = (n) => n.toLocaleString(), color = "#ff8800",
 }: Props) {
   const valid = data.filter((d): d is { date: string; value: number } => d.value != null);
   if (valid.length < 2) {
     return (
-      <div className="rounded-xl bg-gray-800/50 p-3">
-        <div className="text-xs text-gray-400 mb-1">{label}</div>
-        <div className="h-28 flex items-center justify-center text-[11px] text-gray-500">
-          {valid.length === 1 ? `단일 월 (${format(valid[0].value)})` : "데이터 없음"}
+      <div className="bg-term-panel border border-term-border p-2">
+        <div className="text-[10px] uppercase tracking-widest text-term-orange font-bold mb-1">
+          ▓ {label}
+        </div>
+        <div className="h-24 flex items-center justify-center text-[11px] text-term-dim font-mono">
+          {valid.length === 1 ? `· single (${format(valid[0].value)})` : "· no data"}
         </div>
       </div>
     );
@@ -52,26 +54,28 @@ export default function TimeSeriesChart({
     ym.length === 6 ? `${ym.slice(2, 4)}.${ym.slice(4)}` : ym;
 
   return (
-    <div className="rounded-xl bg-gray-800/50 p-3">
+    <div className="bg-term-panel border border-term-border p-2 font-mono">
       <div className="flex items-baseline justify-between mb-1">
-        <div className="text-xs text-gray-400">{label}</div>
-        <div className="text-[11px] text-gray-500">
+        <div className="text-[10px] uppercase tracking-widest text-term-orange font-bold">
+          ▓ {label}
+        </div>
+        <div className="text-[9px] text-term-dim tracking-wider">
           {fmtYm(valid[0].date)} → {fmtYm(valid[valid.length - 1].date)}
         </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-28">
-        <path d={area} fill={color} opacity="0.15" />
-        <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" />
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24">
+        <path d={area} fill={color} opacity="0.18" />
+        <path d={path} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="miter" />
         {points.map((p, i) => (
-          <circle key={i} cx={p.x} cy={p.y} r="2.5" fill={color} />
+          <circle key={i} cx={p.x} cy={p.y} r="2" fill={color} />
         ))}
       </svg>
-      <div className="flex justify-between text-[10px] text-gray-500 mt-1">
-        <span>최소 {format(dataMin)}</span>
-        <span className="text-gray-300 font-semibold">
-          최근 {format(values[values.length - 1])}
+      <div className="flex justify-between text-[9px] text-term-dim mt-1 uppercase tracking-wider">
+        <span>LO {format(dataMin)}</span>
+        <span className="text-term-text font-bold">
+          LAST {format(values[values.length - 1])}
         </span>
-        <span>최대 {format(dataMax)}</span>
+        <span>HI {format(dataMax)}</span>
       </div>
     </div>
   );
