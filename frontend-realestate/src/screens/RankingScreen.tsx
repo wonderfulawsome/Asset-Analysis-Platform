@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 import TerminalSection from "../components/TerminalSection";
+import MiniChart from "../components/MiniChart";
 
 interface TradeRow {
   sgg_cd: string;
@@ -10,6 +11,7 @@ interface TradeRow {
   trade_vs_long_ratio: number;
   trade_count: number | null;
   stats_ym: string;
+  price_series?: number[];
 }
 interface PriceRow {
   sgg_cd: string;
@@ -17,6 +19,7 @@ interface PriceRow {
   change_pct_3m: number;
   median_price_per_py: number | null;
   stats_ym: string;
+  price_series?: number[];
 }
 interface RankingPayload {
   trade_recovery_top5: TradeRow[];
@@ -53,7 +56,7 @@ export default function RankingScreen() {
           <p className="text-[9px] text-term-dim tracking-wider mb-1">
             전월 거래량 ÷ 직전 12개월 평균
           </p>
-          {loading ? <SkeletonTable cols={4} /> : (
+          {loading ? <SkeletonTable cols={5} /> : (
             <RankTable
               rows={(data?.trade_recovery_top5 ?? []).map((r, i) => ({
                 rank: i + 1,
@@ -63,6 +66,7 @@ export default function RankingScreen() {
                 valueFmt: `${r.trade_vs_long_ratio.toFixed(2)}배`,
                 sub: r.trade_count ? `${r.trade_count.toLocaleString()}건` : "—",
                 color: r.trade_vs_long_ratio >= 1 ? "text-term-up" : "text-term-down",
+                series: r.price_series,
               }))}
               valueLabel="배율"
               subLabel="거래"
@@ -81,7 +85,7 @@ export default function RankingScreen() {
         <p className="text-[9px] text-term-dim tracking-wider mb-1">
           시군구 단위 3개월 변화율
         </p>
-        {loading ? <SkeletonTable cols={4} /> : (
+        {loading ? <SkeletonTable cols={5} /> : (
           <RankTable
             rows={(data?.price_top5 ?? []).map((r, i) => ({
               rank: i + 1,
@@ -91,6 +95,7 @@ export default function RankingScreen() {
               valueFmt: `${r.change_pct_3m >= 0 ? "+" : ""}${r.change_pct_3m.toFixed(1)}%`,
               sub: r.median_price_per_py ? `${r.median_price_per_py.toLocaleString()}만/평` : "—",
               color: r.change_pct_3m >= 0 ? "text-term-up" : "text-term-down",
+              series: r.price_series,
             }))}
             valueLabel="3개월 변화"
             subLabel="평단가"
@@ -110,6 +115,7 @@ interface RankRow {
   valueFmt: string;
   sub: string;
   color: string;
+  series?: number[];     // 평단가 12개월 mini-chart 데이터
 }
 
 function RankTable({ rows, valueLabel, subLabel, onClick }: {
@@ -145,6 +151,7 @@ function RankTable({ rows, valueLabel, subLabel, onClick }: {
         <tr className="text-[9px] tracking-widest text-term-dim border-b border-term-border">
           <Th onClick={() => toggle("rank")} active={key === "rank"} dir={dir}>#</Th>
           <Th onClick={() => toggle("name")} active={key === "name"} dir={dir} align="left">시군구</Th>
+          <th className="text-center py-1.5 px-1 font-normal text-term-dim w-20">평단가 추이</th>
           <Th onClick={() => toggle("value")} active={key === "value"} dir={dir} align="right">{valueLabel}</Th>
           <th className="text-right py-1.5 pl-2 font-normal text-term-dim">{subLabel}</th>
         </tr>
@@ -158,8 +165,19 @@ function RankTable({ rows, valueLabel, subLabel, onClick }: {
           >
             <td className="py-1.5 text-term-dim text-center w-6 font-bold">{r.rank}</td>
             <td className="py-1.5 text-term-text font-bold truncate">{r.name}</td>
+            <td className="py-1.5 px-1 w-20">
+              {r.series && r.series.length >= 2 ? (
+                <MiniChart
+                  data={r.series.map((v, i) => ({ date: String(i), value: v }))}
+                  color={r.color === "text-term-up" ? "#ff4444" : r.color === "text-term-down" ? "#4488ff" : "#ff8800"}
+                  height={22}
+                />
+              ) : (
+                <div className="h-[22px]" />
+              )}
+            </td>
             <td className={`py-1.5 text-right font-bold font-mono ${r.color}`}>{r.valueFmt}</td>
-            <td className="py-1.5 text-right text-term-dim text-[10px]">{r.sub}</td>
+            <td className="py-1.5 text-right text-term-dim text-[10px] pl-2">{r.sub}</td>
           </tr>
         ))}
       </tbody>

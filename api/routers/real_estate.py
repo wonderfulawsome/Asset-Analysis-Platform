@@ -572,11 +572,53 @@ def compute_ranking() -> dict:
         })
     price_up.sort(key=lambda x: x['change_pct_3m'], reverse=True)
 
+    top_trade = trade_recovery[:5]
+    top_price = price_up[:5]
+    # TOP 10 sgg 의 12개월 평단가 시계열 mini-chart 용 (각 row 옆 inline)
+    target_sggs = list({r['sgg_cd'] for r in top_trade + top_price})
+    series_by_sgg = _ranking_price_series(client, target_sggs)
+    for r in top_trade + top_price:
+        r['price_series'] = series_by_sgg.get(r['sgg_cd']) or []
+
     return {
-        'trade_recovery_top5': trade_recovery[:5],
-        'price_top5': price_up[:5],
+        'trade_recovery_top5': top_trade,
+        'price_top5': top_price,
         'updated_at': date.today().isoformat(),
     }
+
+
+def _ranking_price_series(client, sgg_cds: list[str]) -> dict[str, list[float | None]]:
+    """랭킹 TOP 10 sgg 의 12개월 평단가 series — region_summary stdg-월 → sgg 평균.
+    페이지네이션으로 한 번에 fetch (4000+ 행) 후 메모리 그룹핑."""
+    from collections import defaultdict
+    if not sgg_cds:
+        return {}
+    PAGE = 1000
+    offset = 0
+    rows: list[dict] = []
+    while True:
+        chunk = (
+            client.table('region_summary')
+            .select('sgg_cd,stats_ym,median_price_per_py')
+            .in_('sgg_cd', sgg_cds)
+            .range(offset, offset + PAGE - 1)
+            .execute().data or []
+        )
+        rows.extend(chunk)
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
+    # (sgg, ym) → [price...]
+    by: dict[tuple[str, str], list[float]] = defaultdict(list)
+    for r in rows:
+        if r.get('median_price_per_py') is not None:
+            by[(r['sgg_cd'], r['stats_ym'])].append(r['median_price_per_py'])
+    # sgg → ordered ym 평균 series
+    out: dict[str, list[float | None]] = {}
+    for sgg in sgg_cds:
+        yms = sorted({k[1] for k in by if k[0] == sgg})
+        out[sgg] = [round(sum(by[(sgg, ym)]) / len(by[(sgg, ym)]), 0) for ym in yms]
+    return out
 
 
 @router.get('/ranking')
