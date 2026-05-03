@@ -807,30 +807,58 @@ def _build_stdg_index() -> list[dict]:
 
 @router.get('/search')
 def get_search(q: str = Query(..., description='검색어 — 시군구명 / 법정동명')):
-    """시군구·법정동 통합 검색. q 길이 ≥1, 결과 최대 30개. 시군구 우선 + 법정동.
+    """시군구·법정동 통합 검색. q 길이 ≥1, 결과 최대 80개.
+    시군구 매칭 시 그 시군구의 모든 법정동도 자동 펼침 (사용자 직관: "부천" 검색
+    → 부천시 + 부천 24동 모두 나와서 선택). 직접 법정동명 매칭도 별도 추가.
     응답: [{type, code, name, sgg_nm, sgg_cd}, ...]"""
     q = (q or '').strip()
     if len(q) < 1:
         return []
-    results: list[dict] = []
-    # 1) 시군구 매칭 (한글명 또는 코드)
+
+    # 1) 시군구 매칭 — 한글명 또는 코드
+    matched_sggs: list[tuple[str, str]] = []  # [(sgg_cd, sgg_nm), ...]
     for cd, nm in _SGG_KO_NAMES.items():
         if q in nm or q in cd:
-            results.append({'type': 'sgg', 'code': cd, 'name': nm, 'sgg_nm': nm, 'sgg_cd': cd})
-            if len(results) >= 30:
-                return results
-    # 2) 법정동 매칭
-    for r in _build_stdg_index():
+            matched_sggs.append((cd, nm))
+
+    results: list[dict] = []
+    seen_keys: set[tuple[str, str]] = set()  # (type, code) dedupe
+
+    def push(item: dict):
+        k = (item['type'], item['code'])
+        if k in seen_keys:
+            return
+        seen_keys.add(k)
+        results.append(item)
+
+    stdg_index = _build_stdg_index()
+    stdgs_by_sgg: dict[str, list[dict]] = {}
+    for r in stdg_index:
+        stdgs_by_sgg.setdefault(r['sgg_cd'], []).append(r)
+
+    # 2) 매칭된 시군구 + 그 시군구의 모든 법정동 펼침
+    for cd, nm in matched_sggs:
+        push({'type': 'sgg', 'code': cd, 'name': nm, 'sgg_nm': nm, 'sgg_cd': cd})
+        for r in stdgs_by_sgg.get(cd, []):
+            push({
+                'type': 'stdg', 'code': r['stdg_cd'], 'name': r['stdg_nm'],
+                'sgg_nm': nm, 'sgg_cd': cd,
+            })
+        if len(results) >= 80:
+            return results[:80]
+
+    # 3) 직접 법정동명 매칭 (시군구 매칭과 별개로)
+    for r in stdg_index:
         nm = r['stdg_nm']
         if q in nm:
             sgg_nm = _SGG_KO_NAMES.get(r['sgg_cd'], r['sgg_cd'])
-            results.append({
+            push({
                 'type': 'stdg', 'code': r['stdg_cd'], 'name': nm,
                 'sgg_nm': sgg_nm, 'sgg_cd': r['sgg_cd'],
             })
-            if len(results) >= 30:
+            if len(results) >= 80:
                 break
-    return results
+    return results[:80]
 
 
 @router.get('/market-summary')
