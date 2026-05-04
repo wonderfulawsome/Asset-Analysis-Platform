@@ -164,7 +164,7 @@ export default function MapScreen() {
         onPolygonClick={handlePolygonClick}
         center={{ lat: 37.45, lng: 127.0 }}
         level={11}
-        maxLevel={11}
+        maxLevel={10}
       />
 
       {/* 플로팅 상단 — 터미널 스타일 검색 + MARKET BRIEF + CHOROPLETH 캡션 */}
