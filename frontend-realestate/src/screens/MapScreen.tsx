@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import KakaoMap, { PolygonFeature } from "../components/KakaoMap";
+import VWorldMap, { PolygonFeature } from "../components/VWorldMap";
 import FeatureCard from "../components/FeatureCard";
 import MarketSummaryCard from "../components/MarketSummaryCard";
 import { apiFetch } from "../api/client";
@@ -34,7 +34,7 @@ interface SelectedRegion {
   changePct: number | null;        // FeatureCard 표시용 — 1개월(전월) 대비 변화
 }
 
-// GeoJSON FeatureCollection → KakaoMap 의 PolygonFeature[] 로 변환.
+// GeoJSON FeatureCollection → VWorldMap 의 PolygonFeature[] 로 변환.
 async function loadPolygons(overviews: Map<string, SggOverview>): Promise<PolygonFeature[]> {
   const geo = await fetchGeoJson();
   const polys: PolygonFeature[] = [];
@@ -159,7 +159,7 @@ export default function MapScreen() {
 
   return (
     <div className="relative h-full w-full">
-      <KakaoMap
+      <VWorldMap
         polygons={polygons}
         onPolygonClick={handlePolygonClick}
         center={{ lat: 37.45, lng: 127.0 }}
