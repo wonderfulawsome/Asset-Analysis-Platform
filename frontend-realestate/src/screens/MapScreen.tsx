@@ -99,6 +99,7 @@ export default function MapScreen() {
   }, []);
 
   function handlePolygonClick(sggCd: string, subKey?: string) {
+    console.log("[MapScreen] handlePolygonClick", { sggCd, subKey, overviewsSize: overviews.size, polygonsLen: polygons.length });
     const ov = overviews.get(sggCd);
     const sggNm = polygons.find((p) => p.sggCd === sggCd && p.subKey === subKey)?.name
                   ?? polygons.find((p) => p.sggCd === sggCd)?.name
@@ -109,7 +110,7 @@ export default function MapScreen() {
     const topStdgCd = sub?.top_stdg_cd ?? ov?.top_stdg_cd ?? null;
     const topStdgNm = sub?.top_stdg_nm ?? ov?.top_stdg_nm ?? null;
     const medianPp = sub?.median_price_per_py ?? ov?.median_price_per_py ?? null;
-    setSelected({
+    const next = {
       sggCd,
       sggNm,
       topStdgNm,
@@ -117,7 +118,9 @@ export default function MapScreen() {
       medianPricePerPy: medianPp,
       // FeatureCard 표시용 = 1개월 전 대비 (사용자 의도). 폴리곤 색칠은 3M 그대로.
       changePct: ov?.change_pct_1m ?? null,
-    });
+    };
+    console.log("[MapScreen] setSelected", next);
+    setSelected(next);
     // 시그널 + 대표 법정동 summary 병렬 fetch — 끝날 때까지 loading=true
     setSignal(null);
     setTopStdgSummary(null);

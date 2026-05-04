@@ -59,10 +59,13 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
 
   return (
     <>
-      {/* backdrop */}
-      <div className="fixed inset-0 bg-black/70 z-30" onClick={onClose} />
+      {/* backdrop — z 9000 (Leaflet pane 700 보다 높게) */}
+      <div className="fixed inset-0 bg-black/70" style={{ zIndex: 9000 }} onClick={onClose} />
       {/* card — 터미널 스타일 (검정 패널 + 오렌지 헤더 + mono) */}
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-40 w-[92%] max-w-md font-mono">
+      <div
+        className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] max-w-md font-mono"
+        style={{ zIndex: 9001 }}
+      >
         <div
           className="bg-term-panel border border-term-border cursor-pointer hover:border-term-orange/50 transition"
           onClick={onTap}

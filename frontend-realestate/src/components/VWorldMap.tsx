@@ -130,7 +130,8 @@ export default function VWorldMap({
     };
   }, [markers, onMarkerClick, ready]);
 
-  // 3) polygons
+  // 3) polygons — Leaflet path 는 SVG. interactive=true 명시 + bubblingMouseEvents=false
+  // 로 click 이 다른 layer 로 흘러가지 않도록.
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map || !polygons || polygons.length === 0) return;
@@ -144,8 +145,15 @@ export default function VWorldMap({
           opacity: 0.8,
           fillColor: poly.fillColor,
           fillOpacity: 0.45,
+          interactive: true,
+          bubblingMouseEvents: false,
         });
-        lpoly.on("click", () => onPolygonClick?.(poly.sggCd, poly.subKey));
+        lpoly.on("click", (e) => {
+          // Leaflet click event — DomEvent.stop 으로 map click 으로 안 전파
+          L.DomEvent.stop(e.originalEvent);
+          console.log("[VWorldMap] polygon click", poly.sggCd, poly.subKey);
+          onPolygonClick?.(poly.sggCd, poly.subKey);
+        });
         lpoly.on("mouseover", () => lpoly.setStyle({ fillOpacity: 0.65 }));
         lpoly.on("mouseout", () => lpoly.setStyle({ fillOpacity: 0.45 }));
         lpoly.addTo(map);
