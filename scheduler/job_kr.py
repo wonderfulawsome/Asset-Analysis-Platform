@@ -28,7 +28,7 @@ def run_kr_pipeline() -> None:
         from collector.valuation_signal_kr import fetch_valuation_signal_today_kr
         from database.repositories import (
             upsert_macro, upsert_index_prices, upsert_valuation_signal,
-            upsert_noise_regime,
+            upsert_noise_regime, upsert_crash_surge,
         )
 
         # 1) macro_raw — 최근 5일치 (오늘 + 며칠 buffer)
@@ -105,6 +105,118 @@ def run_kr_pipeline() -> None:
                 print(f'[KR-Pipeline] sector ETF {len(sector_rows)}건 적재')
         except Exception as e:
             print(f'[KR-Pipeline] sector ETF 실패: {e}')
+            traceback.print_exc()
+
+        # 6) 홈 화면 AI 헤드라인 — KR × (ko, en) 미리 생성 후 ai_headline_cache 적재
+        # endpoint /api/market-summary/home-headline 는 DB 조회만 하면 되어 즉시 응답.
+        try:
+            from api.routers.market_summary import precompute_home_headline
+            for _lang in ('ko', 'en'):
+                ok = precompute_home_headline(_lang, 'kr')
+                print(f"[KR-Pipeline] home-headline kr/{_lang} {'OK' if ok else 'FAIL'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] home-headline 실패: {e}')
+            traceback.print_exc()
+
+        # 8) KR Sector Cycle (5번째 탭 거시경제) — 매크로 12종 + HMM 4-state 경기국면.
+        # 매크로 데이터가 월별이라 매일 적재해도 같은 결과지만, idempotent 하니 무해.
+        # 부분 실패 (ECOS 일부 코드 무효 등) 도 sector_macro_kr 안에서 graceful.
+        try:
+            from collector.sector_macro_kr import (
+                fetch_sector_macro_kr, to_sector_macro_kr_records,
+            )
+            from collector.sector_etf_kr import fetch_sector_etf_returns_kr
+            from processor.feature2_sector_cycle import run_sector_cycle
+            from database.repositories import upsert_sector_macro, upsert_sector_cycle
+
+            macro_kr = fetch_sector_macro_kr(months=240)
+            if macro_kr is not None and not macro_kr.empty:
+                # macro 적재 — 청크 분할
+                recs = to_sector_macro_kr_records(macro_kr)
+                CHUNK = 200
+                for i in range(0, len(recs), CHUNK):
+                    upsert_sector_macro(recs[i:i + CHUNK], region='kr')
+                print(f"[KR-Pipeline] sector_macro {len(recs)}건 적재")
+
+                macro_start = str(macro_kr.index[0].date())
+                sector_ret, holding_ret = fetch_sector_etf_returns_kr(macro_start)
+                if not sector_ret.empty:
+                    cycle_kr = run_sector_cycle(macro_kr, sector_ret, holding_ret, region='kr')
+                    upsert_sector_cycle(cycle_kr, region='kr')
+                    print(f"[KR-Pipeline] sector_cycle {cycle_kr['date']} "
+                          f"{cycle_kr['phase_emoji']} {cycle_kr['phase_name']} 적재")
+                else:
+                    print('[KR-Pipeline] sector_ret 빈 DF — sector_cycle 건너뜀')
+            else:
+                print('[KR-Pipeline] sector_macro 빈 DF — sector_cycle 건너뜀')
+        except Exception as e:
+            print(f'[KR-Pipeline] sector_cycle 실패: {e}')
+            traceback.print_exc()
+
+        # 9) KR Sector Valuation — 10 ETF PER/PBR 1차 fallback (KOSPI 시장 평균 동일 적용)
+        try:
+            from collector.sector_etf_kr import fetch_sector_etf_per_pbr_kr
+            from database.repositories import upsert_sector_valuation
+            val_rows = fetch_sector_etf_per_pbr_kr()
+            if val_rows:
+                upsert_sector_valuation(val_rows, region='kr')
+                print(f"[KR-Pipeline] sector_valuation {len(val_rows)}건 적재 (1차 fallback)")
+            else:
+                print('[KR-Pipeline] sector_valuation 0건 — KOSPI PER/PBR fetch 실패')
+        except Exception as e:
+            print(f'[KR-Pipeline] sector_valuation 실패: {e}')
+            traceback.print_exc()
+
+        # 7) KR Crash/Surge — 학습된 모델 있으면 오늘자 1행 적재 (신호탭)
+        # KRX/VKOSPI 일부 fetch 실패로 NaN 발생 시: ffill+bfill 후 NaN 컬럼만 0 fallback.
+        # 그래도 안 되면 가장 최근 NaN 없는 행으로 후퇴 적재 (날짜는 그 행 기준).
+        try:
+            from processor.feature3_crash_surge import load_crash_surge_model, predict_crash_surge
+            from collector.crash_surge_data_kr import (
+                fetch_crash_surge_light_kr, compute_features_kr,
+            )
+            cs_model = load_crash_surge_model(region='kr')
+            if cs_model is not None:
+                raw = fetch_crash_surge_light_kr(lookback_days=300)
+                feat_df = compute_features_kr(raw)
+                if feat_df is not None and not feat_df.empty:
+                    # 1차: ffill + bfill 로 결측 채움
+                    filled = feat_df.ffill().bfill()
+                    last_row = filled.tail(1)
+                    nan_cols = last_row.columns[last_row.isna().any()].tolist()
+                    if nan_cols:
+                        # 일부 컬럼 전체 NaN → 0 fallback (학습 분포 약간 왜곡되지만 적재 가능)
+                        print(f'[KR-Pipeline] crash_surge 잔여 NaN 컬럼 {len(nan_cols)}개 → 0 fallback: {nan_cols}')
+                        last_row = last_row.fillna(0)
+                    # 적재 — date 는 feat_df 의 마지막 인덱스 (가장 최근 거래일)
+                    last_date = last_row.index[-1].strftime('%Y-%m-%d')
+                    result = predict_crash_surge(last_row.values, cs_model)
+                    result['date'] = last_date
+                    upsert_crash_surge(result, region='kr')
+                    print(f"[KR-Pipeline] crash_surge {last_date} "
+                          f"crash={result['crash_score']:.1f}({result['crash_grade']}) "
+                          f"surge={result['surge_score']:.1f}({result['surge_grade']}) 적재"
+                          f"{' (NaN ' + str(len(nan_cols)) + '개 fallback)' if nan_cols else ''}")
+                else:
+                    print('[KR-Pipeline] crash_surge 피처 빈 DF — 건너뜀')
+            else:
+                print('[KR-Pipeline] crash_surge_xgb_kr.pkl 없음 — 학습 먼저 '
+                      '(python -m scripts.train_kr_crash_surge)')
+        except Exception as e:
+            print(f'[KR-Pipeline] crash_surge 실패: {e}')
+            traceback.print_exc()
+
+        # 10) 5탭 AI 해설 미리 생성 — fundamental/signal/sector/sector-mom × ko/en × region=kr.
+        # endpoint /api/market-summary/ai-explain 가 DB 즉시 응답 → 사용자 첫 진입 빠름.
+        # sector-val 은 region='us' 통일이라 KR 파이프라인 제외. sector-mom 은 region 분리 — KR 도 적재.
+        try:
+            from api.routers.market_summary import precompute_ai_explain
+            for _tab in ('fundamental', 'signal', 'sector', 'sector-mom'):
+                for _lang in ('ko', 'en'):
+                    ok = precompute_ai_explain(_tab, _lang, 'kr')
+                    print(f"[KR-Pipeline] ai-explain {_tab}/{_lang}/kr {'OK' if ok else 'SKIP'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] ai-explain precompute 실패: {e}')
             traceback.print_exc()
 
     except Exception as e:

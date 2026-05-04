@@ -26,9 +26,24 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 from collector.crash_surge_data import ALL_FEATURES
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
-MODEL_PATH = os.path.join(MODEL_DIR, 'crash_surge_xgb.pkl')
+MODEL_PATH = os.path.join(MODEL_DIR, 'crash_surge_xgb.pkl')  # US 하위호환 (기존 경로)
 
 DECAY = 0.9995
+
+
+def _model_path(region: str = 'us') -> str:
+    """region 별 모델 파일 경로. US 는 기존 파일, KR 은 _kr.pkl."""
+    if region == 'kr':
+        return os.path.join(MODEL_DIR, 'crash_surge_xgb_kr.pkl')
+    return MODEL_PATH
+
+
+def _feature_names_for_region(region: str = 'us') -> list[str]:
+    """region 별 feature 이름 — US 44, KR 24."""
+    if region == 'kr':
+        from collector.crash_surge_data_kr import KR_FEATURES
+        return list(KR_FEATURES)
+    return list(ALL_FEATURES)
 
 
 # ── 등급 ──
@@ -88,8 +103,18 @@ def train_crash_surge(
     X_dev: np.ndarray, y_dev: np.ndarray,
     X_full: np.ndarray,
     n_trials: int = 50,
+    region: str = 'us',
 ) -> dict:
-    """XGBoost 학습 + Platt 캘리브레이션 + 모델 번들 저장."""
+    """XGBoost 학습 + Platt 캘리브레이션 + 모델 번들 저장.
+
+    Args:
+        region: 'us' (기존 ALL_FEATURES 44개) 또는 'kr' (KR_FEATURES 24개)
+                — bundle 의 feature_names 와 저장 경로 분기.
+    """
+    feat_names = _feature_names_for_region(region)
+    if X_train.shape[1] != len(feat_names):
+        print(f'  [CrashSurge-{region}] WARN: X_train 차원 {X_train.shape[1]} != '
+              f'expected {len(feat_names)} (region={region})')
 
     tscv = TimeSeriesSplit(n_splits=5)
 
@@ -180,48 +205,71 @@ def train_crash_surge(
         'crash_rank_values': crash_rank_values,
         'surge_rank_values': surge_rank_values,
         'train_month': datetime.date.today().strftime('%Y-%m'),
+        'region': region,
+        'feature_names': feat_names,                   # 추론 시 동일 컬럼·순서 보장 + region 자동 분기
     }
 
     os.makedirs(MODEL_DIR, exist_ok=True)
-    joblib.dump(bundle, MODEL_PATH)
-    print(f'  [CrashSurge] 모델 저장 완료: {MODEL_PATH}')
+    save_path = _model_path(region)
+    joblib.dump(bundle, save_path)
+    print(f'  [CrashSurge-{region}] 모델 저장 완료: {save_path} ({len(feat_names)} 피처)')
 
     return bundle
 
 
 # ── 모델 로드 ──
 
-def load_model() -> Optional[dict]:
-    """저장된 모델 번들 로드. 없으면 None."""
-    if not os.path.exists(MODEL_PATH):
+def load_model(region: str = 'us') -> Optional[dict]:
+    """저장된 모델 번들 로드. region 별. 구버전 호환 (feature_names 없으면 차원으로 추정)."""
+    path = _model_path(region)
+    if not os.path.exists(path):
         return None
     try:
-        bundle = joblib.load(MODEL_PATH)
-        print(f'  [CrashSurge] 모델 로드 (학습 월: {bundle.get("train_month", "?")})')
+        bundle = joblib.load(path)
+        # 구버전 (feature_names 없음) → model.n_features_in_ 으로 역추정
+        if 'feature_names' not in bundle:
+            try:
+                n_feat = bundle['model'].n_features_in_
+            except Exception:
+                n_feat = 44
+            from collector.crash_surge_data_kr import KR_FEATURES
+            if n_feat == len(KR_FEATURES):
+                bundle['feature_names'] = list(KR_FEATURES)
+            else:
+                bundle['feature_names'] = list(ALL_FEATURES)
+            print(f'  [CrashSurge-{region}] 구버전 모델 — feature_names 추정: {n_feat} 피처')
+        print(f'  [CrashSurge-{region}] 모델 로드 (학습 월: {bundle.get("train_month", "?")}, '
+              f'{len(bundle["feature_names"])} 피처)')
         return bundle
     except Exception as e:
-        print(f'  [CrashSurge] 모델 로드 실패: {e}')
+        print(f'  [CrashSurge-{region}] 모델 로드 실패: {e}')
         return None
+
+
+# Alias — 명시적 region 명명 선호 시
+load_crash_surge_model = load_model
 
 
 # ── 추론 ──
 
 def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
-    """오늘의 44피처 벡터로 crash/surge 점수 예측.
+    """오늘의 피처 벡터로 crash/surge 점수 예측.
 
     Args:
-        X_today: shape (1, 44) numpy array (raw features, not scaled)
+        X_today: shape (1, n_features) numpy array — n_features = 44 (US) / 24 (KR)
         model_bundle: train_crash_surge() 반환값
 
     Returns:
         dict with date, crash_score, crash_grade, surge_score, surge_grade,
-             crash_raw, surge_raw, macro_f1
+             crash_raw, surge_raw, macro_f1, feature_values, shap_values, feature_importance
     """
     model = model_bundle['model']
     scaler = model_bundle['scaler']
     platt_surge = model_bundle['platt_surge']
     crash_rank_values = model_bundle['crash_rank_values']
     surge_rank_values = model_bundle['surge_rank_values']
+    region = model_bundle.get('region', 'us')
+    feat_names = model_bundle.get('feature_names') or _feature_names_for_region(region)
 
     # Scale + predict
     X_scaled = scaler.transform(X_today)
@@ -246,10 +294,10 @@ def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
         'macro_f1': float(round(model_bundle['macro_f1'], 4)),  # numpy float32 → Python float 변환
     }
 
-    # 현재 피처값 저장 (46개 피처 모두)
+    # 현재 피처값 저장 (n_features 개 — region 별)
     result['feature_values'] = {
-        ALL_FEATURES[i]: round(float(X_today[0][i]), 4)
-        for i in range(len(ALL_FEATURES))
+        feat_names[i]: round(float(X_today[0][i]), 4)
+        for i in range(len(feat_names))
     }
 
     # SHAP 값 계산 (lazy import — 서버 시작 시 필수 아님)
@@ -259,9 +307,9 @@ def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
         shap_vals = explainer.shap_values(X_scaled)
 
         def _top_shap(sv, n=10):
-            pairs = [(ALL_FEATURES[i], float(sv[i])) for i in range(len(ALL_FEATURES))]  # numpy → float 변환
-            pairs.sort(key=lambda x: abs(x[1]), reverse=True)  # 절대값 기준 정렬
-            return [{'name': p[0], 'value': float(round(p[1], 4))} for p in pairs[:n]]  # round 후 float 보장
+            pairs = [(feat_names[i], float(sv[i])) for i in range(len(feat_names))]
+            pairs.sort(key=lambda x: abs(x[1]), reverse=True)
+            return [{'name': p[0], 'value': float(round(p[1], 4))} for p in pairs[:n]]
 
         # shap 버전에 따라 반환 형태가 다름:
         #   구버전: list of arrays [class0(1,F), class1(1,F), class2(1,F)]
@@ -292,7 +340,7 @@ def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
                 crash_sv = sv_arr[1, 0, :]
                 surge_sv = sv_arr[2, 0, :]
             else:
-                crash_sv = sv_arr.flatten()[:len(ALL_FEATURES)]
+                crash_sv = sv_arr.flatten()[:len(feat_names)]
                 surge_sv = crash_sv
 
         result['shap_values'] = {
@@ -301,8 +349,8 @@ def predict_crash_surge(X_today: np.ndarray, model_bundle: dict) -> dict:
         }
 
         imp = model.feature_importances_                      # XGBoost feature importance (float32 배열)
-        imp_pairs = sorted(zip(ALL_FEATURES, imp), key=lambda x: x[1], reverse=True)[:10]  # 상위 10개
-        result['feature_importance'] = [{'name': n, 'value': float(round(float(v), 4))} for n, v in imp_pairs]  # float32 → float 변환
+        imp_pairs = sorted(zip(feat_names, imp), key=lambda x: x[1], reverse=True)[:10]
+        result['feature_importance'] = [{'name': n, 'value': float(round(float(v), 4))} for n, v in imp_pairs]
     except Exception as e:
         print(f'  [CrashSurge] SHAP 계산 실패: {e}')
         result['shap_values'] = None
@@ -319,7 +367,7 @@ def backfill_crash_surge(df_full, model_bundle: dict) -> list[dict]:
     """전체 기간 crash/surge 점수를 일괄 계산하여 DB upsert용 레코드 리스트 반환.
 
     Args:
-        df_full: prepare_datasets()['df_full'] — 날짜 인덱스 + ALL_FEATURES 컬럼
+        df_full: prepare_datasets()['df_full'] — 날짜 인덱스 + feature 컬럼 (region 별 24/44)
         model_bundle: train_crash_surge() 반환값
 
     Returns:
@@ -330,9 +378,11 @@ def backfill_crash_surge(df_full, model_bundle: dict) -> list[dict]:
     platt_surge = model_bundle['platt_surge']            # Platt 캘리브레이터
     crash_rank_values = model_bundle['crash_rank_values']  # 전체 기간 crash raw 분포
     surge_rank_values = model_bundle['surge_rank_values']  # 전체 기간 surge raw 분포
+    region = model_bundle.get('region', 'us')
+    feat_names = model_bundle.get('feature_names') or _feature_names_for_region(region)
 
-    # 전체 피처를 스케일링 + 추론
-    X_all = df_full[ALL_FEATURES].values                 # (N, 46) 피처 행렬
+    # 전체 피처를 스케일링 + 추론 — region 별 차원 자동
+    X_all = df_full[feat_names].values
     X_scaled = scaler.transform(X_all)                   # 표준화
     proba_all = model.predict_proba(X_scaled)            # (N, 3) 확률 행렬
 

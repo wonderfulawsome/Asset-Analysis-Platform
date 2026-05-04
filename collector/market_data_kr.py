@@ -215,6 +215,66 @@ def fetch_foreign_institution_flow(days: int = 60) -> pd.DataFrame:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# USDKRW + 외국인 순매수 — 시황 보강 지표 (공포·탐욕 / P/C 자리 대체)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def fetch_usdkrw_history(days: int = 60) -> pd.Series:
+    """원/달러 환율 일별 close. yfinance 'KRW=X' 사용."""
+    try:
+        import yfinance as yf
+        end = _dt.date.today()
+        start = end - _dt.timedelta(days=days * 2)
+        df = yf.download('KRW=X', start=start, end=end, progress=False, auto_adjust=False)
+        if df is None or df.empty:
+            return pd.Series(dtype=float)
+        if hasattr(df.columns, 'levels') and len(df.columns.levels) > 1:
+            df.columns = df.columns.get_level_values(0)
+        return df['Close'].dropna()
+    except Exception as e:
+        print(f"[KR] USDKRW fetch 실패: {e}")
+        return pd.Series(dtype=float)
+
+
+def fetch_foreign_net_buy_kospi(days: int = 60) -> pd.DataFrame:
+    """KOSPI 외국인 일별 순매수액 (단위: 원).
+
+    1차 pykrx: stock.get_market_trading_value_by_date('KOSPI') — KRX 막힘 시 ✗
+    2차 EWY proxy: yfinance EWY ETF 일간 수익률 × KOSPI 시총 추정 — 정확도 낮음
+
+    Returns: DataFrame(index=Date, columns=['net_buy']) 단위 원. 빈 DF 면 모두 실패.
+    """
+    end = _dt.date.today()
+    start = end - _dt.timedelta(days=days * 2)
+    sd, ed = start.strftime('%Y%m%d'), end.strftime('%Y%m%d')
+
+    # 1차 pykrx (KRX 정상 시)
+    try:
+        from pykrx import stock
+        df = stock.get_market_trading_value_by_date(sd, ed, 'KOSPI')
+        if df is not None and not df.empty and '외국인합계' in df.columns:
+            return pd.DataFrame({'net_buy': df['외국인합계'].astype(float)})
+    except Exception as e:
+        print(f"[KR] pykrx 외국인 수급 실패 → EWY proxy: {e}")
+
+    # 2차 EWY proxy: 미국 상장 한국 ETF 의 일간 수익률을 외국인 매수세 proxy 로
+    try:
+        import yfinance as yf
+        ewy = yf.download('EWY', start=start, end=end, progress=False, auto_adjust=False)
+        if ewy is None or ewy.empty:
+            return pd.DataFrame()
+        if hasattr(ewy.columns, 'levels') and len(ewy.columns.levels) > 1:
+            ewy.columns = ewy.columns.get_level_values(0)
+        # EWY 일간 수익률 (% × 1조 원) 으로 외국인 순매수 규모 추정 (대략적)
+        # KOSPI 시총 약 2300조, 외국인 보유 32% ≈ 740조. 1% 변동 → 약 7400억 매매 추정
+        ret = ewy['Close'].pct_change()
+        net_buy = ret * 7400_0000_0000  # 0.01 (1%) × 740조 = 7.4조
+        return pd.DataFrame({'net_buy': net_buy.dropna()})
+    except Exception as e:
+        print(f"[KR] EWY proxy 실패: {e}")
+        return pd.DataFrame()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 일별 KR 매크로 record — macro_raw 스키마에 매핑
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -234,59 +294,90 @@ def _rsi(prices: pd.Series, period: int = 14) -> Optional[float]:
 def compute_kr_macro_history(days: int = 30) -> list[dict]:
     """최근 N 영업일의 KR 매크로 record 리스트.
 
-    macro_raw 스키마 매핑:
+    macro_raw 스키마 매핑 (US 컬럼 의미와 같게 매핑 — frontend 코드 변경 불필요):
     - sp500_close  ← KOSPI close
     - sp500_return ← KOSPI 일간 수익률 (%)
-    - sp500_vol20  ← KOSPI 20일 연율화 변동성 (std * sqrt(252))
+    - sp500_vol20  ← KODEX 200 거래량 / 20일 평균 거래량 (US 의 거래량 비율과 동일)
     - sp500_rsi    ← KOSPI RSI(14)
-    - vix          ← VKOSPI
+    - vix          ← VKOSPI (proxy: KOSPI 20D 연율화 std × 100)
     - tnx          ← KR 10Y KTB rate (%)
     - yield_spread ← (KR 10Y - KR 3Y) (%)
     - dxy_return   ← None (한국 시장에 직접 등가 없음)
     - putcall_ratio← None (Stage 3 — KRX 옵션 시장)
     """
-    # 데이터 한 번에 fetch
     kospi = fetch_kospi_price_history(days=max(days * 2, 60))
     vkospi = fetch_vkospi_history(days=max(days * 2, 60))
     kr_10y = fetch_kr_10y_treasury(days=max(days * 2, 60))
     kr_3y = fetch_kr_3y_treasury(days=max(days * 2, 60))
+    usdkrw = fetch_usdkrw_history(days=max(days * 2, 60))
+    fnb_df = fetch_foreign_net_buy_kospi(days=max(days * 2, 60))
+    foreign_net_buy = fnb_df['net_buy'] if not fnb_df.empty else pd.Series(dtype=float)
+    foreign_5d_cum = (foreign_net_buy.rolling(5).sum().dropna()
+                       if not foreign_net_buy.empty else pd.Series(dtype=float))
 
     if kospi.empty:
         print('[KR-Macro] KOSPI 데이터 없음 — 빈 리스트 반환')
         return []
 
-    # KOSPI 수익률·변동성 계산
-    close = kospi['종가']                                        # 종가 컬럼
-    daily_return = close.pct_change() * 100                     # 일간 수익률 %
-    vol20 = close.pct_change().rolling(20).std() * np.sqrt(252) * 100  # 연율화 변동성 %
+    close = kospi['종가']
+    daily_return = close.pct_change() * 100
 
-    # 최근 days 만큼 잘라 record 생성
+    # ── 거래량 비율 (sp500_vol20 슬롯) — KOSPI 자체 거래량 우선, KODEX 200 fallback ──
+    # 1차 KOSPI(^KS11) 자체 — yfinance 가 한국 시장 전체 거래량 합산 제공 (7~11억 정상)
+    # 2차 KODEX 200(069500) — 단 yfinance ETF 거래량은 마지막 날짜 부정확할 수 있음
+    # 이상치 방어: min_periods=15 (결측 多 시 분모 너무 작아짐 방지) + clip(0.1, 5.0) 캡
+    vol_ratio_series = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+    if '거래량' in kospi.columns:
+        kv = kospi['거래량'].astype(float).replace(0, np.nan)   # 0 도 NaN 처리
+        if kv.notna().any():
+            kv_avg = kv.rolling(20, min_periods=15).mean()
+            vol_ratio_series = (kv / kv_avg).replace([np.inf, -np.inf], np.nan).dropna()
+            vol_ratio_series = vol_ratio_series.clip(0.1, 5.0)   # 이상치 캡 (5배 상한)
+    if vol_ratio_series.empty:
+        try:
+            kodex200 = _etf_ohlcv_fallback('069500', days=max(days * 2, 60))
+            if kodex200 is not None and not kodex200.empty and '거래량' in kodex200.columns:
+                vs = kodex200['거래량'].astype(float).replace(0, np.nan)
+                va20 = vs.rolling(20, min_periods=15).mean()
+                vol_ratio_series = (vs / va20).replace([np.inf, -np.inf], np.nan).dropna()
+                vol_ratio_series = vol_ratio_series.clip(0.1, 5.0)
+        except Exception as e:
+            print(f'[KR-Macro] KODEX 200 거래량 폴백 실패: {e}')
+
     target_dates = close.index[-days:]
     records = []
     for d in target_dates:
         date_str = d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d)[:10]
-        # 각 시리즈에서 해당 날짜 또는 가장 가까운 이전 거래일 값 조회
         kospi_close = float(close.loc[d])
         ret = daily_return.loc[d] if d in daily_return.index else None
-        vol = vol20.loc[d] if d in vol20.index else None
-        # VKOSPI / KR 금리는 다른 인덱스라 forward-fill 식으로 매칭
+        vol_ratio = _value_at_or_before(vol_ratio_series, d)
         vkospi_val = _value_at_or_before(vkospi['Close'] if 'Close' in vkospi.columns else None, d)
         kr10y_val = _value_at_or_before(kr_10y, d)
         kr3y_val = _value_at_or_before(kr_3y, d)
-        # RSI — 해당 날짜 이전까지 데이터로
         rsi_val = _rsi(close.loc[:d])
+        # USDKRW + 외국인 순매수
+        usdkrw_val = _value_at_or_before(usdkrw, d)
+        usdkrw_prev = _value_at_or_before(usdkrw[usdkrw.index < d] if not usdkrw.empty else None, d)
+        usdkrw_chg = ((usdkrw_val - usdkrw_prev) / usdkrw_prev * 100
+                      if (usdkrw_val and usdkrw_prev) else None)
+        fnb_1d = _value_at_or_before(foreign_net_buy, d)
+        fnb_5d = _value_at_or_before(foreign_5d_cum, d)
 
         records.append({
             'date': date_str,
             'sp500_close': round(kospi_close, 2),
             'sp500_return': round(float(ret), 4) if ret is not None and not pd.isna(ret) else None,
-            'sp500_vol20': round(float(vol), 4) if vol is not None and not pd.isna(vol) else None,
+            'sp500_vol20': round(float(vol_ratio), 4) if vol_ratio is not None else None,
             'sp500_rsi': rsi_val,
             'vix': round(float(vkospi_val), 2) if vkospi_val is not None else None,
             'tnx': round(float(kr10y_val), 4) if kr10y_val is not None else None,
             'yield_spread': (round(float(kr10y_val - kr3y_val), 4)
                              if (kr10y_val is not None and kr3y_val is not None) else None),
             'dxy_return': None,
+            'usdkrw': round(float(usdkrw_val), 2) if usdkrw_val is not None else None,
+            'usdkrw_change_pct': round(float(usdkrw_chg), 4) if usdkrw_chg is not None else None,
+            'foreign_net_buy_1d': round(float(fnb_1d), 0) if fnb_1d is not None else None,
+            'foreign_net_buy_5d': round(float(fnb_5d), 0) if fnb_5d is not None else None,
         })
     return records
 

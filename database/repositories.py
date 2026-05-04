@@ -229,7 +229,16 @@ def fetch_sector_macro_history(limit: int = 120, region: str = 'us') -> list[dic
     client = get_client()
     response = (
         client.table("sector_macro_raw")
-        .select("date,pmi,yield_spread,anfci,icsa_yoy,permit_yoy,real_retail_yoy,capex_yoy,real_income_yoy")
+        .select(
+            # US 8 + derived 2
+            "date,pmi,yield_spread,anfci,icsa_yoy,permit_yoy,real_retail_yoy,"
+            "capex_yoy,real_income_yoy,pmi_chg3m,capex_yoy_chg3m,"
+            # KR 12 + derived 2 (sparse — region='us' 행은 NULL, region='kr' 행은 KR 채워짐)
+            "kr_indpro_yoy,kr_yield_spread,kr_credit_spread,"
+            "kr_unemp_yoy,kr_unemp_rate,kr_permit_yoy,kr_retail_yoy,"
+            "kr_capex_yoy,kr_income_yoy,kr_cpi_yoy,kr_gdp_yoy,kr_m2_yoy,"
+            "kr_indpro_chg3m,kr_capex_yoy_chg3m"
+        )
         .eq("region", region)
         .order("date", desc=True)
         .limit(limit)
@@ -1265,3 +1274,87 @@ def fetch_valuation_signal_history(days: int = 30, region: str = 'us') -> list[d
         print(f"[DB] valuation_signal history 실패: {e}")
         return []
     return list(reversed(r.data or []))
+
+
+# ── ai_headline_cache (홈 화면 LLM 헤드라인) ────────────────────
+# 스케줄러가 region+lang 조합별 미리 생성 → endpoint 는 DB 즉시 응답.
+
+def upsert_ai_headline(region: str, lang: str, summary: str,
+                        generated_at: str | None = None) -> None:
+    """region+lang 별 헤드라인 1행 upsert. UNIQUE (region, lang)."""
+    if not summary:
+        return
+    client = get_client()
+    payload = {
+        'region': region,
+        'lang': lang,
+        'summary': summary,
+        'generated_at': generated_at,
+    }
+    try:
+        client.table("ai_headline_cache").upsert(
+            payload, on_conflict="region,lang"
+        ).execute()
+    except Exception as e:
+        print(f"[DB] ai_headline_cache upsert 실패 ({region}/{lang}): {e}")
+
+
+def fetch_ai_headline(region: str, lang: str) -> dict | None:
+    """region+lang 헤드라인 1행. 없으면 None."""
+    client = get_client()
+    try:
+        r = (
+            client.table("ai_headline_cache")
+            .select("*")
+            .eq("region", region)
+            .eq("lang", lang)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[DB] ai_headline_cache fetch 실패 ({region}/{lang}): {e}")
+        return None
+    return r.data[0] if r.data else None
+
+
+# ── ai_explain_cache (5탭 AI 해설) ────────────────────────────
+# 스케줄러가 tab+lang+region 조합 미리 생성 → endpoint 3-tier (memory → DB → LLM 즉석).
+
+def upsert_ai_explain(tab: str, lang: str, region: str, explanation: str,
+                       generated_at: str | None = None) -> None:
+    """tab+lang+region 별 AI 해설 1행 upsert. UNIQUE (tab, lang, region)."""
+    if not explanation:
+        return
+    client = get_client()
+    payload = {
+        'tab': tab,
+        'lang': lang,
+        'region': region,
+        'explanation': explanation,
+        'generated_at': generated_at,
+    }
+    try:
+        client.table("ai_explain_cache").upsert(
+            payload, on_conflict="tab,lang,region"
+        ).execute()
+    except Exception as e:
+        print(f"[DB] ai_explain_cache upsert 실패 ({tab}/{lang}/{region}): {e}")
+
+
+def fetch_ai_explain(tab: str, lang: str, region: str) -> dict | None:
+    """tab+lang+region AI 해설 1행. 없으면 None."""
+    client = get_client()
+    try:
+        r = (
+            client.table("ai_explain_cache")
+            .select("*")
+            .eq("tab", tab)
+            .eq("lang", lang)
+            .eq("region", region)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[DB] ai_explain_cache fetch 실패 ({tab}/{lang}/{region}): {e}")
+        return None
+    return r.data[0] if r.data else None

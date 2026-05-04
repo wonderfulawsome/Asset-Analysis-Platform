@@ -26,12 +26,27 @@ from typing import Optional
 
 import httpx
 
+# .env 자동 로드 — standalone script (train_kr_hmm 등) 에서도 ECOS_API_KEY 인식하도록
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 
-ECOS_KEY = os.getenv("ECOS_API_KEY", "")
+
+def _ecos_key() -> str:
+    """매번 환경변수에서 읽기 — 실행 중 키 추가/변경 대응."""
+    return os.getenv("ECOS_API_KEY", "")
+
+
+ECOS_KEY = _ecos_key()  # 모듈 import 시점 캐시 (대부분 사용처에서 충분)
 ECOS_URL = "https://ecos.bok.or.kr/api/StatisticSearch"
 
-# 지표별 spec — 변경 시 한 곳만 수정하면 모든 fetch 함수가 따라감
-SPECS = {
+# 지표별 spec — 변경 시 한 곳만 수정하면 모든 fetch 함수가 따라감.
+# ⚠️ fetch_macro_rate_kr() 는 RATE_SPECS 만 순회하고, sector_macro_kr 은 SECTOR_MACRO_SPECS
+# 만 사용 — SPECS 통합 dict 는 하위 호환 (fetch_ecos_series 가 'metric' 키로 lookup) 용.
+# 두 dict 분리 이유: 매수 시그널(rate) 호출이 sector cycle 거시 12종까지 끌어 호출 폭증하지 않도록.
+RATE_SPECS = {
     "base_rate":        {"table": "722Y001", "item": "0101000",    "cycle": "M"},
     "mortgage_rate":    {"table": "121Y006", "item": "BECBLA0302", "cycle": "M"},
     "mortgage_balance": {"table": "151Y005", "item": "11110A0",    "cycle": "M"},
@@ -41,19 +56,37 @@ SPECS = {
     "kr_corp_aa3y":     {"table": "817Y002", "item": "010320000",  "cycle": "D"},
 }
 
+# Sector cycle 거시경제 탭 전용 (collector/sector_macro_kr 만 사용).
+# ⚠️ 통계표/항목 코드는 ECOS StatisticTableList + StatisticItemList sweep 으로 직접 검증 (2026-05-04).
+# ECOS 시리즈 모두 월별/분기별 — 일별 sector_cycle 계산엔 사용 안 함.
+SECTOR_MACRO_SPECS = {
+    "kr_cpi":             {"table": "901Y009", "item": "0",       "cycle": "M"},  # 소비자물가지수 총지수 (1965~)
+    "kr_gdp":             {"table": "200Y108", "item": "10601",   "cycle": "Q"},  # 국내총생산에 대한 지출(계절조정 실질, 1960Q1~)
+    "kr_unemp_rate":      {"table": "901Y027", "item": "I61BC",   "cycle": "M"},  # 실업률 (1999.06~)
+    "kr_m2":              {"table": "161Y007", "item": "BBGS00",  "cycle": "M"},  # M2(말잔, 계절조정계열, 2003~)
+    "kr_indpro":          {"table": "901Y033", "item": "AB00",    "cycle": "M"},  # 광공업생산지수 (2000~)
+    "kr_retail":          {"table": "901Y100", "item": "G0",      "cycle": "M"},  # 소매판매액지수 총지수 (1995~)
+    "kr_capex":           {"table": "901Y066", "item": "I15B",    "cycle": "M"},  # 설비투자지수 (계절조정, 월별)
+    "kr_permit":          {"table": "901Y105", "item": "ALL",     "cycle": "M"},  # 주택건설인허가실적 전국 (2007.01~)
+}
+
+# 통합 dict — fetch_ecos_series 가 metric 키로 spec 조회할 때 사용. 새 metric 추가 시 양쪽 모두 보임.
+SPECS = {**RATE_SPECS, **SECTOR_MACRO_SPECS}
+
 
 def fetch_ecos_series(metric: str, from_ym: str, to_ym: str) -> list[dict]:
     """단일 지표를 from_ym ~ to_ym(YYYYMM) 범위로 조회.
 
     반환: list of {date, value, cycle, metric}
     """
-    if not ECOS_KEY:
+    key = _ecos_key()
+    if not key:
         raise RuntimeError("ECOS_API_KEY 환경변수가 설정되지 않았습니다.")
     spec = SPECS[metric]
 
     # ECOS URL 은 REST path 형식 — query string 아님
     url = (
-        f"{ECOS_URL}/{ECOS_KEY}/json/kr/1/100000/"
+        f"{ECOS_URL}/{key}/json/kr/1/100000/"
         f"{spec['table']}/{spec['cycle']}/"
         f"{from_ym}/{to_ym}/{spec['item']}"
     )
@@ -93,6 +126,17 @@ def _ecos_time_to_date(t: str, cycle: str) -> str | None:
         return f"{t[:4]}-{t[4:6]}-{t[6:8]}"
     if cycle == "M" and len(t) == 6:
         return f"{t[:4]}-{t[4:6]}-01"  # 월 데이터는 해당월 1일로 통일
+    if cycle == "Q" and len(t) == 6 and t[4] == "Q":
+        # 분기 데이터: '2024Q1' → 2024-01-01, '2024Q4' → 2024-10-01 (분기 첫달 1일)
+        try:
+            year = int(t[:4])
+            quarter = int(t[5])
+            if quarter < 1 or quarter > 4:
+                return None
+            month = (quarter - 1) * 3 + 1
+            return f"{year:04d}-{month:02d}-01"
+        except ValueError:
+            return None
     if cycle == "A" and len(t) == 4:
         return f"{t}-01-01"
     return None
@@ -115,9 +159,10 @@ def fetch_macro_rate_kr(from_ym: str = "", months: int = 24) -> list[dict]:
         from_ym = f"{y:04d}{m:02d}"
     to_ym = date.today().strftime("%Y%m")
 
-    # 3개 지표 각각 호출 후 date 기준 merge
+    # 3개 지표 각각 호출 후 date 기준 merge.
+    # ⚠️ RATE_SPECS 만 순회 — 매수 시그널용으로 sector cycle 거시 12종까지 끌고 오면 호출 폭증.
     by_date: dict[str, dict] = {}
-    for metric in SPECS.keys():
+    for metric in RATE_SPECS.keys():
         try:
             for row in fetch_ecos_series(metric, from_ym, to_ym):
                 d = row["date"]

@@ -101,18 +101,24 @@ def get_valuation(region: str = Query('us')):
     }
 
 
-# 캐시 — 5분 TTL (계산 비용 없지만 동시 사용자 다발 호출 방어)
+# 캐시 — 5분 TTL (계산 비용 없지만 동시 사용자 다발 호출 방어). region 별 분리.
 import time
-_momentum_cache: dict = {"data": None, "ts": 0}
+_momentum_cache: dict = {}                                     # {region: {data, ts}}
 _MOMENTUM_TTL = 300
 
 
 @router.get('/momentum')
-def get_momentum():
-    """11개 섹터의 1M·3M·6M 수익률 + 현재 phase 예상 순위 비교."""
+def get_momentum(region: str = Query('us')):
+    """섹터의 1주일·1개월 수익률 + 1주일 기준 랭킹 (region 별 분리).
+
+    'us': SPDR 13종 (XLK/XLF/SOXX 등).
+    'kr': KODEX/TIGER 10종 (139260/091160 등).
+    """
+    region = _norm_region(region)
     now = time.time()
-    if _momentum_cache["data"] and (now - _momentum_cache["ts"]) < _MOMENTUM_TTL:
-        return _momentum_cache["data"]
-    result = compute_sector_momentum()
-    _momentum_cache.update({"data": result, "ts": now})
+    cached = _momentum_cache.get(region)
+    if cached and (now - cached["ts"]) < _MOMENTUM_TTL:
+        return cached["data"]
+    result = compute_sector_momentum(region=region)
+    _momentum_cache[region] = {"data": result, "ts": now}
     return result

@@ -61,7 +61,8 @@ const NR_ICON = {                                 // 아이콘 스타일
 
 // ── 피처 설명 사전 (i18n 동적 조회) ──
 // getCSFeatureDesc(): 키별로 tFeatLabel/tFeatDesc 함수를 통해 번역 조회
-const CS_FEATURE_KEYS = [                         // CS 피처 키 목록
+const CS_FEATURE_KEYS = [                         // CS 피처 키 목록 (US 44 + KR 19, 공통 5 제외)
+  // US 44
   'SP500_LOGRET_1D','SP500_LOGRET_5D','SP500_LOGRET_10D','SP500_LOGRET_20D',
   'SP500_DRAWDOWN_60D','SP500_MA_GAP_50','SP500_MA_GAP_200','SP500_INTRADAY_RANGE',
   'RV_5D','RV_21D','EWMA_VOL_L94','VOL_OF_VOL_21D',
@@ -73,6 +74,14 @@ const CS_FEATURE_KEYS = [                         // CS 피처 키 목록
   'SOFR_MINUS_EFFR','NFCI_LEVEL','CORR_EQ_DGS10_60D',
   'HY_OAS_CHG_5D','HY_OAS_CHG_20D','BBB_OAS_CHG_5D','BBB_OAS_CHG_20D',
   'CCC_OAS_CHG_5D','CCC_OAS_CHG_20D','VIX9D_VIX_RATIO','VIX_VIX3M_RATIO','VIX_CHG_5D',
+  // KR 19 (RV_5D/RV_21D/EWMA_VOL_L94/VOL_OF_VOL_21D/WTI_RET_5D 5개는 US 와 공유)
+  'KOSPI_LOGRET_1D','KOSPI_LOGRET_5D','KOSPI_LOGRET_10D','KOSPI_LOGRET_20D',
+  'KOSPI_DRAWDOWN_60D','KOSPI_MA_GAP_50','KOSPI_MA_GAP_200',
+  'VKOSPI_LEVEL','VKOSPI_CHANGE_1D','VKOSPI_PCTL_252D',
+  'KR_CORP_AA3Y_SPREAD','KR_CORP_SPREAD_CHG_5D','KR_CORP_SPREAD_CHG_20D',
+  'KR_DGS10_LEVEL','KR_T10Y3M_SLOPE',
+  'FOREIGN_NET_BUY_1D','FOREIGN_NET_BUY_5D',
+  'USDKRW_RET_5D','KOSPI_DOLLAR_VOL_Z_20D',
 ];
 // 동적 getter: 매번 현재 언어의 번역을 반환
 function getCSFeatureDesc() {                     // CS 피처 설명 사전 생성
@@ -94,21 +103,21 @@ function getNRFeatureDesc() {                     // NR 피처 설명 사전 생
   return obj;
 }
 
-// 하락 전조 등급 스타일 (높을수록 위험 = 빨강)
+// 하락 전조 — 글씨/바 색상 빨강 고정 (등급 무관, badge cls 만 등급별)
 const CS_GRADE_STYLE = {
-  '낮음': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
-  '보통': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
-  '주의': { cls: 'badge-yellow', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)' },
-  '경고': { cls: 'badge-red', color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
-  '위험': { cls: 'badge-red', color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
+  '낮음': { cls: 'badge-green',  color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
+  '보통': { cls: 'badge-green',  color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
+  '주의': { cls: 'badge-yellow', color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
+  '경고': { cls: 'badge-red',    color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
+  '위험': { cls: 'badge-red',    color: '#EF4444', bg: 'rgba(239,68,68,0.08)' },
 };
-// 상승 전조 등급 스타일 (높을수록 상승 기대 = 초록)
+// 상승 전조 — 글씨/바 색상 초록 고정 (등급 무관, badge cls 만 등급별)
 const SURGE_GRADE_STYLE = {
-  '낮음': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
-  '보통': { cls: 'badge-green', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
-  '주의': { cls: 'badge-yellow', color: '#22C55E', bg: 'rgba(34,197,94,0.08)' },
-  '경고': { cls: 'badge-green', color: '#22C55E', bg: 'rgba(34,197,94,0.08)' },
-  '위험': { cls: 'badge-green', color: '#16A34A', bg: 'rgba(22,163,74,0.08)' },
+  '낮음': { cls: 'badge-green',  color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  '보통': { cls: 'badge-green',  color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  '주의': { cls: 'badge-yellow', color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  '경고': { cls: 'badge-green',  color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
+  '위험': { cls: 'badge-green',  color: '#10B981', bg: 'rgba(16,185,129,0.08)' },
 };
 
 // 티커 라벨 (i18n 동적 조회)
@@ -177,23 +186,69 @@ function animateNumber(el, target, duration, delay, decimals, suffix) {
   }, delay);
 }
 
-// ── 보유종목 관리 (localStorage) ──
-// 보유종목 티커 목록 (이름은 i18n에서 동적 조회)
-const AVAILABLE_TICKERS = ['SPY','QQQ','DIA','IWM','VTI','VOO','SOXX','SMH','XLK','XLF','XLE','XLV','XLB','XLP','XLU','XLI','XLRE','ARKK','GLD','SLV','TLT','BND','SCHD','VXUS'];
-// 동적 getter: 매번 현재 언어의 이름 반환
-function getAvailableHoldings() {                  // 보유종목 목록 + 번역된 이름
-  return AVAILABLE_TICKERS.map(tk => ({ ticker: tk, name: t('hold.' + tk) }));
+// ── 보유종목 관리 (localStorage) — region 별 분리 ──
+// US 보유종목 티커 목록 (이름은 i18n 'hold.X' 에서 동적 조회)
+const AVAILABLE_TICKERS_US = ['SPY','QQQ','DIA','IWM','VTI','VOO','SOXX','SMH','XLK','XLF','XLE','XLV','XLB','XLP','XLU','XLI','XLRE','ARKK','GLD','SLV','TLT','BND','SCHD','VXUS'];
+
+// KR 보유종목 — KODEX/TIGER 시리즈 + 시총 상위 종목 일부
+const AVAILABLE_TICKERS_KR = [
+  // 인덱스 ETF
+  '069500','102110','232080','229200','226490',
+  // 섹터 ETF
+  '139260','091160','300610','091170','139250','266420','091180','117680','341850','227560',
+  // 시총 상위 종목
+  '005930','000660','035420','035720','207940','068270','005380','000270','105560','055550',
+];
+
+// KR ETF/종목 한국어 이름 매핑
+const HOLDINGS_NAMES_KR = {
+  '069500':'KODEX 200', '102110':'TIGER 200',
+  '232080':'TIGER 코스닥150', '229200':'KODEX 코스닥150', '226490':'KODEX KOSPI',
+  '139260':'TIGER 200 IT', '091160':'KODEX 반도체',
+  '300610':'KODEX 게임산업', '091170':'KODEX 은행',
+  '139250':'TIGER 200 에너지화학', '266420':'KODEX 헬스케어',
+  '091180':'KODEX 자동차', '117680':'KODEX 철강',
+  '341850':'TIGER 리츠', '227560':'TIGER 200 생활소비재',
+  '005930':'삼성전자', '000660':'SK하이닉스',
+  '035420':'NAVER', '035720':'카카오',
+  '207940':'삼성바이오로직스', '068270':'셀트리온',
+  '005380':'현대차', '000270':'기아',
+  '105560':'KB금융', '055550':'신한지주',
+};
+
+function _holdingsRegion() {
+  return (typeof window.getRegion === 'function') ? window.getRegion() : 'us';
 }
 
-const DEFAULT_HOLDINGS = ['SPY', 'QQQ', 'SOXX', 'DIA'];
+// 동적 getter — region 별 ticker 목록 + 이름
+function getAvailableHoldings() {
+  if (_holdingsRegion() === 'kr') {
+    return AVAILABLE_TICKERS_KR.map(tk => ({
+      ticker: tk, name: HOLDINGS_NAMES_KR[tk] || tk,
+    }));
+  }
+  return AVAILABLE_TICKERS_US.map(tk => ({ ticker: tk, name: t('hold.' + tk) }));
+}
+
+// 하위호환 — 일부 코드가 const 로 참조
+const AVAILABLE_TICKERS = AVAILABLE_TICKERS_US;
+
+const DEFAULT_HOLDINGS_US = ['SPY', 'QQQ', 'SOXX', 'DIA'];
+const DEFAULT_HOLDINGS_KR = ['069500', '102110', '091160', '232080'];  // KODEX 200/TIGER 200/KODEX 반도체/코스닥150
+const DEFAULT_HOLDINGS = DEFAULT_HOLDINGS_US;  // 하위호환
+
+function _holdingsKey() {
+  return _holdingsRegion() === 'kr' ? 'holdings_kr' : 'holdings';
+}
 
 function getHoldings() {
   try {
-    const data = localStorage.getItem('holdings');
+    const data = localStorage.getItem(_holdingsKey());
     if (!data) {
-      // 최초 방문: 기본 보유종목 설정 (설정 화면 스킵)
-      setHoldings(DEFAULT_HOLDINGS);
-      return DEFAULT_HOLDINGS;
+      // 최초 방문: region 별 기본 보유종목 설정
+      const def = _holdingsRegion() === 'kr' ? DEFAULT_HOLDINGS_KR : DEFAULT_HOLDINGS_US;
+      setHoldings(def);
+      return def;
     }
     const arr = JSON.parse(data);
     return Array.isArray(arr) && arr.length > 0 ? arr : null;
@@ -201,7 +256,7 @@ function getHoldings() {
 }
 
 function setHoldings(arr) {
-  localStorage.setItem('holdings', JSON.stringify(arr));
+  localStorage.setItem(_holdingsKey(), JSON.stringify(arr));
 }
 
 // ── 보유종목 설정 화면 ──
@@ -221,21 +276,28 @@ function showHoldingsSetup() {
 
   function renderChips(filter) {
     const q = (filter || '').toUpperCase().trim();
+    const all = getAvailableHoldings();
     const filtered = q
-      ? getAvailableHoldings().filter(h => h.ticker.includes(q) || h.name.includes(q))
-      : getAvailableHoldings();
+      ? all.filter(h => h.ticker.includes(q) || (h.name || '').toUpperCase().includes(q))
+      : all;
+    // KR 모드 6자리 코드는 길어서 한국어 이름 우선 표시
+    const isKr = _holdingsRegion() === 'kr';
     chipsEl.innerHTML = filtered.map(h => {
       const sel = _setupSelected.includes(h.ticker) ? ' selected' : '';
-      return `<div class="h-chip${sel}" data-ticker="${h.ticker}">${h.ticker} <span style="font-weight:400;color:${sel ? 'rgba(255,255,255,0.7)' : 'var(--sub)'};font-size:11px">${h.name}</span></div>`;
+      const main = isKr ? h.name : h.ticker;
+      const sub = isKr ? h.ticker : h.name;
+      return `<div class="h-chip${sel}" data-ticker="${h.ticker}">${main} <span style="font-weight:400;color:${sel ? 'rgba(255,255,255,0.7)' : 'var(--sub)'};font-size:11px">${sub}</span></div>`;
     }).join('');
   }
 
   function renderSelected() {
+    const isKr = _holdingsRegion() === 'kr';
     selectedEl.innerHTML = _setupSelected.length === 0
       ? `<span style="color:var(--sub2);font-size:12px">${t('holdings.selectPrompt')}</span>`
-      : _setupSelected.map(t =>
-          `<div class="h-sel-chip">${t}<span class="h-sel-remove" data-ticker="${t}">✕</span></div>`
-        ).join('');
+      : _setupSelected.map(tk => {
+          const display = isKr ? (HOLDINGS_NAMES_KR[tk] || tk) : tk;
+          return `<div class="h-sel-chip">${display}<span class="h-sel-remove" data-ticker="${tk}">✕</span></div>`;
+        }).join('');
     confirmBtn.disabled = _setupSelected.length === 0;
   }
 
@@ -500,44 +562,94 @@ async function loadMarketOverview() {
     const res = await fetch('/api/market-summary/today');
     const d = await res.json();
 
-    // Fear & Greed 데이터 캐시 (인사이트 연동용)
+    // region 별 라벨 분기
+    const isKr = (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+    const rsiLabelText = isKr ? 'KOSPI RSI (14)' : t('mo.rsi');
+    const retLabelText = isKr ? '주요 ETF 평균 (KODEX/TIGER)' : t('mo.marketReturn');
+
+    // Fear & Greed 데이터 캐시 (인사이트 연동용) — KR 미적재 시 null 가능
     _fgData = d.fear_greed;
 
-    // Fear & Greed 등급별 색상 결정 (탐욕=초록, 공포=빨강, 나머지=기본)
-    const GREED_SET = new Set(['탐욕', '극도 탐욕']);    // API 한글 등급 비교용
-    const FEAR_SET = new Set(['공포', '극도 공포']);    // API 한글 등급 비교용
-    const fgColor = GREED_SET.has(d.fear_greed.rating) ? '#22C55E'
-                  : FEAR_SET.has(d.fear_greed.rating) ? '#EF4444'
-                  : '#F97316';
-
-    // Market Return 색상 결정 (양수=초록, 음수=빨강)
-    const retVal = d.market_return.value;
-    const retColor = retVal >= 0 ? '#22C55E' : '#EF4444';
-    const retSign = retVal >= 0 ? '+' : '';
-
-    // RSI 색상/라벨 결정
-    const rsi = d.rsi || 0;
-    const rsiColor = rsi >= 60 ? '#EF4444' : rsi <= 40 ? '#22C55E' : '#F97316';  // 60 이상 과매수, 40 이하 과매도
-    const rsiLabel = rsi >= 60 ? t('rsi.overbought') : rsi <= 40 ? t('rsi.oversold') : t('rsi.neutral'); // RSI 라벨 번역
-
-    // 카드 렌더링
-    el.innerHTML = `<div class="mo-card">
-      <div class="mo-title">${t('mo.title')}</div>
-      <div class="mo-row">
+    // KR 모드: fear_greed 자리 → 원/달러 환율 표시
+    // 환율은 macro 의 usdkrw / usdkrw_change_pct 컬럼 — 별도 fetch 로 받음
+    let fgRowHtml;
+    if (isKr) {
+      // 환율 호출 (macro/latest 안에 있음)
+      try {
+        const macroRes2 = await fetch('/api/macro/latest');
+        const macro2 = await macroRes2.json();
+        const krw = macro2 && macro2.usdkrw;
+        const krwChg = macro2 && macro2.usdkrw_change_pct;
+        if (krw) {
+          const sign = (krwChg ?? 0) >= 0 ? '+' : '';
+          const color = (krwChg ?? 0) >= 0 ? '#EF4444' : '#22C55E';  // 환율↑=원화 약세=빨강
+          fgRowHtml = `<div class="mo-row">
+            <span class="mo-label">원/달러 환율</span>
+            <span class="mo-value">
+              <span class="mo-score">${krw.toFixed(2)}</span>
+              <span class="mo-badge" style="background:${color}20;color:${color}">${sign}${(krwChg ?? 0).toFixed(2)}%</span>
+            </span>
+          </div>`;
+        } else {
+          fgRowHtml = `<div class="mo-row">
+            <span class="mo-label">원/달러 환율</span>
+            <span class="mo-value"><span style="color:#6b7280;font-size:13px">데이터 부족</span></span>
+          </div>`;
+        }
+      } catch {
+        fgRowHtml = `<div class="mo-row">
+          <span class="mo-label">원/달러 환율</span>
+          <span class="mo-value"><span style="color:#6b7280;font-size:13px">데이터 부족</span></span>
+        </div>`;
+      }
+    } else if (!d.fear_greed) {
+      fgRowHtml = `<div class="mo-row">
+        <span class="mo-label">${t('mo.fearGreed')}</span>
+        <span class="mo-value"><span style="color:#6b7280;font-size:13px">준비 중</span></span>
+      </div>`;
+    } else {
+      const GREED_SET = new Set(['탐욕', '극도 탐욕']);
+      const FEAR_SET = new Set(['공포', '극도 공포']);
+      const fgColor = GREED_SET.has(d.fear_greed.rating) ? '#22C55E'
+                    : FEAR_SET.has(d.fear_greed.rating) ? '#EF4444'
+                    : '#F97316';
+      fgRowHtml = `<div class="mo-row">
         <span class="mo-label">${t('mo.fearGreed')}</span>
         <span class="mo-value">
           <span class="mo-score" style="color:${fgColor}">${d.fear_greed.score}</span>
           <span class="mo-badge" style="background:${fgColor}20;color:${fgColor}">${tFgRating(d.fear_greed.rating)}</span>
         </span>
-      </div>
+      </div>`;
+    }
+
+    // Market Return — 0% 이고 KR 모드면 데이터 없음 표시
+    const retVal = d.market_return.value;
+    const retEmpty = isKr && retVal === 0;
+    const retColor = retVal >= 0 ? '#22C55E' : '#EF4444';
+    const retSign = retVal >= 0 ? '+' : '';
+    const retRowHtml = retEmpty
+      ? `<div class="mo-row">
+          <span class="mo-label">${retLabelText}</span>
+          <span class="mo-value"><span style="color:#6b7280;font-size:13px">데이터 부족</span></span>
+        </div>`
+      : `<div class="mo-row">
+          <span class="mo-label">${retLabelText}</span>
+          <span class="mo-value">
+            <span class="mo-score" style="color:${retColor}">${retSign}${retVal.toFixed(2)}%</span>
+          </span>
+        </div>`;
+
+    // RSI 색상/라벨
+    const rsi = d.rsi || 0;
+    const rsiColor = rsi >= 60 ? '#EF4444' : rsi <= 40 ? '#22C55E' : '#F97316';
+    const rsiLabel = rsi >= 60 ? t('rsi.overbought') : rsi <= 40 ? t('rsi.oversold') : t('rsi.neutral');
+
+    el.innerHTML = `<div class="mo-card">
+      <div class="mo-title">${t('mo.title')}</div>
+      ${fgRowHtml}
+      ${retRowHtml}
       <div class="mo-row">
-        <span class="mo-label">${t('mo.marketReturn')}</span>
-        <span class="mo-value">
-          <span class="mo-score" style="color:${retColor}">${retSign}${retVal.toFixed(2)}%</span>
-        </span>
-      </div>
-      <div class="mo-row">
-        <span class="mo-label">${t('mo.rsi')}</span>
+        <span class="mo-label">${rsiLabelText}</span>
         <span class="mo-value">
           <span class="mo-score" style="color:${rsiColor}">${rsi > 0 ? rsi.toFixed(1) : '--'}</span>
           <span class="mo-badge" style="background:${rsiColor}20;color:${rsiColor}">${rsi > 0 ? rsiLabel : '-'}</span>
@@ -594,13 +706,16 @@ async function loadHoldingsSummary() {
     }
 
     // 개별 종목 목록만 표시 (전체수익률 제거)
+    const isKr = _holdingsRegion() === 'kr';
     let html = '<div class="hs-items">';
-    matched.forEach(t => {
-      const v = priceMap[t];
+    matched.forEach(tk => {
+      const v = priceMap[tk];
       const color = v >= 0 ? 'var(--green)' : 'var(--red)';
       const sign = v >= 0 ? '+' : '';
+      // KR 모드: 6자리 코드 → 한국어 이름 표시 (없으면 ticker 그대로)
+      const display = isKr ? (HOLDINGS_NAMES_KR[tk] || tk) : tk;
       html += `<div class="hs-item">
-        <span class="hs-ticker">${t}</span>
+        <span class="hs-ticker">${display}</span>
         <span class="hs-ret" style="color:${color}">${sign}${v.toFixed(2)}%</span>
       </div>`;
     });
@@ -627,15 +742,18 @@ async function loadRegime() {
 
   const name  = data.regime_name ?? '';              // API 한글 국면명
   // noise_score 기반 동적 위치 계산 (범위: 5%~95%)
-  // 분포 기반 기준: min=-5(P01), mid=0(P50 중앙값), max=10(~P93)
-  // 중심점(mid=0)을 50%로, 양쪽 대칭 스케일링
-  const ns = data.noise_score ?? null;
   // 부호 반전 후: 양수=이성, 음수=감정. 좌(감정)~우(이성) 게이지에 그대로 매핑.
+  // KR 모드: 학습 모델이 51개월·fallback fundamental_gap 으로 분포가 더 깊음 (-25~+5)
+  // US 모드: 표준 분포 (-10~+5)
+  const ns = data.noise_score ?? null;
+  const isKrRegime = _curRegion() === 'kr';
+  const G_LO = isKrRegime ? -25 : -10;
+  const G_HI = isKrRegime ? 5 : 5;
   let pos;
   if (ns != null) {
     const mid = 0;
-    if (ns <= mid) { pos = 5 + ((ns - (-10)) / (mid - (-10))) * 45; }  // -10→5%, 0→50%
-    else           { pos = 50 + ((ns - mid) / (5 - mid)) * 45; }       // 0→50%, +5→95%
+    if (ns <= mid) { pos = 5 + ((ns - G_LO) / (mid - G_LO)) * 45; }
+    else           { pos = 50 + ((ns - mid) / (G_HI - mid)) * 45; }
     pos = Math.max(5, Math.min(95, pos));
   } else { pos = NR_GAP_POS[name] ?? 50; }
   const color = NR_GAP_COLOR[name] ?? '#999';        // 갭바 색상
@@ -650,6 +768,10 @@ async function loadRegime() {
   }
 
   _nrData = data;  // 상세페이지용 캐시
+
+  // 카드 제목 region 분기 (US: Noise vs Signal, KR: 시장 이성 점수)
+  const titleEl = document.getElementById('nr-card-title');
+  if (titleEl) titleEl.textContent = isKrRegime ? '시장 이성 점수' : 'Noise vs Signal';
 
   const container = document.getElementById('regime-card');
   const nrIcon = NR_ICON[name] || { icon: 'cloud', color: '#999', softBg: 'rgba(0,0,0,0.05)' };
@@ -669,10 +791,6 @@ async function loadRegime() {
       <div class="nr-gap-track">
         <div class="nr-gap-fill" style="width:${pos}%;background:linear-gradient(to right,#F44336,#FF9800,#8BC34A,#4CAF50)"></div>
         <div class="nr-gap-dot" style="left:${pos}%;border-color:${color}"></div>
-      </div>
-      <div class="nr-gap-ticks">
-        <span>${t('nr.match')}</span>
-        <span>${t('nr.gap')}</span>
       </div>
     </div>
     ${_buildFgNoiseInsight(ns)}`;
@@ -697,20 +815,35 @@ function deltaArrow(cur, prev, invert) {
   return `<span class="ind-delta" style="color:${color}">${arrow}</span>`;
 }
 
-// region 별 정적 라벨 텍스트 갱신 — KR 모드면 VIX→VKOSPI 등
+// region 별 정적 라벨 텍스트 갱신 — KR 모드면 VIX 카드만 숨김 + P/C → 외국인 라벨
 function _applyRegionMarketLabels() {
   const isKr = _curRegion() === 'kr';
-  const vixCard = document.querySelector('.ind-card .ind-label');
-  // VIX 라벨 (첫 번째 ind-label)
+  // ind-grid 에 kr-2col 클래스 토글 — VIX 숨김 후 남은 2개를 50/50 으로
+  document.querySelectorAll('.ind-grid').forEach(grid => {
+    grid.classList.toggle('kr-2col', isKr);
+  });
+  // VIX 카드 — KR 모드에서 숨김
+  document.querySelectorAll('.ind-card').forEach(card => {
+    const lab = card.querySelector('.ind-label');
+    if (!lab) return;
+    const txt = lab.textContent.trim();
+    if (txt === 'VIX' || txt === 'VKOSPI') {
+      card.style.display = isKr ? 'none' : '';
+    }
+  });
+  // P/C → 외국인 순매수 라벨
   document.querySelectorAll('.ind-card .ind-label').forEach(el => {
-    if (el.textContent.trim() === 'VIX') el.textContent = isKr ? 'VKOSPI' : 'VIX';
-    // VKOSPI → VIX 복원 (region 전환 안전망)
-    if (el.textContent.trim() === 'VKOSPI' && !isKr) el.textContent = 'VIX';
+    const txt = el.textContent.trim();
+    if (txt === 'P/C') el.textContent = isKr ? '외국인 순매수' : 'P/C';
+    if (txt === '외국인 순매수' && !isKr) el.textContent = 'P/C';
   });
 }
 
 
 async function loadMacro() {
+  // 라벨 갱신은 macro 데이터 유무와 무관 — 진입 즉시 한 번 호출
+  _applyRegionMarketLabels();                         // VIX → VKOSPI 라벨 region 분기
+
   let macro, fg;
   try {
     const [macroRes, fgRes] = await Promise.all([
@@ -720,8 +853,8 @@ async function loadMacro() {
     macro = await macroRes.json();
     fg    = await fgRes.json();
   } catch (e) { console.error('loadMacro error:', e); return; }
-  if (!macro || !fg) return;
-  _applyRegionMarketLabels();                         // VIX → VKOSPI 라벨 region 분기
+  // KR 모드는 fg 가 null 일 수 있음 — macro 만 있어도 VIX/VOL 카드 진행
+  if (!macro) return;
 
   // VIX
   const vixVal = document.getElementById('vix-val');
@@ -751,10 +884,27 @@ async function loadMacro() {
                      : vol >= 1.1 ? '#FF9800'
                      : '';
 
-  // PUT/CALL Ratio
+  // PUT/CALL Ratio (KR 모드: 외국인 5일 누적 순매수로 대체)
   const pcVal = document.getElementById('pc-val');
   const pcSub = document.getElementById('pc-sub');
-  // macro_raw에서 putcall_ratio 컬럼 가져오기
+  const isKrMode = (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+  if (isKrMode) {
+    // KR: 외국인 5일 누적 순매수 (억 원 단위 환산)
+    const fnb5 = macro.foreign_net_buy_5d;
+    if (fnb5 != null) {
+      const eok = fnb5 / 100_000_000;  // 원 → 억 원
+      const sign = eok >= 0 ? '+' : '';
+      const color = eok >= 0 ? 'var(--green)' : 'var(--red)';
+      pcVal.innerHTML = `<span style="color:${color};font-weight:700">${sign}${eok.toFixed(0)}</span><span style="font-size:11px;color:var(--sub2)"> 억</span>`;
+      pcSub.textContent = eok >= 1000 ? '강한 매수' : eok >= 0 ? '매수 우위' : eok >= -1000 ? '매도 우위' : '강한 매도';
+      pcSub.style.color = color;
+    } else {
+      pcVal.innerHTML = '<span style="font-size:14px;color:#6b7280">데이터 부족</span>';
+      pcSub.textContent = '';
+    }
+    return;  // KR 모드 P/C 카드 처리 종료
+  }
+  // 이하 US 모드 P/C 처리
   const pcRatio = macro.putcall_ratio ?? 0;
   if (pcRatio > 0) {
     // 숫자 애니메이션으로 PUT/CALL ratio 표시
@@ -766,7 +916,7 @@ async function loadMacro() {
     // 하방=빨강, 상방=초록
     pcSub.style.color = pcRatio >= 1.1 ? 'var(--red)' : pcRatio <= 0.9 ? 'var(--green)' : '';
   } else {
-    // 데이터 없으면 대시 표시
+    // US 데이터 없음 (KR 은 위에서 early return)
     pcVal.textContent = '--';
     pcSub.textContent = '--';
   }
@@ -1204,21 +1354,21 @@ async function loadCrashSurge() {
     badge.className = `badge ${volCls}`;
     badge.textContent = volLabel;
 
-    // 하락 가능성: 점수 기반 라벨 (경고 없음)
+    // 하락 가능성 — 글씨/바 색상 빨강 고정, 라벨만 점수 기반
     const crashLabel = d.crash_score < 40 ? t('grade.low') : d.crash_score < 60 ? t('grade.normal') : t('grade.high');
     const crashS = d.crash_score < 40
-      ? { cls: 'badge-green', color: '#10B981' }
+      ? { cls: 'badge-green',  color: '#EF4444' }
       : d.crash_score < 60
-      ? { cls: 'badge-yellow', color: '#F59E0B' }
-      : { cls: 'badge-red', color: '#EF4444' };
+      ? { cls: 'badge-yellow', color: '#EF4444' }
+      : { cls: 'badge-red',    color: '#EF4444' };
 
-    // 상승 기대도: 점수 기반 라벨 (낮음=빨강/보통=노랑/높음=초록)
+    // 상승 기대도 — 글씨/바 색상 초록 고정, 라벨만 점수 기반
     const surgeLabel = d.surge_score < 40 ? t('grade.low') : d.surge_score < 60 ? t('grade.normal') : t('grade.high');
     const surgeS = d.surge_score < 40
-      ? { cls: 'badge-red', color: '#EF4444' }
+      ? { cls: 'badge-red',    color: '#10B981' }
       : d.surge_score < 60
-      ? { cls: 'badge-yellow', color: '#F59E0B' }
-      : { cls: 'badge-green', color: '#22C55E' };
+      ? { cls: 'badge-yellow', color: '#10B981' }
+      : { cls: 'badge-green', color: '#10B981' };
 
     const el = document.getElementById('cs-card');
     el.innerHTML = `
@@ -1293,8 +1443,10 @@ function renderLineChart(containerId, points, options = {}) {
   const rawMin = Math.min(...vals);                                // Y 최솟값
   const rawMax = Math.max(...vals);                                // Y 최댓값
   const hasZero = options.zeroLine !== false;                      // 0 기준선 표시 여부
-  const yMin = rawMin;                                             // Y축 하한: 데이터 최솟값
-  const yMax = rawMax;                                             // Y축 상한: 데이터 최댓값
+  // Y축 절대 범위 고정 옵션 — 게이지와 동일 범위로 0 기준선·라벨 의미 일치
+  // (yFixedMin/yFixedMax 미지정 시 기존 동작 = 데이터 자동)
+  const yMin = options.yFixedMin != null ? options.yFixedMin : rawMin;
+  const yMax = options.yFixedMax != null ? options.yFixedMax : rawMax;
   const yRange = yMax - yMin || 1;                                 // Y축 범위 (0 방지)
 
   const x = i => pad.left + (i / (points.length - 1)) * cW;       // X좌표 계산 함수
@@ -1342,13 +1494,7 @@ function renderLineChart(containerId, points, options = {}) {
     yAxisSideLabels += `<text class="chart-side-label" x="${pad.left - 4}" y="${pad.top + cH}" text-anchor="end" dominant-baseline="middle">${options.yBottomLabel}</text>`;
   }
 
-  // 데이터 포인트 (점)
-  const dots = points.map((p, i) => {
-    const dotColor = options.dotColor ? options.dotColor(p.value) : lineColor;  // 점 색상
-    return `<circle class="chart-dot" cx="${x(i).toFixed(1)}" cy="${y(p.value).toFixed(1)}" fill="${dotColor}" data-idx="${i}"/>`;
-  }).join('');
-
-  // SVG 조립
+  // SVG 조립 (점 없이 라인 + 영역만)
   el.innerHTML = `<div class="line-chart-wrap">
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
       <defs><linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
@@ -1359,7 +1505,6 @@ function renderLineChart(containerId, points, options = {}) {
       ${zeroLineStr}
       <path class="chart-area" d="${areaPath}" fill="url(#${gradId})"/>
       <path class="chart-line" d="${linePath}" stroke="${lineColor}"/>
-      ${dots}
       ${xLabels}
       ${yLabels}
       ${yAxisSideLabels}
@@ -1367,33 +1512,31 @@ function renderLineChart(containerId, points, options = {}) {
     <div class="chart-tooltip" id="${containerId}-tip"></div>
   </div>`;
 
-  // 터치/호버 툴팁
-  const wrap = el.querySelector('.line-chart-wrap');                // 래퍼 요소
-  const tip = document.getElementById(containerId + '-tip');       // 툴팁 요소
-  const svg = wrap.querySelector('svg');                           // SVG 요소
-  const showTip = (idx) => {                                       // 툴팁 표시 함수
-    const p = points[idx];                                         // 해당 데이터
-    const sign = p.value > 0 ? '+' : '';                           // 양수 부호
-    tip.textContent = `${p.fullLabel || p.label}: ${sign}${p.value.toFixed(1)}`;  // 텍스트
-    const cx = x(idx);                                             // X좌표
-    tip.style.left = `${cx}px`;                                    // 위치 지정
-    tip.style.top = `${y(p.value) - 28}px`;                        // 점 위에 표시
-    tip.style.transform = 'translateX(-50%)';                      // 중앙 정렬
-    tip.style.opacity = '1';                                       // 표시
+  // 호버/터치 툴팁 — 점 제거 후 SVG 전체에서 X 좌표로 가까운 데이터 찾기
+  const wrap = el.querySelector('.line-chart-wrap');
+  const tip = document.getElementById(containerId + '-tip');
+  const svg = wrap.querySelector('svg');
+  const showTip = (idx) => {
+    const p = points[idx];
+    const sign = p.value > 0 ? '+' : '';
+    tip.textContent = `${p.fullLabel || p.label}: ${sign}${p.value.toFixed(1)}`;
+    tip.style.left = `${x(idx)}px`;
+    tip.style.top = `${y(p.value) - 28}px`;
+    tip.style.transform = 'translateX(-50%)';
+    tip.style.opacity = '1';
   };
-  const hideTip = () => { tip.style.opacity = '0'; };             // 툴팁 숨김
-  svg.querySelectorAll('.chart-dot').forEach(dot => {              // 각 점에 이벤트
-    dot.addEventListener('mouseenter', () => showTip(+dot.dataset.idx));  // 마우스 진입
-    dot.addEventListener('mouseleave', hideTip);                          // 마우스 이탈
-  });
-  svg.addEventListener('touchstart', e => {                        // 터치 이벤트
-    const rect = svg.getBoundingClientRect();                      // SVG 위치
-    const tx = (e.touches[0].clientX - rect.left) / rect.width * W;  // 터치 X좌표
-    let closest = 0, minDist = Infinity;                           // 가장 가까운 점 탐색
+  const hideTip = () => { tip.style.opacity = '0'; };
+  const findClosest = (clientX) => {
+    const rect = svg.getBoundingClientRect();
+    const tx = (clientX - rect.left) / rect.width * W;
+    let closest = 0, minDist = Infinity;
     points.forEach((_, i) => { const d = Math.abs(x(i) - tx); if (d < minDist) { minDist = d; closest = i; } });
-    showTip(closest);                                              // 가장 가까운 점 툴팁
-  }, { passive: true });
-  svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });  // 터치 종료 후 숨김
+    return closest;
+  };
+  svg.addEventListener('mousemove', e => showTip(findClosest(e.clientX)));
+  svg.addEventListener('mouseleave', hideTip);
+  svg.addEventListener('touchstart', e => showTip(findClosest(e.touches[0].clientX)), { passive: true });
+  svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });
 }
 
 // ── Crash/Surge 이중 그래프 (하락 가능성 vs 상승 가능성) ──
@@ -1554,12 +1697,17 @@ async function loadNoiseChart() {
       value: r.noise_score != null ? r.noise_score : 0,            // noise_score 값
     }));
 
-    renderLineChart('nr-chart', points, {                          // 그래프 렌더링
-      color: 'var(--accent)',                                      // 보라색 선
-      zeroLine: true,                                              // 0 기준선 표시
-      dotColor: v => v >= 0 ? 'var(--green)' : 'var(--red)',       // 양수(이성적) 초록, 음수(감정적) 빨강
-      yTopLabel: t('chart.yTop'),                                     // Y축 상단: 이성적 (양수)
-      yBottomLabel: t('chart.yBottom'),                              // Y축 하단: 감정적 (음수)
+    // Y축을 게이지와 동일한 절대 범위로 고정 — 0 기준선·이성/감정 라벨 의미 일치
+    // KR: -25 ~ +5 (분포 깊음), US: -10 ~ +5
+    const isKr = _curRegion() === 'kr';
+    renderLineChart('nr-chart', points, {
+      color: 'var(--accent)',
+      zeroLine: true,
+      dotColor: v => v >= 0 ? 'var(--green)' : 'var(--red)',
+      yFixedMin: isKr ? -25 : -10,
+      yFixedMax: 5,
+      yTopLabel: t('chart.yTop'),                                  // 양수 영역 (0선 위)
+      yBottomLabel: t('chart.yBottom'),                            // 음수 영역 (0선 아래)
     });
   } catch (e) {
     console.error('NR chart error:', e);                           // 에러 로그

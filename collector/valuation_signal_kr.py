@@ -37,6 +37,43 @@ _FALLBACK_ERP = {'mean': 0.02, 'std': 0.015, 'n': 0, 'source': 'fallback'}
 _FALLBACK_VKOSPI = {'mean': 18.0, 'std': 5.0, 'n': 0, 'source': 'fallback'}
 _FALLBACK_DD = {'mean': -0.04, 'std': 0.05, 'n': 0, 'source': 'fallback'}
 
+# PER hard fallback (캐시도 없는 첫 실행 보호용 — KOSPI 장기 평균 ~14)
+_HARD_FALLBACK_PER = 14.0
+
+
+def _load_last_known_per() -> float | None:
+    """baseline JSON 에 캐싱된 마지막 정상 KOSPI PER 반환 (없으면 None)."""
+    try:
+        with open(_BASELINE_PATH) as f:
+            data = json.load(f)
+        cached = data.get('last_known_per')
+        if cached and float(cached) > 0:
+            return float(cached)
+    except Exception:
+        pass
+    return None
+
+
+def _save_last_known_per(per: float) -> None:
+    """정상 PER 값을 baseline JSON 에 머지 저장 (다음 실패 시 fallback 으로 사용)."""
+    try:
+        if not per or per <= 0:
+            return
+        data = {}
+        if os.path.exists(_BASELINE_PATH):
+            try:
+                with open(_BASELINE_PATH) as f:
+                    data = json.load(f)
+            except Exception:
+                data = {}
+        data['last_known_per'] = round(float(per), 2)
+        data['last_known_per_updated_at'] = datetime.now().isoformat()
+        os.makedirs(os.path.dirname(_BASELINE_PATH), exist_ok=True)
+        with open(_BASELINE_PATH, 'w') as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(f'[valuation_kr] last_known_per 저장 실패: {e}')
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Baselines (5Y)
@@ -249,8 +286,15 @@ def fetch_valuation_signal_today_kr() -> dict | None:
         except Exception as e:
             print(f'[valuation_kr] PER fetch 실패: {e}')
         if not kospi_per or kospi_per <= 0:
-            print('[valuation_kr] PER fallback 14.0 사용')
-            kospi_per = 14.0
+            cached = _load_last_known_per()
+            if cached:
+                kospi_per = cached
+                print(f'[valuation_kr] PER fallback (캐싱된 마지막 정상값 {cached:.2f}) 사용')
+            else:
+                kospi_per = _HARD_FALLBACK_PER
+                print(f'[valuation_kr] PER fallback ({_HARD_FALLBACK_PER}, 캐시 없음) 사용')
+        else:
+            _save_last_known_per(kospi_per)
 
         # KOSPI close (60+ days for DD) — pykrx → FDR → yfinance 폴백
         close = _kospi_close_dual(years=1)
@@ -347,7 +391,7 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
         print('[valuation_kr] KOSPI close 비어있음 — backfill 중단')
         return []
 
-    # KOSPI fundamental (PER) — pykrx 만 지원, 실패시 14.0 평탄 시리즈
+    # KOSPI fundamental (PER) — pykrx 만 지원. 실패시 캐싱된 last_known_per → 없으면 _HARD_FALLBACK_PER
     per_series = None
     try:
         from pykrx import stock
@@ -356,10 +400,18 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
         if fund is not None and not fund.empty and 'PER' in fund.columns:
             per_series = fund['PER'].replace(0, np.nan)
     except Exception as e:
-        print(f'[valuation_kr] PER pykrx 실패 → fallback 14.0: {e}')
+        print(f'[valuation_kr] PER pykrx 실패 → fallback 사용: {e}')
     if per_series is None or per_series.empty:
-        per_series = pd.Series(14.0, index=close.index)
-        print('[valuation_kr] PER fallback (14.0 평탄) 사용')
+        cached = _load_last_known_per()
+        fallback_per = cached if cached else _HARD_FALLBACK_PER
+        per_series = pd.Series(fallback_per, index=close.index)
+        src = '캐싱된 마지막 정상값' if cached else f'하드 fallback {_HARD_FALLBACK_PER}'
+        print(f'[valuation_kr] PER fallback ({src}, {fallback_per:.2f} 평탄) 사용')
+    else:
+        # 정상 PER 마지막 값 → 캐시 갱신 (다음 실패 시 활용)
+        last_valid = per_series.dropna()
+        if not last_valid.empty:
+            _save_last_known_per(float(last_valid.iloc[-1]))
 
     ey = 1.0 / per_series
 

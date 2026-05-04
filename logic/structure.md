@@ -63,8 +63,11 @@ Passive-Financial-Data-Analysis/
 │   ├─ real_estate_trade.py    ★ MOLIT 매매·전월세
 │   ├─ real_estate_population.py ★ MOIS 인구·세대원수·매핑
 │   ├─ real_estate_geocode.py  ★ Kakao 로컬 (지오코딩)
-│   ├─ ecos_macro.py           ★ 한국은행 ECOS (기준금리·주담대)
+│   ├─ ecos_macro.py           ★ 한국은행 ECOS (RATE_SPECS 6 + SECTOR_MACRO_SPECS 5, Q cycle 지원)
 │   ├─ kosis_migration.py      ★ 통계청 KOSIS (인구이동)
+│   ├─ kosis_macro.py          ★ 통계청 KOSIS 거시 4종 (광공업/소매/설비/건축)
+│   ├─ sector_macro_kr.py      ★ KR 거시 12 + derived 2 통합 aggregator (ECOS+KOSIS)
+│   ├─ sector_etf_kr.py        ★ KODEX/TIGER 10 sector + 8 holding returns + PER/PBR fallback
 │   └─ sector_valuation.py     ★ yfinance Ticker.info — 11개 섹터 ETF PER/PBR
 ├─ processor/
 │   ├─ feature1_regime.py      HMM 학습·예측
@@ -73,7 +76,8 @@ Passive-Financial-Data-Analysis/
 │   ├─ feature4_chart_predict.py 앙상블 ETF 예측
 │   ├─ feature5_real_estate.py ★ 매핑 + 지역 집계
 │   ├─ feature6_buy_signal.py  ★ 매수/관망/주의 시그널
-│   └─ feature7_sector_momentum.py ★ 섹터 1주·1개월 일별 누적수익률 + 1주 기준 랭킹
+│   ├─ feature7_sector_momentum.py ★ 섹터 1주·1개월 일별 누적수익률 + 1주 기준 랭킹
+│   └─ sector_valuation_kr_backfill.py ★ KR sector PER/PBR proxy 60개월 backfill
 ├─ database/
 │   ├─ supabase_client.py      threading.local() 싱글톤
 │   └─ repositories.py         ★ 모든 테이블 upsert/fetch (단일 파일)
@@ -115,6 +119,7 @@ Passive-Financial-Data-Analysis/
 │   ├─ build_metro_geojson.py   ★ southkorea-maps → 수도권 metro-sgg.geojson 변환 (이름→행안부 LAWD_CD 매핑)
 │   ├─ backfill_metro.py        ★ 수도권 77 LAWD_CD × N개월 backfill — 부천(41194)은 41192/41196 / 화성(41590)은 41591/41593/41595/41597 합산 (mapping/pop/trade/rent), --only/--start-from 분할 실행
 │   ├─ flip_noise_score_sign.py noise_score 부호 일괄 반전 (1회성)
+│   ├─ train_kr_sector_cycle.py ★ KR Sector Cycle (HMM 4-state) 1회 학습 + sector_macro/cycle/valuation 적재
 │   └─ upload_dim.py
 ├─ models/                     pkl 학습 모델 (HMM, XGBoost, ensemble)
 ├─ supabase_tables.sql         전체 DDL (~20 테이블)
@@ -135,13 +140,14 @@ Passive-Financial-Data-Analysis/
 - `macro_raw` — 거시지표 일별
 - `market_regime` — HMM 시장 국면 (sp500/kospi)
 - `noise_regime` — Noise vs Signal HMM
-- `crash_surge` — XGBoost 폭락/급등 결과
+- `crash_surge` — XGBoost 폭락/급등 결과 (US 44 피처 / KR 24 피처, region 컬럼)
 - `fear_greed_raw` — CNN F&G 일별
 - `index_price_raw` — ETF 가격
 - `sector_macro_raw` — FRED 섹터 매크로
 - `sector_cycle_result` — 섹터 경기국면
 - `chart_predict` — 앙상블 ETF 30일 예측
 - `sector_valuation` ★ — 11개 섹터 ETF PER/PBR 일별 (date+ticker UNIQUE)
+- `ai_headline_cache` ★ — 홈 화면 LLM 헤드라인 캐시 (region+lang UNIQUE) — 스케줄러 미리 생성
 
 ### 3.2 부동산 원천 (★ 신규)
 
@@ -630,6 +636,7 @@ RUN_SCHEDULER=true                        # false=스케줄러 비활성
 - **알림 (시그널 매수 전환)**: 사용자 favorite 시군구의 signal 변화 push
 - **시장 밸류 composite z (적용 완료, 2026-04-29)**: `collector/valuation_signal.py` 가 `z_comp = 0.4·z_ERP(5Y) + 0.3·z_VIX(5Y) + 0.3·z_DD60(5Y)` 산출 → `valuation_signal` 테이블에 6개 컬럼(vix/dd_60d/z_erp/z_vix/z_dd/z_comp) 추가. `/api/macro/valuation-signal` 응답에 `baselines_5y={erp,vix,dd,weights}` + 각 행 `z_*` 포함. 부호 컨벤션: 양수=저평가/공포 (DD 부호 반전). Baseline 캐시: `models/valuation_baselines.json` (TTL 90일). 한계: mild 충격은 max +0.84σ 가 천장 — 임계 완화 / EWMA / VIX intraday high 가 후보.
 - **KR 등가 (적용 완료, 2026-05-02 ~ 05-03)**: `collector/valuation_signal_kr.py` (KOSPI PER + KR 10Y + VKOSPI + DD60), `collector/noise_regime_data_kr.py` (KOSPI Shiller-like). 데이터 소스 3-tier: pykrx → FDR → yfinance(.KS). KR 10Y/3Y/회사채는 ECOS API 1차. PER 동적 fallback (2026-05-03): pykrx 성공 시 `models/valuation_baselines_kr.json#last_known_per` 자동 캐싱, 실패 시 캐시 → 없으면 14.0. valuation_signal_kr 와 noise_regime_data_kr 가 같은 캐시 공유. Baseline JSON: `models/valuation_baselines_kr.json` (TTL 90일). 펀더멘털 탭 KR 모드: 게이지 범위 -25~+5 (US -10~+5 vs KR 깊은 분포), 카드 제목 region 분기 ('Noise vs Signal' ↔ '시장 이성 점수'), gap-ticks 중복 제거 — `static/js/main.js loadRegime`, `templates/stocks.html#nr-card-title`.
+- **HMM 6-feature KR 재정의 (2026-05-03)**: `processor/feature1_regime.py` 가 region 별 다른 feature set + 가중치 사용. `FEATURE_NAMES` (US 8: fundamental_gap·erp_zscore·residual_corr·dispersion·amihud·vix_term·hy_spread·realized_vol) ↔ `FEATURE_NAMES_KR` (KR 6: erp_zscore·residual_corr·dispersion·amihud·hy_spread·realized_vol). KR 은 PER 시계열 부재로 fundamental_gap 가 12M log P/E diff cancel 로 0 평탄, VKOSPI 단일값으로 vix_term 가 1.0 평탄 → 두 피처 제외. 가중치 재배분: vix_term 2.0 → realized_vol 흡수해 4.0, |fundamental_gap| 0.5 → |erp_zscore| 흡수해 0.5. US 합 7.8 vs KR 합 7.5. `_feature_names(region)`/`_noise_weights(region)`/`_weights_for_features(feat_names)` 헬퍼, model bundle 에 `feature_names` 키 저장 (구버전 호환: `model.means_.shape[1]` 으로 8/6 추정). `train_hmm` 에서 region 의 feature subset 만 학습, `predict_regime`/`backfill_noise_regime` 가 `feat_names` 길이로 vector 차원 자동. 프론트 (`feature_contributions`/`feature_values` list/dict 순회) 자동 적응. 사용자가 `python scripts/train_kr_hmm.py` 재실행 시 6-feature 모델로 자동 교체.
 
 ### 15.3 인프라
 - Supabase 유료 전환 (1GB 초과 시)
@@ -665,3 +672,19 @@ Stage 2: python:3.11-slim
 상세 시간순 이력은 `update.py [1]~[N]` 참조. 본 문서는 현재 시점 청사진.
 
 마지막 갱신 시점: 2026-05-03 (화성시(41590) backfill — MOLIT 가 41590 0건 반환, 옛 일반구 4코드(41591 새솔/41593 기안/41595 반정/41597 산척·동탄) 합산 후 sgg_cd=41590 normalize. backfill_metro.py 부천 분기 옆에 elif sgg=='41590' 추가, 5 LAWD_CD × 12 ym 20.7분, region_summary 30~35 stdg/월 (1585 trades 202603), buy_signal 매수(39.3), top_stdg=송동(평단가 1811만/평). app_cache 3종(sgg_overview·region_detail:41590·ranking) 즉시 재계산. update.py [85])
+
+마지막 갱신 시점: 2026-05-03 (KR HMM 6-feature 재정의 — fundamental_gap·vix_term 제거, |erp_zscore| 0.3→0.5 + realized_vol 2.0→4.0 흡수. processor/feature1_regime.py 에 FEATURE_NAMES_KR + NOISE_WEIGHTS_US/KR + _feature_names/_noise_weights/_weights_for_features 헬퍼, train_hmm 에서 features_df subset 후 학습, model bundle 에 feature_names 키 저장. load_model 구버전 호환 (means_.shape[1] 으로 추정), predict/backfill 가 feat_names 길이로 차원 자동. 프론트 자동 적응 (feature_contributions/feature_values 순회). 사용자가 train_kr_hmm.py 재실행 시 6-feature 모델로 교체. update.py [86])
+
+마지막 갱신 시점: 2026-05-03 (홈 AI 헤드라인 DB 캐시 — 사용자 보고 KR 홈탭 "오늘의 종합판단" 로딩 느림. 기존 in-memory _headline_cache (TTL 만료 시 LLM 즉석 호출, 재시작 시 증발) → migrations/2026_05_03_add_ai_headline_cache.sql 추가 (region+lang UNIQUE), repositories upsert/fetch_ai_headline, market_summary 에 _generate_home_headline 헬퍼 추출 + precompute_home_headline 신규 + endpoint 3단 fallback (메모리→DB→LLM 즉석). scheduler/job_kr.py 6번째 step + scheduler/job.py Step 10 에서 ko/en × region 미리 생성. Noise 추이 차트 dot 제거 (renderLineChart) — 라인 + 그라데이션만, mousemove 로 가까운 점 hover. main.js?v=125. update.py [87][88]. 사용자 액션: Supabase SQL Editor 에서 마이그 실행 후 다음 스케줄에 캐시 채워짐)
+
+마지막 갱신 시점: 2026-05-03 (Noise 추이 차트 Y축 절대 범위 고정 — 사용자 보고 게이지(좌측 감정)와 라인차트(위쪽 이성적 라벨) 가 같은 score (-13.4) 를 시각적으로 모순되게 표시. renderLineChart 에 yFixedMin/yFixedMax 옵션 추가, loadNoiseChart 에서 region 따라 KR -25~+5 / US -10~+5 (게이지 G_LO/G_HI 와 일치) 전달. 0 기준선이 차트 위쪽에 명확히 보이고 "이성적" 라벨 = 양수 영역, "감정적" 라벨 = 음수 영역으로 절대 의미 회복. main.js?v=126, update.py [89])
+
+마지막 갱신 시점: 2026-05-03 (KR 신호탭 — Crash/Surge XGBoost KR 24-feature 구현. collector/crash_surge_data_kr.py 신규 (KOSPI 7 + 변동성 4 + VKOSPI 3 + 회사채 AA-3Y 스프레드 3 + KR 금리 2 + 외국인 순매수 2 + USDKRW/WTI 2 + 거래대금 z 1). processor/feature3_crash_surge.py 에 _model_path/_feature_names_for_region/load_crash_surge_model 헬퍼 + train/predict/backfill region 인자 + bundle 에 region/feature_names 키 + 구버전 호환 (means_.shape 추정). scripts/train_kr_crash_surge.py 신규 (--start 2010 --trials 50). scheduler/job_kr.py Step 7 (load_crash_surge_model('kr') 있으면 light fetch → predict → upsert). home.js KR_SUPPORTED_TILES 에 'signal' 추가. 라벨링 동일 (±10%/20일 forward) — 모델 명명만 "20일 상승/하락 예측" 으로 직관화. home.js?v=29, update.py [90]. 사용자 액션: python -m scripts.train_kr_crash_surge 1회 실행 후 신호탭 자동 활성화)
+
+마지막 갱신 시점: 2026-05-04 (5탭 AI 해설 DB 캐시 — 사용자 보고 5번 탭 진입 시 ai-explain endpoint LLM 즉석 호출 1~3초로 느림. [88] 의 home-headline 패턴을 5탭 AI 해설에 미러링: migrations/2026_05_04_add_ai_explain_cache.sql 신규 (tab+lang+region UNIQUE), repositories.upsert_ai_explain/fetch_ai_explain 추가, market_summary._generate_ai_explain helper + precompute_ai_explain + endpoint 3-tier (memory → DB → LLM 즉석). scheduler/job_kr.py Step 10 (KR × (fundamental/signal/sector) × (ko/en) = 6 entry), scheduler/job.py Step 11 (US × 5탭 × (ko/en) = 10 entry, sector-val/sector-mom 포함). 사용자 액션: 마이그 실행 + 다음 스케줄 사이클 자동 적재. update.py [93])
+
+마지막 갱신 시점: 2026-05-04 (KR 거시경제 탭 — 5번째 탭 'tab-sector' (라벨 "거시경제") 의 미국 구조 (거시 8 → HMM 4-state 경기국면 → 섹터 회전) 를 KR 로 1:1 포팅. migrations 에 sector_macro_raw KR 14 컬럼 ALTER (sparse, 같은 UNIQUE 재사용). collector/ecos_macro.py SPECS 분리 (RATE_SPECS / SECTOR_MACRO_SPECS — fetch_macro_rate_kr 호출 폭증 방지) + Q cycle 변환 + 7종 추가 (CPI/GDP/실업률/M2/광공업/소매/설비투자, ECOS 정확한 코드 검증 완료). collector/kosis_macro.py 신규 (건축허가만 — 4종 중 3개는 ECOS 로 충당). collector/sector_macro_kr.py 신규 (ECOS+KOSIS 통합 aggregator, 분기 데이터 ffill(2)). collector/sector_etf_kr.py 에 ALL_HOLDINGS_KR + fetch_sector_etf_returns_kr + fetch_sector_etf_per_pbr_kr 1차 fallback (KOSPI 시장 평균 동일 적용 — Stage 2 가중평균은 별도 PR). processor/feature2_sector_cycle.py region 분기 (FEATURE_COLS_US/_KR + run_sector_cycle(..., region) + _map_states_to_phases 인덱스 동적 조회) + dropna 정책 변경 (non_empty subset + FEATURE_COLS 만 dropna + sector_ret left join — KR 단상장 ETF/일부 ECOS 무효 시리즈 학습 데이터 0행 만드는 사고 방지, US 도 안전화). processor/sector_valuation_kr_backfill.py 신규. scripts/train_kr_sector_cycle.py 신규. scheduler/job_kr.py Step 8/9 (sector_macro+cycle+valuation). database/repositories.py fetch_sector_macro_history select 26 컬럼 확장. static/js/sector.js _isKr/_MACRO_KEYS_KR/_SECTOR_KEYS_KR/formatMacroValue 분기 + MACRO_GOOD_HIGH/MACRO_NEUTRAL KR 14 추가. static/js/i18n.js 44 항목 (KR 22 ko/en). update.py [91][92]. Production 1차 검증 OK: 2026-04-01 → 🍂 둔화 (99.9%), Top3 [139260 IT, 091160 반도체, 341850 리츠]. 가용 매크로 10/14, kr_permit/kr_income 만 NaN. 사용자 액션: 마이그 실행 → python -m scripts.train_kr_sector_cycle 1회 → 다음 KST 16:00 부터 자동)
+
+마지막 갱신 시점: 2026-05-04 (KR 섹터 밸류에이션 PDF 가중평균 — 사용자 결정 PDF 가중평균 + 주 1회 holdings 캐시. collector/etf_holdings_kr.py 신규 (pykrx.get_etf_portfolio_deposit_file 호출 캐시 TTL 7일, models/etf_holdings_kr.json). collector/sector_etf_kr.py 의 fetch_sector_etf_per_pbr_kr 교체: holdings 로드 + pykrx.get_market_fundamental(KOSPI/KOSDAQ) 1회 fetch 로 전체 종목 PER/PBR + 비중 가중평균 (적자 per≤0 제외 후 재정규화) + coverage<50% 시 KOSPI 평균 fallback. home.js KR_SUPPORTED_TILES 에 'sector-val' 추가. _weighted_avg unit test (50/30/20 비중, 부재 종목 1개 → cov=80%) 통과. home.js?v=31. 사용자 액션: 다음 KR 스케줄 cycle 부터 자동 (홈 'sector-val' 타일 활성))
+
+마지막 갱신 시점: 2026-05-04 (KR 섹터 모멘텀 sector-mom 별 탭 KR 포팅 [94] — 미국 11종 SPDR → KR 10종 KODEX/TIGER 분기. processor/feature7_sector_momentum.py: _ticker_map_for_region helper 신규 + compute_sector_momentum(region='us') 시그니처 + DB query .eq('region', region) 필터 + 반환 dict 'region' 필드. api/routers/sector_cycle.py: get_momentum(region: str = Query('us')) + _momentum_cache region 별 dict 분리 (us 캐시가 kr 응답 덮어쓰는 버그 방지). api/routers/market_summary.py: _build_explain_text('sector-mom') 의 compute_sector_momentum 호출에 region=region 인자 추가. static/js/home.js: SECTOR_KR dict KR 10 ticker 한글 매핑 추가 (139260=IT 등) + KR_SUPPORTED_TILES 에 'sector-mom' 추가. scheduler/job_kr.py Step 10 ai-explain 탭 리스트에 'sector-mom' 추가 (KR × 4탭 × 2lang = 8 entry). templates/stocks.html home.js v=31 → v=32. 5 파일 ~55 LOC. update.py [94])

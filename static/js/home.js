@@ -20,8 +20,11 @@
   };
 
   // KR 모드 지원 타일 (Stage 3.x). 나머지는 데이터 미적재 → 비활성화.
+  // 'signal' / 'macro' / 'sector-val' / 'sector-mom' 활성화 — DB 의 crash_surge_result /
+  // sector_cycle_result / sector_valuation / index_price_raw region='kr' 적재 시 자동 표시.
+  // 사용자 환경에서 train_kr_crash_surge / train_kr_sector_cycle 1회 실행 + 매일 스케줄러 자동 적재.
   const KR_SUPPORTED_TILES = new Set([
-    'ai-chart', 'market', 'fundamental', 'market-valuation',
+    'ai-chart', 'market', 'fundamental', 'market-valuation', 'signal', 'macro', 'sector-val', 'sector-mom',
   ]);
 
   function _isKrMode() {
@@ -51,7 +54,9 @@
   }
 
   // 섹터 ETF ticker → 한국어 표시명 (DB·API 는 영어 그대로, 화면 표시만 번역)
+  // US (SPDR 13종) + KR (KODEX/TIGER 10종, 6자리 숫자라 자체로는 의미 없어 한글 매핑 필수)
   const SECTOR_KR = {
+    // US — SPDR 섹터 ETF
     XLK:  '기술',
     IGV:  '소프트웨어',
     SOXX: '반도체',
@@ -65,6 +70,17 @@
     XLRE: '부동산',
     XLC:  '커뮤니케이션',
     XLP:  '필수소비재',
+    // KR — KODEX/TIGER 섹터 ETF
+    '139260': 'IT',
+    '091160': '반도체',
+    '300610': '게임',
+    '091170': '은행',
+    '139250': '에너지화학',
+    '266420': '헬스케어',
+    '091180': '자동차',
+    '117680': '철강',
+    '341850': '리츠',
+    '227560': '필수소비재',
   };
   const krSector = (ticker, fallback) => SECTOR_KR[ticker] || fallback || ticker;
 
@@ -345,6 +361,18 @@
         return '';
       };
 
+      // region 별 라벨 (US: S&P500/미국 국채/VIX, KR: KOSPI/KR 국고채/VKOSPI)
+      const isKr = (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+      const L = isKr
+        ? { per_label: 'KOSPI 주가수익비율 (PER)',
+            tnx_label: '10년 KR 국고채 금리',
+            vix_label: '한국 변동성지수 (VKOSPI)',
+            vix_caption: '(20↑ 불안 · 30↑ 패닉)' }
+        : { per_label: 'S&P 500 주가수익비율 (PER)',
+            tnx_label: '10년 미국 국채 금리',
+            vix_label: '월가 공포지수 (VIX)',
+            vix_caption: '(20↑ 불안 · 30↑ 패닉)' };
+
       // 1) 수식 — 일반어
       fEl.innerHTML = `5년 평균과 비교한 <b>종합 점수</b> = 주식 매력도(${wPct(W.erp)}%) <span style="color:#6b7280;">+</span> 공포(${wPct(W.vix)}%) <span style="color:#6b7280;">+</span> 하락충격(${wPct(W.dd)}%)`;
 
@@ -354,11 +382,11 @@
       // 3) 분해 — Raw 5행 + 가중 점수 4행 (구분선)
       dEl.innerHTML = `
         <div class="mv-row">
-          <span class="mv-key"><span class="mv-op"></span>S&amp;P 500 주가수익비율 (PER)</span>
+          <span class="mv-key"><span class="mv-op"></span>${L.per_label}</span>
           <span class="mv-val">${(t.spy_per || 0).toFixed(1)}배</span>
         </div>
         <div class="mv-row">
-          <span class="mv-key"><span class="mv-op">−</span>10년 미국 국채 금리</span>
+          <span class="mv-key"><span class="mv-op">−</span>${L.tnx_label}</span>
           <span class="mv-val" style="color:#f59e0b;">${ty}%</span>
         </div>
         <div class="mv-row">
@@ -366,7 +394,7 @@
           <span class="mv-val" style="color:${t.erp >= 0 ? '#10b981' : '#ef4444'};">${erpSign}${erp}%</span>
         </div>
         <div class="mv-row">
-          <span class="mv-key"><span class="mv-op"></span><span>월가 공포지수 (VIX) <small style="color:#6b7280;font-weight:400;">(20↑ 불안 · 30↑ 패닉)</small></span></span>
+          <span class="mv-key"><span class="mv-op"></span><span>${L.vix_label} <small style="color:#6b7280;font-weight:400;">${L.vix_caption}</small></span></span>
           <span class="mv-val" style="color:#7c3aed;">${vix}</span>
         </div>
         <div class="mv-row">

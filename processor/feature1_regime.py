@@ -50,6 +50,36 @@ FEATURE_NAMES = [
     'realized_vol',
 ]
 
+# KR 6-feature: PER 시계열 부재(fundamental_gap=0 평탄) + VKOSPI 단일값(vix_term=1.0 평탄)
+# 으로 두 피처가 학습 데이터에서 정보 없는 평탄 시리즈가 됨 → 제외.
+# vix_term 가중치 2.0 → realized_vol 흡수, fundamental_gap 0.5 → erp_zscore(abs) 흡수.
+FEATURE_NAMES_KR = [
+    'erp_zscore', 'residual_corr', 'dispersion',
+    'amihud', 'hy_spread', 'realized_vol',
+]
+
+# noise_score 가중치 — 양수 = 감정성 (옛 컨벤션, DB 저장용 / repo 단에서 부호 반전)
+# abs() 적용 피처: |값|이 클수록 감정성 ↑ (양/음 모두 비정상)
+# 직접 적용: 부호가 의미 있는 피처 (corr/amihud/vix/hy/rv)
+NOISE_WEIGHTS_US = [
+    ('fundamental_gap', 0.5, True),   # abs
+    ('erp_zscore',      0.3, True),   # abs
+    ('residual_corr',   1.0, False),
+    ('dispersion',      0.0, False),
+    ('amihud',          0.5, False),
+    ('vix_term',        2.0, False),
+    ('hy_spread',       1.5, False),
+    ('realized_vol',    2.0, False),
+]
+NOISE_WEIGHTS_KR = [
+    ('erp_zscore',      0.5, True),   # 0.3 → 0.5 (fundamental_gap 0.5 흡수)
+    ('residual_corr',   1.0, False),
+    ('dispersion',      0.0, False),
+    ('amihud',          0.5, False),
+    ('hy_spread',       1.5, False),
+    ('realized_vol',    4.0, False),  # 2.0 → 4.0 (vix_term 2.0 흡수)
+]
+
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
 # 하위호환 — region 미지정 시 기존 'noise_hmm.pkl' 그대로 사용 (US default).
 # region='kr' 은 _kr.pkl 로 분리.
@@ -63,24 +93,39 @@ def _model_path(region: str = 'us') -> str:
     return MODEL_PATH
 
 
-def compute_noise_score(means: np.ndarray) -> np.ndarray:
-    """noise_score v2: 상관 기반 가중치 — 양수 = 감정성 (옛 컨벤션, DB 저장용).
+def _feature_names(region: str = 'us') -> list[str]:
+    return FEATURE_NAMES_KR if region == 'kr' else FEATURE_NAMES
 
-    피처 순서: fundamental_gap, erp_zscore, residual_corr,
-              dispersion, amihud, vix_term, hy_spread, realized_vol
 
+def _noise_weights(region: str = 'us') -> list:
+    """region 별 noise_score 가중치 spec — list[(name, weight, use_abs)]."""
+    return NOISE_WEIGHTS_KR if region == 'kr' else NOISE_WEIGHTS_US
+
+
+def _weights_for_features(feat_names: list[str]) -> list:
+    """주어진 feature_names 와 동일 순서·길이의 가중치 spec 반환.
+
+    구버전 모델 (feature_names 추정) 호환 — feat_names 길이로 region 결정.
+    """
+    if len(feat_names) == len(FEATURE_NAMES_KR):
+        return NOISE_WEIGHTS_KR
+    return NOISE_WEIGHTS_US
+
+
+def compute_noise_score(means: np.ndarray, region: str = 'us') -> np.ndarray:
+    """noise_score v2: 가중치 합 — 양수 = 감정성 (옛 컨벤션, DB 저장용).
+
+    means.shape = (n_samples, n_features). n_features 는 region 따라 8(US) / 6(KR).
     표시 단(_flip_noise_record)에서 부호 반전되어 "양수=이성"으로 클라이언트에 노출.
     """
-    return (
-        0.5 * np.abs(means[:, 0])   # fundamental_gap
-      + 0.3 * np.abs(means[:, 1])   # erp_zscore
-      + 1.0 * means[:, 2]           # residual_corr
-      # dispersion 제거 (가중치 0)
-      + 0.5 * means[:, 4]           # amihud
-      + 2.0 * means[:, 5]           # vix_term
-      + 1.5 * means[:, 6]           # hy_spread
-      + 2.0 * means[:, 7]           # realized_vol
-    )
+    weights = _noise_weights(region)
+    score = np.zeros(means.shape[0])
+    for i, (_name, w, use_abs) in enumerate(weights):
+        if w == 0:
+            continue
+        col = np.abs(means[:, i]) if use_abs else means[:, i]
+        score = score + w * col
+    return score
 
 
 def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> dict:
@@ -93,9 +138,12 @@ def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> d
 
     Returns:
         dict with model, scaler, state_to_phase, phase_order, train_month, region,
-             last_monthly_values, winsor_bounds, amihud_q01, amihud_q99
+             feature_names, last_monthly_values, winsor_bounds, amihud_q01, amihud_q99
     """
-    X = features_df[FEATURE_NAMES].values
+    feat_names = _feature_names(region)
+    # KR 은 fundamental_gap·vix_term 제외 6피처. compute_monthly_features_kr 가
+    # 8 컬럼을 만들어도 여기서 region 의 subset 만 학습에 사용.
+    X = features_df[feat_names].values
     scaler = RobustScaler()
     X_scaled = scaler.fit_transform(X)
 
@@ -108,14 +156,15 @@ def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> d
                 random_state=42,
             )
             model.fit(X_scaled)
-            print(f'[NoiseHMM] 학습 완료 (cov: {cov_type}, 데이터: {len(X_scaled)}개월)')
+            print(f'[NoiseHMM-{region}] 학습 완료 (cov: {cov_type}, '
+                  f'{len(feat_names)}피처 × {len(X_scaled)}개월)')
             break
         except (ValueError, np.linalg.LinAlgError):
             if cov_type == 'diag':
                 raise
 
     # noise_score 기반 상태 → 국면 매핑
-    noise_scores = compute_noise_score(model.means_)
+    noise_scores = compute_noise_score(model.means_, region=region)
     sorted_states = np.argsort(noise_scores)
     state_to_phase = {int(sid): rank for rank, sid in enumerate(sorted_states)}
 
@@ -129,12 +178,10 @@ def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> d
     amihud_q99 = 0.0                                     # Amihud 상한 기본값
     if monthly_bundle is not None:                       # compute_monthly_features 결과가 있으면
         feat_df = monthly_bundle['features']             # 월별 피처 DataFrame
-        last_monthly = {                                 # 마지막 행의 월별 피처값 추출
-            'fundamental_gap': float(feat_df['fundamental_gap'].iloc[-1]),  # 펀더멘털 갭 최신값
-            'erp_zscore':      float(feat_df['erp_zscore'].iloc[-1]),      # ERP Z-score 최신값
-            'vix_term':        float(feat_df['vix_term'].iloc[-1]),        # VIX 텀 최신값
-            'hy_spread':       float(feat_df['hy_spread'].iloc[-1]),       # HY 스프레드 최신값
-        }
+        # 학습에 쓰인 피처만 last_monthly 에 저장 (region 별 6 또는 8개)
+        for fname in feat_names:
+            if fname in feat_df.columns:
+                last_monthly[fname] = float(feat_df[fname].iloc[-1])
         winsor_bounds = monthly_bundle.get('winsor_bounds', {})  # 윈저라이징 범위
         amihud_q01 = monthly_bundle.get('amihud_q01', 0.0)      # Amihud 윈저 하한
         amihud_q99 = monthly_bundle.get('amihud_q99', 0.0)      # Amihud 윈저 상한
@@ -146,6 +193,7 @@ def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> d
         'phase_order': phase_order,
         'train_month': datetime.date.today().strftime('%Y-%m'),
         'region': region,
+        'feature_names': feat_names,                     # 추론 시 동일 컬럼·순서 보장용
         'last_monthly_values': last_monthly,
         'winsor_bounds': winsor_bounds,
         'amihud_q01': amihud_q01,
@@ -161,13 +209,25 @@ def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> d
 
 
 def load_model(region: str = 'us') -> Optional[dict]:
-    """저장된 모델 번들 로드. 없으면 None."""
+    """저장된 모델 번들 로드. 없으면 None. 구버전 호환 — feature_names 없으면 8-feature US 추정."""
     path = _model_path(region)
     if not os.path.exists(path):
         return None
     try:
         bundle = joblib.load(path)
-        print(f'[NoiseHMM-{region}] 모델 로드 (학습 월: {bundle.get("train_month", "?")})')
+        # 구버전 (feature_names 없음) → 학습된 모델의 차원으로 역추정
+        if 'feature_names' not in bundle:
+            try:
+                n_feat = bundle['model'].means_.shape[1]
+            except Exception:
+                n_feat = 8
+            if n_feat == 6:
+                bundle['feature_names'] = list(FEATURE_NAMES_KR)
+            else:
+                bundle['feature_names'] = list(FEATURE_NAMES)
+            print(f'[NoiseHMM-{region}] 구버전 모델 — feature_names 추정: {n_feat} 피처')
+        print(f'[NoiseHMM-{region}] 모델 로드 (학습 월: {bundle.get("train_month", "?")}, '
+              f'{len(bundle["feature_names"])} 피처)')
         return bundle
     except Exception as e:
         print(f'[NoiseHMM-{region}] 모델 로드 실패: {e}')
@@ -175,10 +235,10 @@ def load_model(region: str = 'us') -> Optional[dict]:
 
 
 def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
-    """오늘의 8피처 벡터로 국면 예측.
+    """오늘의 피처 벡터로 국면 예측. 차원은 model_bundle['feature_names'] 길이와 일치.
 
     Args:
-        daily_features: shape (1, 8) numpy array
+        daily_features: shape (1, n_features) numpy array — n_features = US 8 / KR 6
         model_bundle: train_hmm() 반환값
 
     Returns:
@@ -187,6 +247,9 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
     model = model_bundle['model']
     scaler = model_bundle['scaler']
     state_to_phase = model_bundle['state_to_phase']
+    region = model_bundle.get('region', 'us')
+    feat_names = model_bundle.get('feature_names') or _feature_names(region)
+    weights_spec = _weights_for_features(feat_names)
 
     daily_scaled = scaler.transform(daily_features)
     proba_raw = model.predict_proba(daily_scaled)[0]  # shape (4,)
@@ -201,7 +264,7 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
     hmm_phase = max(proba_by_phase, key=proba_by_phase.get)
 
     # noise_score 계산 → score 기반 레짐 이름 결정
-    ns = float(compute_noise_score(daily_scaled)[0])
+    ns = float(compute_noise_score(daily_scaled, region=region)[0])
     pred_phase, pred_name = score_to_regime_name(ns)
 
     today_str = str(datetime.date.today())
@@ -214,12 +277,10 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
     }
 
     # 피처별 noise_score 기여도 (DB 저장용 옛 컨벤션 — repo 단에서 부호 반전)
-    noise_weights = [0.5, 0.3, 1.0, 0.0, 0.5, 2.0, 1.5, 2.0]
     contributions = []
-    for i, fname in enumerate(FEATURE_NAMES):
-        w = noise_weights[i]
+    for i, (fname, w, use_abs) in enumerate(weights_spec):
         sv = float(daily_scaled[0][i])
-        contrib = w * abs(sv) if i in (0, 1) else w * sv
+        contrib = w * abs(sv) if use_abs else w * sv
         contributions.append({
             'name': fname, 'weight': w,
             'value': round(float(daily_features[0][i]), 4),
@@ -228,7 +289,7 @@ def predict_regime(daily_features: np.ndarray, model_bundle: dict) -> dict:
     contributions.sort(key=lambda x: abs(x['contribution']), reverse=True)
 
     feature_values = {fname: round(float(daily_features[0][i]), 4)
-                      for i, fname in enumerate(FEATURE_NAMES)}
+                      for i, fname in enumerate(feat_names)}
 
     result = {
         'date': today_str,
@@ -285,13 +346,14 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
     model = model_bundle['model']                  # 학습된 HMM 모델
     scaler = model_bundle['scaler']                # RobustScaler
     state_to_phase = model_bundle['state_to_phase']  # HMM state → phase 매핑
+    feat_names = model_bundle.get('feature_names') or _feature_names(region)
+    weights_spec = _weights_for_features(feat_names)
 
     # 기준 날짜 인덱스: SPY 수익률의 최근 N일 (영업일 기준)
     spy_dates = spy_ret.dropna().index[-days:]     # 최근 N 영업일
-    noise_weights = [0.5, 0.3, 1.0, 0.0, 0.5, 2.0, 1.5, 2.0]  # noise_score 가중치 (옛 컨벤션)
 
-    # 월별 피처(fundamental_gap, erp_zscore)를 일별로 forward-fill
-    fg_monthly = features_monthly['fundamental_gap']  # 월별 펀더멘털 갭
+    # 월별 피처(fundamental_gap, erp_zscore)를 일별로 forward-fill — KR 은 fundamental_gap 미사용
+    fg_monthly = features_monthly['fundamental_gap'] if 'fundamental_gap' in features_monthly.columns else None
     ez_monthly = features_monthly['erp_zscore']       # 월별 ERP Z-score
 
     # ⑥ vix_term 일별 시계열 (US: VIX/VIX3M, KR: VKOSPI/VKOSPI 60D)
@@ -330,9 +392,12 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
         try:
             date_str = str(date.date()) if hasattr(date, 'date') else str(date)[:10]  # 날짜 문자열 변환
 
-            # ① fundamental_gap: 해당 월 이전 최신 월별 값
-            fg_before = fg_monthly[fg_monthly.index <= date]  # 해당 날짜 이전 월별 값
-            fg_val = float(fg_before.iloc[-1]) if len(fg_before) > 0 else 0.0  # 마지막 값 사용
+            # ① fundamental_gap: 해당 월 이전 최신 월별 값 (KR 은 미사용 — None)
+            if fg_monthly is not None:
+                fg_before = fg_monthly[fg_monthly.index <= date]
+                fg_val = float(fg_before.iloc[-1]) if len(fg_before) > 0 else 0.0
+            else:
+                fg_val = 0.0
 
             # ② erp_zscore: 동일 로직
             ez_before = ez_monthly[ez_monthly.index <= date]  # 해당 날짜 이전 월별 값
@@ -382,8 +447,18 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
             spy_before = spy_ret[spy_ret.index <= date].iloc[-20:]  # 20일 SPY 수익률
             rv_val = float(spy_before.std() * np.sqrt(252)) if len(spy_before) > 0 else 0.0  # 연율화 변동성
 
-            # 8피처 벡터 구성
-            feat_vec = np.array([[fg_val, ez_val, rc_val, disp_val, ami_val, vt_val, hy_val, rv_val]])  # (1, 8)
+            # 피처 벡터 구성 — region 따라 8(US) / 6(KR)
+            full_values = {
+                'fundamental_gap': fg_val,
+                'erp_zscore':      ez_val,
+                'residual_corr':   rc_val,
+                'dispersion':      disp_val,
+                'amihud':          ami_val,
+                'vix_term':        vt_val,
+                'hy_spread':       hy_val,
+                'realized_vol':    rv_val,
+            }
+            feat_vec = np.array([[full_values[n] for n in feat_names]])  # (1, n_features)
 
             # HMM 예측
             feat_scaled = scaler.transform(feat_vec)   # 스케일링
@@ -396,7 +471,7 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
                 proba_by_phase[phase_id] = proba_by_phase.get(phase_id, 0.0) + float(prob)  # 누적
 
             hmm_phase = max(proba_by_phase, key=proba_by_phase.get)  # HMM 예측 국면 (이모지용)
-            ns = float(compute_noise_score(feat_scaled)[0])  # noise_score 계산
+            ns = float(compute_noise_score(feat_scaled, region=region)[0])  # noise_score 계산
             pred_phase, pred_name = score_to_regime_name(ns)  # score 기반 레짐 이름 결정
 
             # HMM 4-state 확률을 2-레짐(일치/불일치)으로 합산
@@ -408,20 +483,19 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
             }
 
             # 피처 기여도 계산 (DB 저장용 옛 컨벤션 — repo 단에서 부호 반전)
-            contributions = []                         # 기여도 리스트
-            for i, fname in enumerate(FEATURE_NAMES):  # 8개 피처 순회
-                w = noise_weights[i]                   # 가중치
-                sv = float(feat_scaled[0][i])          # 스케일링된 값
-                contrib = w * abs(sv) if i in (0, 1) else w * sv  # 기여도 계산
-                contributions.append({                 # 기여도 딕셔너리
+            contributions = []
+            for i, (fname, w, use_abs) in enumerate(weights_spec):
+                sv = float(feat_scaled[0][i])
+                contrib = w * abs(sv) if use_abs else w * sv
+                contributions.append({
                     'name': fname, 'weight': w,
                     'value': round(float(feat_vec[0][i]), 4),
                     'contribution': round(contrib, 4),
                 })
-            contributions.sort(key=lambda x: abs(x['contribution']), reverse=True)  # 기여도 내림차순
+            contributions.sort(key=lambda x: abs(x['contribution']), reverse=True)
 
             feature_values = {fname: round(float(feat_vec[0][i]), 4)
-                              for i, fname in enumerate(FEATURE_NAMES)}  # 피처값 딕셔너리
+                              for i, fname in enumerate(feat_names)}
 
             records.append({                           # 결과 레코드 추가
                 'date': date_str,

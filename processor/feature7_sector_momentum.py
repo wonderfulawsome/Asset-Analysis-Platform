@@ -1,15 +1,18 @@
-"""섹터 모멘텀 랭킹 — 11개 섹터 ETF 의 1주일·1개월 누적 수익률 + 1주일 기준 랭킹.
+"""섹터 모멘텀 랭킹 — 섹터 ETF 의 1주일·1개월 누적 수익률 + 1주일 기준 랭킹.
 
 데이터 소스: index_price_raw 의 일별 종가 (이미 매일 수집됨, yfinance 호출 0회)
 - 1주일 = 5 거래일 (월~금 한 주)
 - 1개월 = 21 거래일 (월평균 거래일 수)
 - 랭킹: 1주일 수익률 내림차순 (큰 게 1위) — 단기 모멘텀 추적용
+
+region 분기:
+- 'us': SECTOR_VALUATION_ETFS (XLK/XLF/SOXX 등 13종)
+- 'kr': SECTOR_ETF_KR (139260 IT / 091160 반도체 등 10종 KODEX/TIGER)
 """
 from __future__ import annotations
 
 from datetime import date
 
-from collector.sector_valuation import SECTOR_VALUATION_ETFS
 from database.repositories import get_client
 
 
@@ -30,26 +33,46 @@ def _rank_dict(d: dict[str, float], reverse: bool = True) -> dict[str, int]:
     return {k: i + 1 for i, (k, _) in enumerate(sorted_items)}
 
 
-def compute_sector_momentum() -> dict:
-    """11개 섹터의 1W·1M 수익률 + 1W 기준 랭킹.
+def _ticker_map_for_region(region: str) -> dict[str, str]:
+    """region 별 ticker → sector_name 매핑.
+
+    'us': SECTOR_VALUATION_ETFS (영문 sector_name).
+    'kr': SECTOR_ETF_KR (kr_name 한글 추출).
+    """
+    if region == 'kr':
+        from collector.sector_etf_kr import SECTOR_ETF_KR
+        return {t: m['kr_name'] for t, m in SECTOR_ETF_KR.items()}
+    from collector.sector_valuation import SECTOR_VALUATION_ETFS
+    return dict(SECTOR_VALUATION_ETFS)
+
+
+def compute_sector_momentum(region: str = 'us') -> dict:
+    """섹터의 1W·1M 수익률 + 1W 기준 랭킹.
+
+    Args:
+        region: 'us' (SPDR 13종) | 'kr' (KODEX/TIGER 10종).
 
     반환:
       {
         as_of_date: str,
         momentum: [
-          {ticker, sector_name, return_1w, return_1m, rank}, ...11
+          {ticker, sector_name, return_1w, return_1m, rank}, ...
         ]
       }
     """
+    region = region if region in ('us', 'kr') else 'us'
+    ticker_map = _ticker_map_for_region(region)
+    tickers = list(ticker_map.keys())
+
     client = get_client()
     rows: list[dict] = []
     PAGE = 1000
     offset = 0
-    tickers = list(SECTOR_VALUATION_ETFS.keys())
     while True:
         resp = (
             client.table("index_price_raw")
             .select("date,ticker,close")
+            .eq("region", region)                              # region 필터 — us/kr 분리 적재
             .in_("ticker", tickers)
             .order("date", desc=False)
             .range(offset, offset + PAGE - 1)
@@ -61,7 +84,7 @@ def compute_sector_momentum() -> dict:
             break
         offset += PAGE
     if not rows:
-        return {"as_of_date": None, "momentum": []}
+        return {"as_of_date": None, "momentum": [], "region": region}
 
     # ticker → 일별 종가 시계열 (date ASC)
     by_ticker: dict[str, list[tuple[str, float]]] = {}
@@ -88,7 +111,7 @@ def compute_sector_momentum() -> dict:
     rank_by_1w = _rank_dict(returns_1w)
 
     out = []
-    for ticker, sector_name in SECTOR_VALUATION_ETFS.items():
+    for ticker, sector_name in ticker_map.items():
         out.append({
             "ticker": ticker,
             "sector_name": sector_name,
@@ -102,4 +125,5 @@ def compute_sector_momentum() -> dict:
     return {
         "as_of_date": date.today().isoformat(),
         "momentum": out,
+        "region": region,
     }

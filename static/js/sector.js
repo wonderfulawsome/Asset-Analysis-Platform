@@ -30,17 +30,30 @@ const PHASE_COLORS = {
 const PHASE_GAP_POS = { '회복': 12, '확장': 37, '둔화': 63, '침체': 88 };
 // PHASE_SUB는 i18n에서 동적 조회 (tPhaseSub 함수 사용)
 
-// 매크로 라벨 (i18n 동적 조회)
-function getMacroLabels() {                        // 매크로 라벨 사전 생성
-  const keys = ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy','pmi_chg3m','capex_yoy_chg3m'];
+// region 분기 helper — region.js 의 getRegion() 재사용 (없으면 'us' fallback)
+function _isKr() {
+  return (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+}
+
+// region 별 거시 키 세트 (US 10 / KR 14)
+const _MACRO_KEYS_US = ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy','pmi_chg3m','capex_yoy_chg3m'];
+const _MACRO_KEYS_KR = ['kr_indpro_yoy','kr_yield_spread','kr_credit_spread','kr_unemp_yoy','kr_unemp_rate','kr_permit_yoy','kr_retail_yoy','kr_capex_yoy','kr_income_yoy','kr_cpi_yoy','kr_gdp_yoy','kr_m2_yoy','kr_indpro_chg3m','kr_capex_yoy_chg3m'];
+
+// region 별 sector ticker 세트 (US 10 SPDR / KR 10 KODEX·TIGER)
+const _SECTOR_KEYS_US = ['XLF','XLE','XLK','XLV','XLB','XLP','XLU','XLI','XLRE','SOXX'];
+const _SECTOR_KEYS_KR = ['139260','091160','300610','091170','139250','266420','091180','117680','341850','227560'];
+
+// 매크로 라벨 (i18n 동적 조회) — region 분기
+function getMacroLabels() {
+  const keys = _isKr() ? _MACRO_KEYS_KR : _MACRO_KEYS_US;
   const obj = {};
   keys.forEach(k => { obj[k] = t('macro.' + k); });
   return obj;
 }
 
-// 섹터 라벨 (i18n 동적 조회)
-function getSectorLabels() {                       // 섹터 라벨 사전 생성
-  const keys = ['XLF','XLE','XLK','XLV','XLB','XLP','XLU','XLI','XLRE','SOXX'];
+// 섹터 라벨 (i18n 동적 조회) — region 분기
+function getSectorLabels() {
+  const keys = _isKr() ? _SECTOR_KEYS_KR : _SECTOR_KEYS_US;
   const obj = {};
   keys.forEach(k => { obj[k] = t('sector.' + k); });
   return obj;
@@ -100,15 +113,19 @@ async function loadSectorCycle() {
   const topSub = document.getElementById('sc-top-sub');
   topSub.innerHTML = `${phaseIcon(d.phase_name, 14, 2)} ${tPhase(d.phase_name)} ${t('sector.phase')}`;
   const perf = d.phase_sector_perf[d.phase_name] || {};
+  const isKr = _isKr();
   topEl.innerHTML = (d.top3_sectors || []).map((s, i) => {
     const ret = perf[s] || 0;
     const label = getSectorLabels()[s] || s;
     const rankCls = i === 0 ? 'rank-1' : (i === 1 ? 'rank-2' : 'rank-3');
+    // KR: ticker(6자리 숫자) 무의미 → 한글 이름이 메인. US: ticker(XLK 등) 가 메인.
+    const labelHtml = isKr
+      ? `<span class="sc-top-name" style="font-weight:700;flex:1">${label}</span>`
+      : `<span class="sc-top-ticker">${s}</span><span class="sc-top-name">${label}</span>`;
     return `
       <div class="sc-top-item">
         <div class="sc-rank-badge ${rankCls}">${i + 1}</div>
-        <span class="sc-top-ticker">${s}</span>
-        <span class="sc-top-name">${label}</span>
+        ${labelHtml}
         <span class="sc-top-ret" style="color:${ret >= 0 ? 'var(--green)' : 'var(--red)'}">${signStr(ret)}%</span>
       </div>`;
   }).join('');
@@ -123,7 +140,14 @@ async function loadSectorCycle() {
   const sectors = Object.keys(getSectorLabels());
   let hmHTML = '<div class="sc-hm-table"><div class="sc-hm-row sc-hm-header"><div class="sc-hm-cell sc-hm-corner"></div>';
   const _sLabels = getSectorLabels();                // 섹터 라벨 캐시
-  sectors.forEach(s => { hmHTML += `<div class="sc-hm-cell sc-hm-col">${s}<br><span class="sc-hm-col-kr">${_sLabels[s]}</span></div>`; });
+  // KR: ticker 숨기고 한글 이름만 (6자리 숫자가 의미 없음). US: ticker + 영문 이름.
+  sectors.forEach(s => {
+    if (isKr) {
+      hmHTML += `<div class="sc-hm-cell sc-hm-col"><span class="sc-hm-col-kr">${_sLabels[s]}</span></div>`;
+    } else {
+      hmHTML += `<div class="sc-hm-cell sc-hm-col">${s}<br><span class="sc-hm-col-kr">${_sLabels[s]}</span></div>`;
+    }
+  });
   hmHTML += '</div>';
   phases.forEach(ph => {
     const row = d.phase_sector_perf[ph] || {};
@@ -198,27 +222,59 @@ async function loadSectorCycle() {
 }
 
 
-// ── 매크로 지표별 양호 기준 (높을수록 좋은지 여부) ──
+// ── 매크로 지표별 양호 기준 (높을수록 좋은지 여부) ── US + KR 통합
 const MACRO_GOOD_HIGH = {
+  // US 10
   pmi: true, yield_spread: true, permit_yoy: true,
   real_retail_yoy: true, capex_yoy: true, real_income_yoy: true,
   pmi_chg3m: true, capex_yoy_chg3m: true,
   anfci: false, icsa_yoy: false,
+  // KR 14
+  kr_indpro_yoy: true, kr_yield_spread: true,
+  kr_permit_yoy: true, kr_retail_yoy: true, kr_capex_yoy: true,
+  kr_income_yoy: true, kr_m2_yoy: true, kr_gdp_yoy: true,
+  kr_indpro_chg3m: true, kr_capex_yoy_chg3m: true,
+  kr_credit_spread: false, kr_unemp_yoy: false, kr_unemp_rate: false,
+  kr_cpi_yoy: false,   // CPI 는 BOK 타깃 2% 초과 시 긴축 압력 → 낮을수록 양호
 };
 // ── 매크로 지표별 중립값 기준 ──
 const MACRO_NEUTRAL = {
+  // US
   pmi: 50, yield_spread: 0, anfci: 0, icsa_yoy: 0,
   permit_yoy: 0, real_retail_yoy: 0, capex_yoy: 0, real_income_yoy: 0,
   pmi_chg3m: 0, capex_yoy_chg3m: 0,
+  // KR — CPI 는 BOK 타깃 2.0%, 실업률 은 KR 평균 3.0% 기준
+  kr_indpro_yoy: 0, kr_yield_spread: 0, kr_credit_spread: 0,
+  kr_unemp_yoy: 0, kr_unemp_rate: 3.0,
+  kr_permit_yoy: 0, kr_retail_yoy: 0, kr_capex_yoy: 0, kr_income_yoy: 0,
+  kr_cpi_yoy: 2.0, kr_gdp_yoy: 0, kr_m2_yoy: 0,
+  kr_indpro_chg3m: 0, kr_capex_yoy_chg3m: 0,
 };
 
 // ── 매크로 지표 설명 (상세 페이지에서 표시) ──
-// 매크로 설명 (i18n 동적 조회)
-function getMacroDesc() {                          // 매크로 설명 사전 생성
-  const keys = ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy','pmi_chg3m','capex_yoy_chg3m'];
+// 매크로 설명 (i18n 동적 조회) — region 분기
+function getMacroDesc() {
+  const keys = _isKr() ? _MACRO_KEYS_KR : _MACRO_KEYS_US;
   const obj = {};
   keys.forEach(k => { obj[k] = t('macroDesc.' + k); });
   return obj;
+}
+
+// 지표별 표시 형식 — region 무관하게 키 자체로 분기.
+// raw level (PMI 50, ANFCI -1.0, 실업률 3.0, yield spread 0.5%) → toFixed
+// YoY% / 변화량 → signStr + '%'
+const _RAW_LEVEL_KEYS = new Set([
+  'pmi',           // US PMI level (50 기준)
+  'anfci',         // US ANFCI level (0 기준, 음수=완화)
+  'kr_unemp_rate', // KR 실업률 raw
+  'kr_yield_spread', 'kr_credit_spread',  // % 차이 (raw)
+  'yield_spread',  // US 동일
+]);
+function formatMacroValue(key, val) {
+  if (val == null || isNaN(val)) return '--';
+  if (key === 'pmi') return val.toFixed(1);
+  if (_RAW_LEVEL_KEYS.has(key)) return val.toFixed(2);
+  return signStr(val) + '%';
 }
 
 
@@ -269,10 +325,7 @@ function renderSectorDetail(body) {
       // 지표 값 추출
       const val = snap[key];
       const label = getMacroLabels()[key];
-      // 표시 형식 결정 (PMI: 소수1자리, ANFCI: 소수2자리, 나머지: ±%형식)
-      const display = key === 'pmi' ? val.toFixed(1)
-                    : key === 'anfci' ? val.toFixed(2)
-                    : `${signStr(val)}%`;
+      const display = formatMacroValue(key, val);
       // 중립 기준 대비 양호/불량 판단
       const neutral = MACRO_NEUTRAL[key] ?? 0;
       const goodHigh = MACRO_GOOD_HIGH[key] ?? true;
@@ -302,14 +355,18 @@ function renderSectorDetail(body) {
         container.innerHTML = `<div style="text-align:center;font-size:12px;color:var(--sub);padding:12px">${t('detail.noData')}</div>`;
         return;
       }
-      const indicators = ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy'];
+      // 8개 핵심 spark line — region 별 다른 키 세트
+      const indicators = _isKr()
+        ? ['kr_indpro_yoy','kr_yield_spread','kr_credit_spread','kr_unemp_rate',
+           'kr_permit_yoy','kr_retail_yoy','kr_capex_yoy','kr_cpi_yoy']
+        : ['pmi','yield_spread','anfci','icsa_yoy','permit_yoy','real_retail_yoy','capex_yoy','real_income_yoy'];
       const colors = ['#4CAF50','#2196F3','#FF9800','#EF4444','#9C27B0','#00BCD4','#FF5722','#607D8B'];
       let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
       indicators.forEach((key, idx) => {
         const label = getMacroLabels()[key] || key;
         const values = history.map(r => r[key]);
         const latest = values.filter(v => v != null).slice(-1)[0];
-        const display = latest != null ? (key === 'pmi' ? latest.toFixed(1) : key === 'anfci' ? latest.toFixed(2) : signStr(latest) + '%') : '--';
+        const display = formatMacroValue(key, latest);
         html += `<div style="padding:10px;background:var(--card);border-radius:10px;box-shadow:var(--shadow)">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
             <span style="font-size:10px;color:var(--sub);font-weight:600">${label}</span>

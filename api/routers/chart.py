@@ -67,40 +67,75 @@ def _resample_daily_to(df, interval):
 
 
 def _download_kr(ticker: str, interval: str):
-    """pykrx 로 KR ETF OHLCV 다운로드.
+    """KR ETF OHLCV — pykrx → FDR → yfinance(.KS) 3단 폴백.
 
-    pykrx 컬럼은 한글이라 영어로 리네임. interval='1d' 만 직접 지원,
-    '1wk'/'1mo' 는 일봉을 받아 리샘플링.
+    pykrx/FDR 컬럼은 한글, yfinance 는 영어. 모두 영어 컬럼으로 통일 후 반환.
+    interval='1d' 만 직접 지원, '1wk'/'1mo' 는 일봉을 받아 리샘플링.
     """
+    from datetime import date, timedelta
+    if interval == '1d':
+        period_days = 365 * 2
+    elif interval == '1wk':
+        period_days = 365 * 5
+    else:
+        period_days = 365 * 10
+    end = date.today()
+    start = end - timedelta(days=period_days)
+    sd, ed = start.strftime('%Y%m%d'), end.strftime('%Y%m%d')
+
+    df = None
+    # 1차 pykrx
     try:
         from pykrx import stock
-        from datetime import date, timedelta
-        # period 결정 — interval 별 다른 길이
-        if interval == '1d':
-            period_days = 365 * 2  # 2년
-        elif interval == '1wk':
-            period_days = 365 * 5
+        df = stock.get_etf_ohlcv_by_date(sd, ed, ticker)
+        if df is not None and not df.empty:
+            df = df.rename(columns={
+                '시가': 'Open', '고가': 'High', '저가': 'Low',
+                '종가': 'Close', '거래량': 'Volume',
+            })
         else:
-            period_days = 365 * 10
-        end = date.today().strftime('%Y%m%d')
-        start = (date.today() - timedelta(days=period_days)).strftime('%Y%m%d')
-        df = stock.get_etf_ohlcv_by_date(start, end, ticker)
-        if df is None or df.empty:
-            return None
-        # 한글 컬럼 → 영어
-        df = df.rename(columns={
-            '시가': 'Open', '고가': 'High', '저가': 'Low', '종가': 'Close', '거래량': 'Volume',
-        })
-        # Index 가 datetime 인지 확인
-        if not pd.api.types.is_datetime64_any_dtype(df.index):
-            df.index = pd.to_datetime(df.index)
-        # 1wk / 1mo 리샘플
-        if interval in ('1wk', '1mo'):
-            df = _resample_daily_to(df, interval)
-        return df
+            df = None
     except Exception as e:
-        print(f'[Chart-KR] {ticker} {interval}: 실패: {e}')
+        print(f'[Chart-KR] {ticker} pykrx 실패: {e}')
+        df = None
+
+    # 2차 FDR (6자리 종목코드)
+    if df is None or df.empty:
+        try:
+            import FinanceDataReader as fdr
+            df = fdr.DataReader(ticker, start, end)
+            if df is None or df.empty:
+                df = None
+            # FDR 은 이미 영어 컬럼
+        except Exception as e:
+            print(f'[Chart-KR] {ticker} FDR 실패: {e}')
+            df = None
+
+    # 3차 yfinance (6자리.KS suffix)
+    if df is None or df.empty:
+        try:
+            import yfinance as yf
+            df = yf.download(f'{ticker}.KS', start=start, end=end,
+                             progress=False, auto_adjust=False)
+            if df is None or df.empty:
+                return None
+            # MultiIndex 컬럼 평탄화
+            if hasattr(df.columns, 'levels') and len(df.columns.levels) > 1:
+                df.columns = df.columns.get_level_values(0)
+        except Exception as e:
+            print(f'[Chart-KR] {ticker} yfinance 실패: {e}')
+            return None
+
+    if df is None or df.empty:
         return None
+
+    # 인덱스 datetime 보장
+    if not pd.api.types.is_datetime64_any_dtype(df.index):
+        df.index = pd.to_datetime(df.index)
+    # 1wk / 1mo 리샘플
+    if interval in ('1wk', '1mo'):
+        df = _resample_daily_to(df, interval)
+    return df
 
 
 def _download_with_fallback(ticker, interval, max_retries=2):
@@ -179,6 +214,10 @@ def get_ohlc(
             o, h, l, c = float(row['Open']), float(row['High']), float(row['Low']), float(row['Close'])
             # NaN/Infinity 행 건너뛰기 — JSON 직렬화 오류 방지
             if any(math.isnan(v) or math.isinf(v) for v in (o, h, l, c)):
+                continue
+            # 부분 데이터 행 (yfinance 장중/마감 직후 Open=0 또는 OHL 한쪽이 0) 제외
+            # — KR ETF 의 마지막 캔들이 거대한 양/음봉으로 그려지는 문제 방지
+            if o <= 0 or h <= 0 or l <= 0 or c <= 0:
                 continue
             vol = row.get('Volume', 0) if 'Volume' in row else 0
             candles.append({

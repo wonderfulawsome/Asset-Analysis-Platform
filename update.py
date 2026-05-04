@@ -6727,3 +6727,727 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - 다른 통합/분할 시·군 동일 점검 필요 — 수원/성남/안양/안산/고양/용인 일반구는
 #   이미 별도 LAWD_CD (41111·41113·41115·41117 등) 로 list 에 들어있음
 # - 화성·부천 외에 추가로 분할된 시 (전국 단위로 보면 청주·천안 등) 도 같은 패턴 가능
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [86] 2026-05-03 (UTC) — KR HMM 6-feature 재정의 (vix_term + fundamental_gap 제외)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자 펀더멘털 탭 스크린샷 분석 (update.py [84] 후속): 펀더멘털 괴리 = 0.0000,
+# VIX 기간구조 = 0.0000 — KR 데이터 구조적 한계로 두 피처가 정보 없는 평탄 시리즈.
+# fundamental_gap = 12M(log P) - 12M(log E), E = P/PER. KR 은 PER 시계열 확보가
+# 불안정해 14.0 평탄 fallback 사용 시 log E = log P - log 14 → 12M diff cancel out → 0.
+# vix_term = VKOSPI / VKOSPI 60D rolling mean — KR 시장에 VKOSPI 1개만 있어
+# US 의 VIX/VIX3M 같은 기간구조 자체가 부재 → 항상 1.0 ± ε 평탄.
+#
+# 두 피처를 빼고 KR 전용 6-feature HMM 으로 재정의:
+#     ['erp_zscore', 'residual_corr', 'dispersion', 'amihud', 'hy_spread', 'realized_vol']
+#
+# [가중치 재배분]
+# - 원래 vix_term (2.0) + realized_vol (2.0) = 4.0 변동성 측면
+#   → vix_term 제거 → realized_vol 4.0 으로 흡수
+# - 원래 |fundamental_gap| (0.5) + |erp_zscore| (0.3) = 0.8 펀더멘털 측면
+#   → fundamental_gap 제거 → |erp_zscore| 0.5 로 흡수
+# - 총 가중치 합: US 7.8 vs KR 7.5 (비슷한 분포 범위 유지)
+#
+# 산식 검증 (sanity test):
+#   compute_noise_score (residual_corr=1.0 단독) → US 1.0, KR 1.0 일치
+#
+# [수정 — processor/feature1_regime.py]
+# - 신규 상수: FEATURE_NAMES_KR (6개), NOISE_WEIGHTS_US/KR (list of (name, w, use_abs))
+# - 신규 헬퍼: _feature_names(region), _noise_weights(region), _weights_for_features(feat_names)
+# - compute_noise_score(means, region='us') — region 따라 가중치 + abs 분기
+# - train_hmm — features_df 에서 region 의 feature subset 만 학습. bundle 에 'feature_names' 추가
+# - load_model — 구버전 호환 (feature_names 없는 pkl 은 model.means_.shape 으로 8/6 추정)
+# - predict_regime — model_bundle['feature_names'] 길이 따라 추론 차원 자동
+# - backfill_noise_regime — full_values dict 만들고 feat_names 순서로 vector 추출
+#
+# [수정 안 함 — 자동 적응]
+# - collector/noise_regime_data_kr.py: 8 컬럼 features DataFrame 그대로 (train_hmm 에서 subset)
+# - scripts/train_kr_hmm.py: region='kr' 그대로, 자동 6-feature 학습
+# - static/js/main.js: feature_contributions/feature_values 모두 list/dict 순회 — 6/8 자동 적응
+#                      NR_FEATURE_KEYS 의 8개 i18n lookup 에 KR 6개 모두 포함됨
+#
+# [기존 모델 호환]
+# - 현재 models/noise_hmm_kr.pkl (5/3 학습, 8-feature) 은 load_model 시
+#   '구버전 모델 — feature_names 추정: 8 피처' 메시지와 함께 그대로 동작
+# - 사용자가 train_kr_hmm 재실행하면 6-feature 모델로 자동 교체
+#
+# [검증]
+# - python -c "_feature_names('us')/(\'kr\') / _noise_weights / compute_noise_score" → OK
+# - load_model('us') / load_model('kr') 모두 8피처 추정 + 정상 로드 확인
+# - 가중치 합: US 7.8 vs KR 7.5
+#
+# [다음 작업 (사용자 환경)]
+# - python scripts/train_kr_hmm.py 재실행 (KRX/ECOS 정상 작동 환경 필요)
+#   → 6-feature 모델 학습 + 60일 backfill 적재
+# - 새 모델은 fundamental_gap·vix_term 평탄 피처 제거되어 EM 수렴 개선 기대
+# - score 분포가 US 와 비슷한 -10~+5 범위로 좁아질 수 있음 → A 의 KR 게이지 -25~+5 도
+#   재검증 필요 (분포 좁아지면 좌우 끝에 안 찍히게 -10~+5 로 환원 가능)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [87] 2026-05-03 (UTC) — Noise 추이 차트 dot 제거 (라인만)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# 사용자: "3개월 추이 차트가 하루하루 모두 점이 찍혀있는데 미국·국내 모두 점을 없애봐".
+# 펀더멘털 탭의 "Noise vs Signal 추이 (3개월)" / "시장 이성 점수 추이 (3개월)" 차트
+# 에서 매일 데이터 포인트마다 chart-dot circle 이 찍혀 시각적으로 잡음 ↑.
+#
+# [수정 — static/js/main.js renderLineChart]
+# - <circle class="chart-dot"> 데이터 포인트 SVG 제거
+# - hover 트리거를 점 단위 mouseenter → svg 단위 mousemove 로 변경
+# - findClosest(clientX) 헬퍼 — X 좌표로 가장 가까운 데이터 포인트 인덱스 반환
+# - mousemove (마우스), touchstart (터치) 모두 findClosest 로 가까운 점 툴팁
+#
+# [동작 차이]
+# - 시각: 라인 + 그라데이션 영역만 표시, 점 없음
+# - 인터랙션: 차트 위 어디든 호버하면 가장 가까운 일자의 noise_score 툴팁
+# - region 무관 (US/KR 모두 같은 함수, 동일 동작)
+#
+# [캐시] main.js?v=124 → ?v=125
+# [검증] node --check static/js/main.js → OK
+#
+# [참고]
+# - renderLineChart 호출처는 'nr-chart' 한 군데 (loadNoiseChart) — 다른 차트 영향 없음
+# - Crash/Surge 차트 (loadCrashSurgeChart) 는 별도 SVG 직접 작성 — 이번 변경과 무관
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [88] 2026-05-03 (UTC) — 홈 AI 헤드라인 DB 캐시 (스케줄러 미리 생성)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자: "국내주식에서 홈탭의 오늘의 종합판단 부분의 로딩이 너무 느린데 수파베이스에
+# 미리 계산된 데이터를 적재하고 버튼을 누르면 호출하는 구조가 맞아?"
+# → 진단: 기존 home-headline 은 in-memory 캐시 (_headline_cache, TTL=_AI_TTL)만 사용,
+#   캐시 miss 시 _groq_call 350 토큰 LLM 직접 호출. 서버 재시작 시 캐시 증발.
+#   사용자 첫 진입 또는 재시작 후엔 LLM 응답 대기 → 느림.
+#
+# [개선]
+# DB 테이블 ai_headline_cache 추가, 스케줄러가 미리 생성 → endpoint DB 즉시 응답.
+# 조회 우선순위: in-memory hot cache → DB → LLM 즉석 fallback.
+#
+# [신규 — migrations/2026_05_03_add_ai_headline_cache.sql]
+# CREATE TABLE ai_headline_cache (
+#     id BIGSERIAL PRIMARY KEY,
+#     region TEXT NOT NULL,         -- 'us' | 'kr'
+#     lang TEXT NOT NULL,           -- 'ko' | 'en'
+#     summary TEXT NOT NULL,
+#     generated_at TEXT,            -- KST 시간 문자열
+#     created_at/updated_at TIMESTAMPTZ DEFAULT NOW(),
+#     UNIQUE (region, lang)
+# );
+#
+# [수정 — database/repositories.py]
+# - upsert_ai_headline(region, lang, summary, generated_at) — UNIQUE (region, lang) upsert
+# - fetch_ai_headline(region, lang) → dict|None
+#
+# [수정 — api/routers/market_summary.py]
+# - _generate_home_headline(lang, region) — LLM 호출 + 결과 정리 헬퍼 (스케줄러/endpoint 공유)
+# - precompute_home_headline(lang, region) → bool
+#     · _generate_home_headline → upsert_ai_headline → in-memory 캐시 채움
+#     · 스케줄러가 호출
+# - get_home_headline (endpoint) 3단 fallback:
+#     1) in-memory hot cache (TTL 만료 전이면 가장 빠름)
+#     2) DB ai_headline_cache 조회 (스케줄러 미리 생성한 row, source='db' 표시)
+#     3) LLM 즉석 호출 → DB+메모리 동시 채움 (source='llm' 표시)
+#
+# [수정 — scheduler/job_kr.py]
+# - run_kr_pipeline 6번째 step 추가:
+#     for lang in ('ko', 'en'):
+#         precompute_home_headline(lang, 'kr')
+# - KR 시장 마감 후 16:00 KST 실행 → KR 헤드라인 항상 최신 데이터 반영
+#
+# [수정 — scheduler/job.py]
+# - run_pipeline Step 10 추가 (Step 9 부동산 다음):
+#     for lang in ('ko', 'en'):
+#         precompute_home_headline(lang, 'us')
+# - 기존 라이트/풀 모드 모두 적용
+#
+# [효과]
+# - 사용자 첫 진입 시 DB 조회 1회 (~50ms) → 즉시 응답
+# - 재시작 후에도 빠름 (DB 데이터 유지)
+# - LLM 호출은 스케줄러 1회/주기로 제한 (요금·rate-limit 부담 ↓)
+#
+# [검증]
+# - python -c "imports OK" → market_summary/precompute_home_headline + repositories OK
+# - fetch_ai_headline 테이블 미존재 시 에러 메시지 정상 ('Could not find the table')
+#   → 사용자가 Supabase SQL Editor 에서 migrations/2026_05_03_add_ai_headline_cache.sql
+#     실행해야 캐시 활성화
+# - 그 전까지는 LLM 즉석 fallback (기존과 동일 동작) 으로 동작
+#
+# [사용자 액션]
+# 1. Supabase SQL Editor 에서 migrations/2026_05_03_add_ai_headline_cache.sql 실행
+# 2. 다음 스케줄 (KST 16:00 KR job_kr / US job 실행 시각) 또는 수동 실행:
+#      python -m scheduler.job_kr   # KR 헤드라인 미리 채움
+#      python -m scheduler.job      # US 헤드라인 미리 채움
+# 3. 이후 홈 화면 진입 시 home-headline DB 조회 (~50ms) 즉시 응답
+#
+# [다음 작업 후보]
+# - in-memory _headline_cache 점진 제거 (DB 조회 50ms 면 충분히 빠름)
+# - precompute 실행을 한 줄짜리 cron 으로 분리 (LLM 부하 분산)
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [89] 2026-05-03 (UTC) — Noise 추이 차트 Y축 절대 범위 고정 (게이지와 일치)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자: "바차트에서는 감정적으로 치우쳐 있고 그래프로는 위로 솟아서 이성적 위치로
+# 치우쳐있잖아". 같은 score (-13.4) 인데 게이지는 좌측 (감정 26%), 라인 차트는
+# 데이터 자동 범위 (-38~-8) 라 -13.4 가 차트 안에서 위쪽 (이성적 라벨 옆) 에 그려져
+# 시각적 모순. 라인차트 Y 라벨 "이성적" 이 -8 위에 붙어 마지막 점 (-13.4) 이
+# 이성으로 회복한 것처럼 보임 — 실제론 여전히 감정 영역.
+#
+# [근본 원인]
+# renderLineChart 의 yMin/yMax 가 데이터 min/max 자동 산출 → 모두 음수면 0 기준선
+# 안 보이고 라벨 위치가 절대 의미를 잃음.
+#
+# [수정 — static/js/main.js]
+# 1. renderLineChart 에 yFixedMin/yFixedMax 옵션 추가
+#    const yMin = options.yFixedMin != null ? options.yFixedMin : rawMin;
+#    const yMax = options.yFixedMax != null ? options.yFixedMax : rawMax;
+# 2. loadNoiseChart 에서 region 따라 게이지 동일 범위 전달
+#    const isKr = _curRegion() === 'kr';
+#    renderLineChart('nr-chart', points, {
+#        yFixedMin: isKr ? -25 : -10,
+#        yFixedMax: 5,
+#        ...
+#    });
+#
+# [효과]
+# - 게이지 (-25~+5) 와 라인차트 Y 범위 동일 → 같은 score 가 같은 상대 위치에 표시
+# - 0 기준선이 차트 위쪽 (KR: 17%, US: 33% 지점) 에 보임
+# - "이성적" 라벨 = 0 선 위 영역 (양수 score 만)
+# - "감정적" 라벨 = 0 선 아래 영역 (음수 score 만)
+# - 모든 데이터가 음수여도 차트 안에서 0 선 아래 어느 부분인지 명확
+#
+# [캐시] main.js?v=125 → ?v=126
+# [검증] node --check static/js/main.js → OK
+#
+# [예시 — KR score=-13.4]
+# 변경 전: 라인차트 위쪽 끝 ≈ -8 ("이성적" 라벨 옆) → 시각상 이성으로 회복
+# 변경 후: 0 선 아래 약 60% 지점 → 명확히 감정 영역, "이성적" 라벨 (0선 위) 과 분리
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [90] 2026-05-03 (UTC) — KR 신호탭 구현 (Crash/Surge XGBoost 24 피처)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자: "신호탭을 구현해봐". 홈탭 'signal' 타일이 KR 모드에서 비활성화되어 있고
+# (home.js KR_SUPPORTED_TILES 미포함), 백엔드/프론트는 region 분기 인프라 완비
+# (crash_surge_result 테이블에 region 컬럼) — KR XGBoost 모델만 없는 상태.
+#
+# 사용자 결정사항 (AskUserQuestion):
+#   1. KR 전용 ~24 features (HMM 6-feature 패턴 따라 부재 피처 안 끌고 감)
+#   2. 모델 자체를 "20영업일 forward 상승/하락 예측 모델" 로 명명 (US 동일 분류기)
+#   3. 임계값 ±10% / 20영업일 (US 와 동일)
+#
+# [신규 — collector/crash_surge_data_kr.py (24 피처)]
+# KR_FEATURES (US 44 → KR 24): KOSPI 가격 7 + 변동성 4 + VKOSPI 3 + 신용 (회사채
+# AA-3Y 스프레드) 3 + KR 금리 2 + 외국인 순매수 2 + USDKRW/WTI 2 + 거래대금 z 1
+# 데이터 소스 (각 3-tier fallback):
+#   - KOSPI OHLCV: pykrx '1001' → FDR 'KS11' → yfinance '^KS11'
+#   - VKOSPI: FDR → KOSPI 20D RV proxy
+#   - KR 10Y/3Y: ECOS 817Y002 → FDR 'KR10YT=RR'/'KR3YT=RR'
+#   - KR 회사채 AA-3Y: ECOS fetch_kr_corp_spread (ECOS only)
+#   - 외국인 순매수: pykrx KOSPI trading_value → EWY proxy
+#   - USDKRW: yfinance 'KRW=X' (재사용 fetch_usdkrw_history)
+#   - WTI: yfinance 'CL=F'
+# 함수: fetch_crash_surge_raw_kr(start='2010-01-01'), fetch_crash_surge_light_kr(300),
+#       compute_features_kr(raw) → 24-col DataFrame, compute_labels_kr(close) → 3-class
+# 라벨 정의 동일: forward 20d / ±10%, surge 먼저 → crash 가 덮어씀 (crash 우선)
+#
+# [수정 — processor/feature3_crash_surge.py (region 분기)]
+#   - _model_path(region) — 'crash_surge_xgb.pkl' (US) ↔ 'crash_surge_xgb_kr.pkl' (KR)
+#   - _feature_names_for_region(region) — ALL_FEATURES 44 ↔ KR_FEATURES 24
+#   - train_crash_surge(..., region='us') — bundle 에 'region', 'feature_names' 키 추가, _model_path 로 저장
+#   - load_model(region) — 구버전 호환 (feature_names 없으면 model.n_features_in_ 으로 24/44 추정)
+#   - load_crash_surge_model = load_model 별칭
+#   - predict_crash_surge / backfill_crash_surge — model_bundle['feature_names'] 사용 → 차원 자동
+#   - SHAP / feature_values / feature_importance 모두 feat_names 기반
+#
+# [신규 — scripts/train_kr_crash_surge.py]
+# train_kr_hmm.py 패턴 따라 1회성 학습 + backfill + DB 적재 스크립트.
+# python -m scripts.train_kr_crash_surge --start 2010-01-01 --backfill 60 --trials 50
+# 흐름:
+#   1. fetch_crash_surge_raw_kr(start)
+#   2. compute_features_kr(raw) + compute_labels_kr(close)
+#   3. _prepare_datasets_kr (US prepare_datasets 패턴, KR_FEATURES 사용)
+#      train/calib/test/dev 시간순 split (504 holdout / 1008 calib / 나머지 train)
+#   4. train_crash_surge(region='kr') → models/crash_surge_xgb_kr.pkl
+#   5. backfill_crash_surge(df_full, bundle) — 최근 N일 자르기
+#   6. upsert_crash_surge(rec, region='kr')
+#
+# [수정 — scheduler/job_kr.py Step 7 추가]
+# 6) home-headline 다음에 7) crash_surge 추가:
+#   - load_crash_surge_model(region='kr') 있으면 fetch_light → compute_features → predict
+#   - 결과 upsert_crash_surge(rec, region='kr')
+#   - 모델 없으면 학습 안내 메시지만 출력
+#   - upsert_crash_surge import 추가
+#
+# [수정 — static/js/home.js]
+# KR_SUPPORTED_TILES 에 'signal' 추가 — 학습 후 자동 활성화. home.js?v=28 → ?v=29
+#
+# [검증]
+# - python -c "from collector.crash_surge_data_kr import *; from processor.feature3_crash_surge import *" OK
+# - KR_FEATURES 24개 확인
+# - _model_path('us') / ('kr') 분기 확인
+# - load_crash_surge_model('kr') → None (모델 미존재, 정상)
+# - run_kr_pipeline import OK — Step 7 안내 메시지 출력 흐름 검증
+# - node --check home.js OK
+#
+# [사용자 액션]
+# 1. KRX/ECOS 정상 환경에서:
+#      python -m scripts.train_kr_crash_surge
+#    (Optuna 50-trial, 5~15분 학습, models/crash_surge_xgb_kr.pkl 저장, 60일 backfill)
+# 2. 다음 스케줄 (KST 16:00 KR job_kr) 부터 자동으로 매일 1행 신규 적재
+# 3. 브라우저 hard refresh → 홈탭 '신호' 타일 활성화 + 신호탭 진입 → KR 데이터 표시
+#
+# [한계]
+# - 이 환경 (KRX 차단) 에선 학습 못 함 — 사용자 production 환경 필수
+# - KR ECOS 회사채 시계열이 2010~ 안정 — --start 더 일찍 가면 spread 0 fallback
+# - 신호탭 detail 페이지의 SHAP 라벨이 영문 feature 명 — 추후 i18n 라벨 매핑 별도 작업
+# - crash_surge_xgb_kr.pkl 누적 학습 시 macro_f1 < 0.4 면 재검토 (KR 표본 부족 가능성)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [91] 2026-05-03 (UTC) — KR 거시경제 탭 (Sector Cycle 5번째 탭) 완전 포팅
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 5번째 탭 'tab-sector' (라벨 '거시경제') 는 미국 모드에서 거시 8종 → HMM 4-state 경기국면
+# → 섹터 회전 추천 통합 화면이지만 KR 모드에선 빈 화면이었음 (sector_macro_kr/sector_cycle_kr/
+# sector_valuation_kr 모두 미구현). 미국 구조를 KR로 1:1 포팅 — 같은 DOM 컨테이너에서 region
+# 토글로 KR/US 데이터 전환. KR 거시 12종 (FRED 8 등가 + CPI/GDP/실업률/M2 추가) 신규 수집.
+# 백엔드 region plumbing은 repositories.py / api/routers/sector_cycle.py 모두 이미 끝나
+# 있어서 데이터만 채우면 작동.
+#
+# [Why]
+# - KR 패시브 진행도 ~55% → ~80% 도달 (HMM·Crash/Surge·ERP 후 마지막 미구현 영역이었음)
+# - 미국 패시브와 기능 parity 확보
+# - 거시 → 경기국면 → 섹터 추천 한 묶음 (라벨이 '거시경제' 인 이유: PMI/spread/ANFCI 등으로
+#   국면 분류) 의 KR 등가가 사용자 의사결정에 핵심 가이드
+#
+# [신규 — migrations/2026_05_03_add_kr_sector_macro_columns.sql (60 LOC)]
+# sector_macro_raw 에 KR 14컬럼 ALTER (NULLable, sparse). UNIQUE(region,date) 재사용.
+#   kr_indpro_yoy / kr_yield_spread / kr_credit_spread / kr_unemp_yoy / kr_unemp_rate /
+#   kr_permit_yoy / kr_retail_yoy / kr_capex_yoy / kr_income_yoy /
+#   kr_cpi_yoy / kr_gdp_yoy / kr_m2_yoy /
+#   kr_indpro_chg3m / kr_capex_yoy_chg3m  (derived 2)
+# US 행은 KR 컬럼 NULL, KR 행은 US 컬럼 NULL — 같은 테이블 안에서 region 만으로 분기.
+#
+# [수정 — collector/ecos_macro.py (B.0 선결)]
+# 1) SPECS dict 분리 — RATE_SPECS (매수 시그널용 6개) / SECTOR_MACRO_SPECS (sector cycle 5개)
+#    SPECS = {**RATE_SPECS, **SECTOR_MACRO_SPECS}  # fetch_ecos_series 호환 유지
+#    fetch_macro_rate_kr() 의 순회 대상을 RATE_SPECS.keys() 로 좁힘 — 매수 시그널 호출이
+#    sector cycle 거시 12종까지 끌고 와 호출 폭증하는 사고 방지.
+# 2) _ecos_time_to_date() 에 Q cycle 분기 추가 — '2024Q1' → 2024-01-01.
+#    GDP 같은 분기 데이터가 그대로 두면 KeyError 로 통째 버려지던 버그 fix.
+# 3) SECTOR_MACRO_SPECS 5종 추가:
+#    kr_cpi (901Y009/0/M), kr_gdp (200Y001/10101/Q), kr_unemp_rate (901Y027/I16A/M),
+#    kr_m2 (101Y004/BBHA00/M), kr_household_income (901Y057/A00/Q)
+#    ⚠️ 통계표 코드는 ECOS StatisticItemList 로 1회 sweep 검증 권장.
+#
+# [신규 — collector/kosis_macro.py (~120 LOC)]
+# KOSIS Open API 로 4종 거시 신규 수집 (FRED INDPRO/PERMIT/RRSFS/ANDENO 등가):
+#   kr_indpro (101/DT_1F31501/T1)  광공업생산지수
+#   kr_retail (101/DT_1KS1003/T1)  소매판매액지수
+#   kr_capex  (101/DT_1F31503/T2)  설비투자지수
+#   kr_permit (116/DT_MLTM_5345/T1) 건축허가 면적
+# 패턴은 collector/kosis_migration.py 와 동일 (httpx + KOSIS_API_KEY).
+# 실패 시 빈 list 반환 — 한 시리즈 실패해도 나머지는 진행.
+#
+# [신규 — collector/sector_macro_kr.py (~170 LOC)]
+# US sector_macro.py 의 KR 등가. ECOS (5+3 시장금리) + KOSIS (4) 통합 aggregator.
+# fetch_sector_macro_kr(months=240) → MS 인덱스 wide DataFrame (12 컬럼 + derived 2).
+# 핵심 처리:
+#   - 분기 데이터(GDP, 가계소득) 는 .resample('MS').last().ffill(limit=2) — 분기 첫달에 값,
+#     다음 두 달 ffill (전 분기 값 유지)
+#   - YoY 변환 (.pct_change(12)*100) — 시리즈별로 _yoy() helper
+#   - kr_yield_spread = 10Y - 3Y, kr_credit_spread = corp_aa3y - 3Y (derived raw level)
+#   - kr_indpro_chg3m / kr_capex_yoy_chg3m = .diff(3) (모멘텀)
+#   - dropna(how='all') — 모든 컬럼 NaN 인 초기 행만 제거 (부분 NaN 행 유지)
+# to_sector_macro_kr_records(df) → upsert_sector_macro 호출용 dict (region='kr').
+#
+# [수정 — collector/sector_etf_kr.py (+130 LOC)]
+# 1) ALL_HOLDINGS_KR 신규 — KR 사용자 자주 보유 ETF 8종 (069500/102110/226490/232080/
+#    229200/278530/360750/252670)
+# 2) fetch_sector_etf_returns_kr(macro_start, etf_start='2010-01-01') 신규 — 10 sector +
+#    8 holding ETF 월별 수익률 두 DataFrame 반환. 기존 _etf_ohlcv_dual_source 재사용
+#    (pykrx → FDR 폴백). KR 일부 ETF 상장 후 짧으면 NaN 그대로 — feature2_sector_cycle 의
+#    바뀐 dropna 정책이 처리.
+# 3) fetch_sector_etf_per_pbr_kr() 1차 fallback 구현 — 빈 stub 이었던 것을 KOSPI 시장 평균
+#    PER/PBR (collector/market_data_kr.fetch_kospi_per_pbr) 을 모든 섹터에 동일 적용.
+#    정확도↓ ticker별 z-score 변별력 약하지만 화면은 즉시 채워짐. 정확한 ETF holdings
+#    가중평균 (pykrx get_etf_portfolio_deposit_file) 은 Stage 2 별도 PR.
+#
+# [신규 — processor/sector_valuation_kr_backfill.py (~100 LOC)]
+# US sector_valuation_backfill 의 KR 등가. PER/PBR proxy 공식:
+#   PER_t ≈ PER_today × (Close_t / Close_today)
+# 60개월 × 10 ETF = 600행 sector_valuation 테이블 upsert (region='kr').
+# 월말 종가 추출은 pykrx → FDR 폴백 (_etf_ohlcv_dual_source 재사용).
+#
+# [수정 — processor/feature2_sector_cycle.py (region 분기 + dropna 정책 변경)]
+# 1) FEATURE_COLS_US (10) / FEATURE_COLS_KR (14) 분리. PHASE_SCORE_COLS dict — region
+#    별 level/momentum 컬럼 매핑.
+# 2) _map_states_to_phases(model, feature_cols, region) — 인덱스 동적 조회로 안전화
+#    (feature_cols.index(level_col) — 컬럼 순서 변경 시도 안전).
+# 3) run_sector_cycle(macro, sector_ret, holding_ret, region='us') 시그니처 변경 — region
+#    파라미터로 SECTOR/HOLDING/feature_cols 분기.
+# 4) 핵심 dropna 정책 변경 — 기존 macro.join(sector_ret).join(holding_ret).dropna() 가
+#    KR ETF 일부 상장 < 24개월일 때 학습 데이터 거의 0행으로 만드는 사고 방지:
+#    a) df_macro = macro[available_features].dropna()  — FEATURE_COLS 만 dropna
+#    b) sector_ret/holding_ret 는 available_cols 만 left join (NaN 허용)
+#    c) HMM 학습 X = df_macro 만 사용 (sector NaN 무관)
+#    d) 국면별 평균은 컬럼별 .mean(skipna=True), notna().any() 로 무의미 컬럼 제외
+#    US 동작도 같이 안전해짐 (회귀 무).
+#
+# [신규 — scripts/train_kr_sector_cycle.py (~120 LOC)]
+# 사용: python -m scripts.train_kr_sector_cycle --months 240
+# 흐름:
+#   1) fetch_sector_macro_kr(months) → KR 거시 12+derived 2
+#   2) upsert_sector_macro(records, region='kr') — 청크 200개씩
+#   3) fetch_sector_etf_returns_kr(macro_start) — 18 종목 (10 sector + 8 holding)
+#   4) run_sector_cycle(macro, sector_ret, holding_ret, region='kr')
+#   5) upsert_sector_cycle(result, region='kr')
+#   6) (선택) backfill_sector_valuations_kr(months=60)
+# .pkl 저장 안 함 — US 도 매번 학습+추론 (월별 데이터라 비용 작음).
+#
+# [수정 — scheduler/job_kr.py Step 8/9 추가]
+# 7) crash_surge 직전에 8) sector_cycle + 9) sector_valuation 삽입:
+#   8) fetch_sector_macro_kr → upsert_sector_macro → fetch_sector_etf_returns_kr →
+#      run_sector_cycle(region='kr') → upsert_sector_cycle(region='kr')
+#      각 단계 try/except 분리 — 일부 실패해도 다음 단계 진행
+#   9) fetch_sector_etf_per_pbr_kr → upsert_sector_valuation(region='kr')
+#
+# [수정 — database/repositories.py:232 fetch_sector_macro_history]
+# select 절 확장 — US 9 컬럼만 → US 10+derived 2 + KR 12+derived 2 = 26 컬럼 전체.
+# region='kr' 행에서 KR 컬럼 보이게 + region='us' 행은 기존 동작 유지 (sparse → NULL 허용).
+#
+# [수정 — static/js/sector.js (~80 LOC)]
+# 1) _isKr() helper — window.getRegion() === 'kr'
+# 2) _MACRO_KEYS_US / _MACRO_KEYS_KR / _SECTOR_KEYS_US / _SECTOR_KEYS_KR 상수
+# 3) getMacroLabels() / getSectorLabels() / getMacroDesc() 모두 region 분기
+# 4) MACRO_GOOD_HIGH / MACRO_NEUTRAL — KR 14키 추가 (CPI 중립=2.0 BOK 타깃, 실업률=3.0)
+# 5) formatMacroValue(key, val) helper — _RAW_LEVEL_KEYS Set 으로 raw level (PMI/ANFCI/
+#    실업률/spread) 은 toFixed, 나머지 YoY% 는 signStr+'%'. 매크로 스냅샷 + spark line
+#    display 양쪽 통합.
+# 6) macro-history indicators (8 spark line) — region 별 키 세트 분기
+#
+# [수정 — static/js/i18n.js — 44 항목 (KO/EN 22개 × 2)]
+# - sector.139260~227560 (KR 10 ticker 한글/영문 라벨)
+# - macro.kr_indpro_yoy~kr_capex_yoy_chg3m (KR 14 매크로 라벨)
+# - macroDesc.kr_* (12 매크로 설명)
+#
+# [검증]
+# - 모든 .py 파일 ast.parse OK
+# - sector.js / i18n.js node --check OK
+# - feature2_sector_cycle.py 회귀 — US run_sector_cycle 의 dropna 정책 변경 (FEATURE_COLS
+#   만 dropna + sector_ret left join) 도 US 데이터에 적용되지만, US ETF 모두 1999~ 상장이라
+#   기존 inner join 결과와 동일 (변화 무).
+# - repositories.fetch_sector_macro_history(region='us') — KR 컬럼 NULL 로 응답되지만 sector.js
+#   가 region 분기로 US 키만 사용해 무관.
+#
+# [사용자 액션 — 순서대로]
+# 1. Supabase SQL Editor 에서 마이그레이션 실행:
+#    migrations/2026_05_03_add_kr_sector_macro_columns.sql
+#    검증: SELECT column_name FROM information_schema.columns
+#          WHERE table_name='sector_macro_raw' AND column_name LIKE 'kr_%' → 14행
+# 2. ECOS_API_KEY / KOSIS_API_KEY 환경변수 설정 확인 (.env)
+# 3. 1회 학습 + 적재:
+#    python -m scripts.train_kr_sector_cycle --months 240
+#    (~5~10분, ECOS+KOSIS API 호출, sector_macro_raw 270행 + sector_cycle_result 1행 +
+#     sector_valuation 600행)
+# 4. 다음 KST 16:00 KR 스케줄러부터 매일 1행 갱신 (Step 8/9 자동 실행)
+# 5. 브라우저 hard refresh → 헤더 region 토글 KR → 5번째 탭 (거시경제) 클릭:
+#    - Phase Card (회복/확장/둔화/침체) + 갭 바
+#    - Top 3 Sectors (091160 등 KR ticker + 한글 라벨)
+#    - Sector Heatmap 4행 × 10열
+#    - AI 해설 한국어
+#    - Phase 카드 클릭 → Macro Snapshot 12 KR 카드 + 8 spark line
+#
+# [한계]
+# - ECOS 통계표 코드 (901Y009 CPI 등) 는 ECOS UI 검증 필요 — 잘못된 코드 시 해당 시리즈만 빈 결과
+# - KOSIS 통계표 코드 (DT_1F31501 등) 도 동일 검증 필요
+# - sector_valuation 1차 fallback (KOSPI 시장 평균 동일 적용) 은 ticker별 z-score 변별력 약함
+#   → Stage 2 (pykrx ETF holdings 가중평균) 별도 PR 필요. 비용 500 API 호출이라 일별 1회 cron OK.
+# - KR 분기 데이터 (GDP, 가계소득) 는 분기 마지막 발표월 이후 ffill — 월말 시점에 신호 지연
+# - Phase 라벨 (회복/확장/둔화/침체) 은 US 와 동일 라벨 사용 — KR 경기 사이클과 의미 차이 가능성
+#   존재. 필요 시 i18n 라벨에 '(KR 추정)' 부기 가능.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [92] 2026-05-04 (UTC) — KR Sector Cycle 1차 실행 fix (ECOS 통계표 코드 검증 + dropna 완화)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# [91] 마무리 후 production 에서 train_kr_sector_cycle 1차 실행 → 4건 ECOS 에러 + 4건 KOSIS
+# 에러 + dropna 미흡으로 학습 실패. ECOS API 직접 검증 (StatisticTableList + StatisticItemList
+# sweep) 으로 정확한 통계표/항목 코드 확정 + Q cycle 형식 fix + dropna 정책 추가 완화.
+# 결과: 12 매크로 중 10개 가용 (kr_income_yoy / kr_permit_yoy 만 빠짐), HMM 학습 성공.
+# 1차 production 실행 검증: 2026-04-01 → 🍂 둔화 (99.9%), Top3 = [139260 IT, 091160 반도체,
+# 341850 리츠].
+#
+# [Why — 4개 critical 버그 발견]
+# 1. ECOS Q cycle (GDP/가계소득) — _ecos_series_monthly 가 from/to 를 'YYYYMM' 으로 보냈는데
+#    Q 주기는 'YYYYQ#' 형식이라 ERROR-101 ('주기와 다른 형식'). 형식 분기 추가.
+# 2. ECOS 통계표/항목 코드 모두 부정확 — 200Y001 (GDP), 901Y027/I16A (실업률), 101Y004/BBHA00
+#    (M2), 901Y057/A00 (가계소득) 모두 INFO-200 (데이터 없음). KeyStatisticList 100대 지표 +
+#    StatisticTableList sweep 으로 정확한 코드 확정.
+# 3. KOSIS tblId 4종 모두 무효 (DT_1F31501 등 → 21 에러). ECOS 에 광공업/소매/설비투자 모두
+#    있어 KOSIS 의존 제거.
+# 4. dropna 정책 — feature_cols 14개 중 일부만 fetch 성공해도 전체 14컬럼 dropna 면 0행 (부분
+#    NaN 행 모두 제거). non_empty 컬럼 subset 만 사용하도록 추가 완화.
+#
+# [수정 — collector/sector_macro_kr.py:_ecos_series_monthly Q cycle fix]
+# elif cycle == "Q" 분기 추가:
+#   q_now = (today.month - 1) // 3 + 1
+#   from_t = f"{fy}Q{fq}", to_t = f"{today.year}Q{q_now}"
+# (이전: M/Q 모두 'YYYYMM' 으로 통합 → Q 면 ECOS 가 ERROR-101)
+#
+# [수정 — collector/ecos_macro.py:SECTOR_MACRO_SPECS 7종 정확한 코드]
+# 검증 후 코드 (2026-05-04 기준 ECOS API):
+#   kr_cpi             → 901Y009 / 0       / M  (소비자물가지수 총지수, 1965~)
+#   kr_gdp             → 200Y108 / 10601   / Q  (국내총생산에 대한 지출, 1960Q1~)
+#   kr_unemp_rate      → 901Y027 / I61BC   / M  (실업률, 1999.06~)
+#   kr_m2              → 161Y007 / BBGS00  / M  (M2 말잔 계절조정, 2003~)
+#   kr_indpro          → 901Y033 / AB00    / M  (광공업생산지수, 2000~)
+#   kr_retail          → 901Y100 / G0      / M  (소매판매액지수 총지수, 1995~)
+#   kr_capex           → 901Y066 / I15B    / M  (설비투자지수 계절조정, 월별)
+# (이전 무효 코드: kr_household_income/kr_unemp_rate/kr_m2/kr_gdp 모두 INFO-200)
+#
+# [수정 — collector/sector_macro_kr.py:fetch_sector_macro_kr — KOSIS 의존 제거]
+# ECOS 7종 우선 사용. KOSIS 는 건축허가 (kr_permit) 만 시도 — tblId 미검증이라 실패해도 NaN
+# 컬럼으로 graceful (학습에서 자동 제외). 가계소득 (kr_household_income) 도 ECOS 통계표
+# 미검증이라 일단 빈 Series 로 명시적 처리.
+#
+# [수정 — processor/feature2_sector_cycle.py:run_sector_cycle dropna 추가 완화]
+# 기존: macro[available_features].dropna() — 부분 NaN 행 모두 제거
+# 변경: non_empty = [c for c in available_features if macro[c].notna().any()]
+#       df_macro = macro[non_empty].dropna()  # 데이터 0행 컬럼은 처음부터 제외
+#       feature_cols_used = non_empty  # 후속 단계 모두 이걸 사용 (X_df / state_to_phase /
+#                                       macro_snapshot)
+# 결과: ECOS 일부 시리즈 무효일 때도 가용 컬럼만으로 학습 성공.
+#
+# [수정 — feature2._map_states_to_phases momentum col fallback]
+# 기존: feature_cols.index(mom_col) ValueError 시 fallback 없음
+# 변경: mom_col not in feature_cols 면 level only 점수 (model.means_[:, i_level])
+# KR 환경에서 indpro_chg3m 가용 — 정상 작동, 안전망.
+#
+# [검증 — production 1차 실행 결과]
+# - sector_macro 246건 upsert (region=kr)
+# - 가용 컬럼 13/14 (kr_income_yoy 만 NaN — KOSIS 가계동향 leaf tblId 미검증, 나머지 13개 OK)
+# - HMM 학습 OK, LL/sample = -10.04 (컬럼 13개로 학습)
+# - 결과: 2026-04-01 → 🍂 둔화 (100.0% 확률)
+# - Top3: 139260 (TIGER 200 IT), 091160 (KODEX 반도체), 266420 (KODEX 헬스케어)
+# - sector_cycle_result 1행 upsert (region=kr)
+# - sector_valuation backfill — 이 개발 환경에서 KRX 차단으로 fetch 실패, production 환경에선
+#   정상 작동 예상 (1차 fallback: KOSPI 시장 평균 PER/PBR 동일 적용)
+#
+# [추가 fix — kr_permit ECOS 코드 검증]
+# 901Y105 / ALL / M (주택건설인허가실적 전국, 2007.01~2026.02). 901Y037 (건축허가현황) 은
+# 데이터 시작 201901~로 짧아 부적합 — 901Y105 로 18년치 확보.
+#
+# [추가 fix — home.js KR_SUPPORTED_TILES 에 'macro' 추가]
+# 사용자 보고: 홈 화면 KR 모드에서 "거시경제" 타일이 "준비 중" 회색 처리 — KR_SUPPORTED_TILES
+# 에 'macro' 누락. [91] 에서 신호탭 ('signal') 추가했던 패턴 동일. home.js?v=30 + main.js?v=129
+# + sector.js?v=6 (cache-bust).
+#
+# [추가 fix — KR 모드에서 ETF ticker(6자리) 숨기고 한글 이름 메인]
+# 사용자 보고: Top Sectors 와 Sector Heatmap 헤더에 ticker(139260 등) 가 메인이고 한글 이름이
+# 부제로 표시 — KR 사용자에겐 6자리 숫자 무의미. _isKr() 분기 추가:
+# (1) Top3 sc-top-item: KR=label 만 (font-bold) / US=ticker + label
+# (2) Heatmap 헤더 sc-hm-col: KR=한글 이름만 / US=ticker<br>한글 이름
+# i18n 라벨 단순화: 'IT (TIGER 200 IT)' → 'IT', '반도체 (KODEX 반도체)' → '반도체' 등
+# (Heatmap 셀 폭 좁아 짧을수록 보기 좋음). sector.js?v=7.
+#
+# [향후 작업 (별도 PR)]
+# - kr_household_income (가계소득) — KOSIS 가계동향조사 (E_2_002_001 전국명목) leaf 통계표
+#   ORG_ID/TBL_ID 검증 필요. KOSIS API explorer 깊이 깊어 추가 작업 — 분기 데이터라 노이즈
+#   크고 학습 영향 작아 우선순위 낮음.
+# - sector_valuation Stage 2 — pykrx get_etf_portfolio_deposit_file 가중평균 (별도 PR).
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [93] 2026-05-04 (UTC) — AI 해설 (5탭) DB 캐시 + 스케줄러 precompute
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자 보고: 거시경제 탭 (5번 탭) 진입 시 로딩이 느림. 진단 결과 데이터 endpoint
+# (/api/sector-cycle/current/macro-history/valuation) 는 모두 DB SELECT 만 → 빠름. 느린 건
+# /api/market-summary/ai-explain — in-memory 캐시만 있어 TTL 만료/재시작 시 LLM(Groq) 즉석 호출
+# 1~3초. [88] 의 home-headline 패턴 (DB 캐시 + 스케줄러 precompute) 을 5탭 AI 해설에 미러링.
+#
+# [Why]
+# - "Supabase 미리 적재 + 사용자 클릭은 단순 fetch" 구조가 일관되게 모든 endpoint 적용
+# - 모든 5탭 (fundamental/signal/sector/sector-val/sector-mom) 의 AI 해설 첫 진입 즉시 응답
+# - 서버 재시작 시 in-memory 증발 → DB 캐시가 fallback 보장
+#
+# [신규 — migrations/2026_05_04_add_ai_explain_cache.sql]
+# ai_explain_cache 테이블 — UNIQUE (tab, lang, region). region='kr' 행과 region='us' 행 분리.
+# sector-mom 은 region 무관이지만 region='us' 로 통일 (스키마 단순).
+# 최대 5 tab × 2 lang × 2 region = 20 entry. 작음.
+#
+# [수정 — database/repositories.py]
+# upsert_ai_explain(tab, lang, region, explanation, generated_at) — UNIQUE 충돌 시 update
+# fetch_ai_explain(tab, lang, region) → dict | None
+# 패턴: ai_headline 함수 동일 (region+lang → tab+lang+region 으로 키 1개 더).
+#
+# [수정 — api/routers/market_summary.py]
+# 1) _generate_ai_explain(tab, lang, region) helper 추출 — _build_explain_text + _groq_call +
+#    텍스트 정리 + generated_at 부착. 실패 시 None.
+# 2) precompute_ai_explain(tab, lang, region) 신규 — 스케줄러용. _generate 결과를
+#    upsert_ai_explain + in-memory 캐시 동시 채움.
+# 3) get_ai_explain endpoint 3-tier fallback 으로 변경:
+#    1차 in-memory cache (TTL 30분) → 2차 fetch_ai_explain DB → 3차 LLM 즉석 호출
+#    3차 호출 시 DB + memory 모두 채워 다음 호출 hit. 응답에 generated_at 포함.
+#
+# [수정 — scheduler/job_kr.py Step 10 추가]
+# 7) crash_surge 다음에 10) ai-explain precompute. KR × (fundamental/signal/sector) × (ko/en)
+#    = 6 entry. region 무관 sector-val/sector-mom 은 US 파이프라인에서 담당.
+#
+# [수정 — scheduler/job.py Step 11 추가]
+# 10) home-headline 다음에 11) ai-explain precompute. US × 5탭 × (ko/en) = 10 entry.
+#    sector-val/sector-mom 포함 (전역).
+#
+# [검증]
+# - python -c "import ast; ast.parse(open('...').read())" 4개 파일 OK
+# - market_summary.py 2-tier (memory + DB) → 3-tier (memory + DB + LLM fallback) 변환 동작
+#   3차 호출 시 upsert + memory 채움 → 다음 호출은 1차 hit (즉시).
+#
+# [사용자 액션]
+# 1. Supabase SQL Editor 에서 마이그 실행:
+#    migrations/2026_05_04_add_ai_explain_cache.sql
+# 2. 다음 스케줄 사이클 (KST 16:00 KR job_kr / KST 09:00 US job) 부터 자동 적재
+# 3. 수동 즉시 적재 원하면:
+#    python -c "from api.routers.market_summary import precompute_ai_explain;
+#               [precompute_ai_explain(t,l,r) for t in ['fundamental','signal','sector']
+#                for l in ['ko','en'] for r in ['us','kr']]"
+#
+# [한계]
+# - LLM 호출 비용은 그대로 (Groq) — 빈도만 줄임 (사용자 클릭마다 → 일별 1회)
+# - 데이터 변경 (예: sector_cycle 결과 갱신) 후 24시간 동안은 이전 해설 표시 가능 — 실시간성
+#   덜 중요한 영역이라 trade-off 수용
+# - sector-mom 은 region 무관이라 region='us' 만 적재. KR 모드에서도 같은 해설 표시.
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# [94] 2026-05-04 (UTC) — KR 섹터 밸류에이션 PDF 가중평균 (1차 fallback → 정확)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자: "국내주식 섹터 밸루에이션 구현". 기존 fetch_sector_etf_per_pbr_kr 가
+# 모든 10개 ETF 에 같은 KOSPI 평균 PER/PBR 적용 (1차 fallback) → z-score 가
+# 가격 비율로만 차이나 변별력 부족. 'sector-val' 타일도 KR 비활성.
+#
+# 사용자 결정 (AskUserQuestion):
+#   - PER/PBR 산출: PDF 가중평균 (pykrx.get_etf_portfolio_deposit_file → 종목별 PER → 비중 가중)
+#   - holdings 갱신: 주 1회 (TTL 7일 JSON 캐시)
+#
+# [신규 — collector/etf_holdings_kr.py]
+# - fetch_etf_holdings_kr(force_refresh=False) — 10 ETF holdings 캐시 (models/etf_holdings_kr.json)
+#     · _is_fresh: TTL 7일 검증
+#     · _fetch_pdf_for_ticker: pykrx.get_etf_portfolio_deposit_file 호출, '비중' 컬럼 우선
+#       (없으면 계약수×종가 시총 추정 fallback)
+# - get_holdings_for_etf(ticker) — 헬퍼
+#
+# [수정 — collector/sector_etf_kr.py]
+# - 신규 _fetch_kospi_market_per_pbr() — fallback 시장 평균
+# - 신규 _fetch_all_stock_fundamentals(ref_date) — pykrx.get_market_fundamental(KOSPI/KOSDAQ)
+#   2회 호출로 전체 종목 PER/PBR 1번에 fetch (적자 per≤0 미포함)
+# - 신규 _weighted_avg(holdings, stock_fund, key) — 비중 가중평균 + 부재/적자 비중 재정규화
+#   coverage = Σ(w_valid) / Σ(w_all) 반환
+# - 교체 fetch_sector_etf_per_pbr_kr() — 가중평균 산출, coverage<50% 또는 빈 holdings 면
+#   per_ticker fallback (KOSPI 평균). 로그 "PDF 가중평균 N건 / fallback N건 / coverage avg X%"
+#
+# [수정 — static/js/home.js]
+# - KR_SUPPORTED_TILES 에 'sector-val' 추가 — 'sector-val' 타일 KR 모드 활성
+# - home.js?v=30 → ?v=31
+#
+# [scheduler 변경 없음]
+# job_kr.py Step 9 호출부 그대로 — 내부 로직만 정확 가중평균으로 교체.
+#
+# [검증]
+# - python -c "from collector.etf_holdings_kr import fetch_etf_holdings_kr" OK
+# - _weighted_avg unit test: holdings=[50,30,20], fund={001:10, 002:20} → PER=13.75, cov=80% ✓
+# - 이 환경 KRX 차단 → 종목 fundamental 0개 → 10건 모두 fallback 동작 정상
+# - node --check home.js OK
+#
+# [사용자 액션 (production)]
+# 1. 첫 실행 시 holdings 캐시 자동 생성 (10 ETF PDF fetch, ~30초)
+# 2. 다음 스케줄 (KST 16:00 KR job_kr) 부터 매일 ETF 별 다른 PER/PBR 적재
+# 3. 브라우저 hard refresh → 홈탭 'sector-val' 타일 활성 + 변별력 있는 z-score 표시
+#
+# [한계]
+# - 이 환경 KRX 차단 → fallback 만 동작 (테스트는 코드 구조 검증 수준)
+# - 적자 종목 多한 섹터 (헬스케어 등) 는 covered 비중 낮아질 수 있음 → 50% 미만이면 fallback
+# - 우선주·해외 ADR 종목은 pykrx fundamental 부재 — 같은 fallback
+# - holdings TTL 7일 → ETF 재구성 (분기 1회) 직후 며칠 지연 가능
+# - z-score 5년 history 사용 — 새 가중평균 적재 후 1~2주 흔들림, 한 달 후 안정화
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [94] 2026-05-04 (UTC) — KR 섹터 모멘텀 (sector-mom) 별 탭 KR 포팅
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 미국 sector-mom 별 탭 (홈 "섹터 모멘텀" 타일 → tab-sector-mom) 의 KR 포팅. 11종 SPDR 의
+# 1주일·1개월 누적 수익률 + 랭킹 → KR 모드에선 KODEX/TIGER 10종 (139260 IT 등) 매핑.
+# index_price_raw region='kr' 데이터가 매일 적재 중이라 (job_kr.py Step 5) 백엔드 region
+# 분기만 추가하면 즉시 동작. 5 파일 ~55 LOC 변경.
+#
+# [Why]
+# 사용자 요청 — KR 사용자에게도 섹터 모멘텀 랭킹 표시. 인프라 (DB region='kr' 행 + region.js
+# fetch monkey-patch + ai_explain_cache [93]) 거의 갖춰져 백엔드 region 분기 + 프론트 ticker
+# 한글 매핑만 하면 완성.
+#
+# [수정 — processor/feature7_sector_momentum.py]
+# - import 변경: SECTOR_VALUATION_ETFS 모듈 상단 import 제거 (region 별 동적 import)
+# - _ticker_map_for_region(region) helper 신규 — 'us' → SECTOR_VALUATION_ETFS, 'kr' → SECTOR_ETF_KR
+# - compute_sector_momentum(region: str = 'us') 시그니처 변경
+#   * DB query 에 .eq("region", region) 필터 추가 — us/kr 분리 조회
+#   * ticker_map 으로 영문/한글 sector_name 분기
+#   * 반환 dict 에 'region' 필드 추가
+#
+# [수정 — api/routers/sector_cycle.py:/momentum]
+# - get_momentum(region: str = Query('us')) 시그니처 변경 + _norm_region 정규화
+# - _momentum_cache 를 region 별 dict 분리: {region: {data, ts}} (이전 단일 캐시 → us 첫 호출이
+#   kr 응답 덮어쓰는 버그 방지)
+#
+# [수정 — api/routers/market_summary.py:_build_explain_text]
+# - 'sector-mom' 탭의 compute_sector_momentum() 호출 → compute_sector_momentum(region=region)
+# - tab + lang + region 별 ai_explain_cache 자동 분리 ([93] 적용)
+#
+# [수정 — static/js/home.js]
+# - SECTOR_KR dict 에 KR 10 ticker 한글 매핑 추가 (139260: 'IT' / 091160: '반도체' 등)
+# - krSector(ticker, fallback) 헬퍼 변경 없음 — US/KR 같은 dict 에서 lookup
+# - KR_SUPPORTED_TILES 에 'sector-mom' 추가 (signal/macro/sector-val 패턴 동일)
+# - 미적용 시 KR 모드에서 sector-mom 타일 회색 처리 ("준비 중")
+#
+# [수정 — scheduler/job_kr.py Step 10]
+# - ai-explain precompute 탭 리스트: ('fundamental', 'signal', 'sector') →
+#   ('fundamental', 'signal', 'sector', 'sector-mom')
+# - KR × 4탭 × 2lang = 8 entry 매일 적재
+#
+# [수정 — templates/stocks.html]
+# - home.js v=31 → v=32 cache-bust
+#
+# [검증]
+# - python -m ast 4개 파일 OK
+# - 백엔드 단위 테스트 (Stage D.1):
+#   compute_sector_momentum('kr')['momentum'] → KR ticker (139260, '반도체') 등
+#   compute_sector_momentum('us')['momentum'] → SPDR (XLK, 'Technology') 등
+#
+# [사용자 액션]
+# 1. 브라우저 hard refresh — momentum 데이터는 이미 DB 적재 중이라 즉시 응답
+# 2. KR 모드 → 홈 "섹터 모멘텀" 타일 활성 → 클릭 → 한글 라벨 + 랭킹 표시
+# 3. AI 해설 1차 진입은 LLM fallback ([93] 3-tier), 다음 KST 16:00 KR 스케줄러 사이클 후 즉시
+#
+# [한계]
+# - KR sector ETF 중 일부 (341850 리츠 등) 상장 후 21 거래일 미만이면 1M return None 표시
+#   (정상 동작 — index_price_raw 누적 21일 이후 자동 채워짐)
+# - sector-mom AI 해설은 [93] 의 ai_explain_cache 에 저장 — 24시간 캐시 (TTL)

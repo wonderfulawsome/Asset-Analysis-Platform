@@ -40,9 +40,7 @@
     if (document.querySelector('.kr-coming-soon')) return;
     const banner = document.createElement('div');
     banner.className = 'kr-coming-soon';
-    banner.innerHTML = '<b>🇰🇷 한국 시장 데이터 준비 중</b><br>'
-      + 'KOSPI · VKOSPI · KODEX/TIGER 섹터 ETF 데이터 수집 인프라 구축 완료. '
-      + '실제 데이터 연결은 Stage 2 에서 진행됩니다.';
+    banner.innerHTML = '국내 주식 탭 준비 중';
     const home = document.getElementById('home-view');
     if (home) {
       home.insertBefore(banner, home.firstChild);
