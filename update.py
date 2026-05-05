@@ -7586,3 +7586,128 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # [검증]
 # - python -m ast market_summary.py OK
 # - 사용자 화면 새로고침 시 즉시 적용 (frontend cache-bust 불필요 — 백엔드 응답만 변경)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [98] 2026-05-05 (UTC) — UI 디자인 워크스페이스 워크플로우 재정의 (Stop hook 해제)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# [96] 에서 도입한 Stop hook 자동 미러가 사용자 의도와 안 맞아 해제. 사용자 명시:
+# "디자인(프론트) 를 그대로 본 폴더에서 클론해오는거야. 그리고 이후에 내가 너에게 디자인
+# 변경점을 말하면 그 부분만 바꾸는거지" — 즉 디자인 폴더는 단순 미러가 아니라 디자인
+# 변경 작업장. 매 턴 종료 시 자동 미러는 디자인 폴더의 작업물을 본폴더 버전으로
+# 덮어쓰므로 충돌.
+#
+# [수정 파일]
+# - .claude/settings.json : hooks 키 제거, schema 키만 남김
+#     {
+#       "$schema": "https://json.schemastore.org/claude-code-settings.json"
+#     }
+# - /root/UI 디자인/CLAUDE.md : 워크플로우 재작성
+#     · "단방향 미러" 표현 → "클론 + 디자인 변경 작업장"
+#     · 자동 sync 없음 명시
+#     · 본폴더 반영은 사용자 명시 요청 시에만 ("이거 본폴더에도 넣어")
+#     · 본폴더가 변경되면 사용자가 "sync 시켜" 요청 시 sync_ui_design.sh 수동 실행
+#     · sync_ui_design.sh 는 --delete 옵션이라 디자인 작업 중 실행 시 작업물 손실 경고
+# - logic/structure.md : 마지막 갱신 시점 추가
+#
+# [수정 안 한 파일]
+# - scripts/sync_ui_design.sh : 그대로 보존 — 사용자가 "sync 시켜" 요청 시 수동 실행용
+#
+# [Why — Stop hook 자동 미러의 문제]
+# 사용자 시나리오: "home.css hover 효과를 더 화려하게 바꿔줘" → Claude 가 디자인 폴더의
+# static/css/home.css 수정 → 사용자 확인 → 마음에 들면 본폴더에 반영. 자동 Stop hook 이
+# 켜져 있으면 매 턴 종료 시 본폴더(미수정) → 디자인 폴더(수정됨) rsync --delete 로 디자인
+# 작업이 즉시 사라짐. 양방향 sync 는 충돌 위험으로 [96] 단계에서 사용자가 거부했음 →
+# 결국 자동 sync 자체를 빼는 것이 가장 깔끔.
+#
+# [Why — sync_ui_design.sh 는 보존]
+# 본폴더 프론트가 바뀐 후 (예: 새 페이지 추가, 컴포넌트 신규) 디자인 폴더를 다시 동기화하고
+# 싶을 때 사용자가 "sync 시켜" 한 마디로 호출 가능. 자동이 아니라 명시 호출이라 안전.
+#
+# [Why — 디자인 폴더 작업물의 본폴더 반영도 수동]
+# 사용자가 시안을 충분히 본 후 "이게 좋다"고 판단했을 때만 본폴더에 적용. Claude 가 임의로
+# 본폴더를 건드리면 production 영향 위험. 사용자 페르소나(개발자) 가 결정 게이트키퍼.
+#
+# [동작 흐름 (수정 후)]
+# 1. 본폴더 프론트 변경 → 사용자가 "sync 시켜" → Claude 가 sync_ui_design.sh 실행
+# 2. 사용자 디자인 변경 요청 → Claude 가 디자인 폴더 (예: static/css/home.css) 직접 수정
+# 3. 사용자 확인 → "이거 본폴더에도 넣어" → Claude 가 본폴더 동일 파일 수정
+# 4. 매 턴 종료 시 아무 자동 sync 도 일어나지 않음
+#
+# [검증]
+# - python3 -c 'import json; json.load(open(".../settings.json"))' OK (스키마만 남음)
+# - sync_ui_design.sh 그대로 동작 (수동 호출 시): rsync -a --delete static/templates/
+#   frontend-realestate "/root/UI 디자인/"
+# - /root/UI 디자인/sandbox/ 는 sync 대상 source 가 아니므로 수동 sync 실행 시에도 안전
+#   ([96] sandbox 파일 home_tiles_micro_v1.html 보존)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [99] 2026-05-05 (UTC) — 디자인 전용 호스트 서버 (포트 8001) + STATIC/TEMPLATES env
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자 명시 "디자인 전용으로 따른 호스트 서버 사용하길 원함". [98] 의 "디자인 폴더는 코드
+# 보관소로만, 화면은 본 레포 8000 만" 은 사용자 의도와 안 맞음 (디자인 작업 화면을 별도
+# 서버에서 즉시 확인하고 싶음) → 본 레포 api/app.py 의 static/templates 디렉토리를
+# 환경변수로 받게 수정. 디자인 서버는 cwd=본 레포 (백엔드 의존성 .env/models/ 그대로) +
+# STATIC_DIR/TEMPLATES_DIR 만 디자인 폴더로 오버라이드.
+#
+# [수정 파일]
+# - api/app.py — 3곳:
+#     # line ~140
+#     _STATIC_DIR = os.getenv('STATIC_DIR', 'static')
+#     _TEMPLATES_DIR = os.getenv('TEMPLATES_DIR', 'templates')
+#     app.mount('/static', StaticFiles(directory=_STATIC_DIR), name='static')
+#     templates = Jinja2Templates(directory=_TEMPLATES_DIR)
+#     # line ~178 (realestate SPA fallback)
+#     return FileResponse(os.path.join(_STATIC_DIR, 'realestate/index.html'))
+#     # line ~270 (TikTok verify file)
+#     file_path = os.path.join(_STATIC_DIR, 'tiktokPFHpLA0MzDof0SYGfC4gfqJEhsk65ZrR.txt')
+#
+# - /root/UI 디자인/CLAUDE.md — 워크플로우에 디자인 서버 8001 안내 추가
+# - logic/structure.md — 마지막 갱신 시점 추가
+#
+# [실행 명령]
+# 본 레포 (production):
+#   uvicorn api.app:app --reload  # port 8000, env 미지정 → 'static'/'templates' 기본값
+#
+# 디자인 서버 (port 8001):
+#   cd /root/Passive-Financial-Data-Analysis
+#   RUN_SCHEDULER=false \
+#     STATIC_DIR='/root/UI 디자인/static' \
+#     TEMPLATES_DIR='/root/UI 디자인/templates' \
+#     .venv/bin/uvicorn api.app:app --reload --port 8001 \
+#       --reload-dir '/root/UI 디자인/static' \
+#       --reload-dir '/root/UI 디자인/templates'
+#
+# [Why — 두 서버 동시 운영]
+# - 8000 (본 레포) = production, 사용자 검증·메인 화면
+# - 8001 (디자인) = 디자인 폴더 hot reload, 시안 즉시 확인
+# 사용자 워크플로우:
+#   "X 바꿔" → Claude 가 디자인 폴더 수정 → 8001 hot reload → F5 로 즉시 확인
+#   "본폴더에도 넣어" → Claude 가 본 레포 수정 → 8000 reload → production 반영
+#
+# [Why — env 오버라이드 방식]
+# 백엔드 의존성(.env, models/, catboost_info/, supabase 클라이언트 등) 은 cwd 기반이라
+# cwd=본 레포 유지. STATIC_DIR/TEMPLATES_DIR 만 디자인 폴더로 가리키면 화면 자원만
+# 분기. env 미지정 시 기본값 'static'/'templates' 라 production 동작 동일 (안전).
+#
+# [Why — RUN_SCHEDULER=false]
+# 디자인 서버에서 스케줄러 중복 실행 방지 (8000 본 레포가 이미 스케줄링).
+#
+# [검증]
+# - python3 -m py_compile api/app.py OK
+# - 디자인 서버 부팅: "Will watch for changes in these directories:
+#     ['/root/UI 디자인/static', '/root/UI 디자인/templates']" 한글 경로 watch OK
+# - curl http://127.0.0.1:8001/stocks → 200 OK (디자인 폴더 templates/stocks.html 서빙)
+# - 8000 (본 레포) 도 그대로 200 (env 미지정 기본값)
+# - hot reload: 디자인 폴더 파일 변경 시 uvicorn 자동 재시작 → 브라우저 F5 즉시 반영
+#
+# [한계]
+# - frontend-realestate (Vite React) 는 빌드 산출물(static/realestate/) 만 서빙되므로
+#   부동산 SPA 디자인은 별도 vite dev (5173) 또는 디자인 폴더에서 npm run build 필요
+# - models/ 모델 .pkl 은 본 레포 절대 경로(cwd) 기반이라 디자인 폴더 변경 영향 없음
+

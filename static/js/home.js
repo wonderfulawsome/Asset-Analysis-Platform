@@ -214,17 +214,20 @@
         const fgCol = colorByZ(v.per_z);
         const fgPct = v.per != null ? (v.per * 100).toFixed(1) + '%' : '-';
         const sign = v.per != null && v.per >= 0 ? '+' : '';
+        const lbl = labelByGap(v.per);   // 갭 절대값 기반 (직관적)
         return `
           <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
+          <div class="sv-label" style="color:${lbl.color};">${lbl.text}</div>
           <div class="sv-cell" style="background:${fgCol};">${sign}${fgPct}</div>`;
       }).join('');
       const sourceLine = data.as_of_date
         ? `<div class="sv-phase" style="font-size:11px;line-height:1.5;">Fundamental Gap = log(P_t/P_{t-12}) − log(EPS_t/EPS_{t-12}) = 12개월 가격 성장률 − 12개월 EPS 성장률. <strong style="color:#ef4444;">양수=가격이 EPS 보다 빨리</strong> (비싸짐) / <strong style="color:#3b82f6;">음수=EPS 가 가격보다 빨리</strong> (싸짐). as of <strong>${data.as_of_date}</strong>.</div>`
         : '';
       target.innerHTML = phaseLine + histLine + sourceLine + `
-        <div class="sv-grid" style="grid-template-columns: 1fr auto;">
+        <div class="sv-grid" style="grid-template-columns: 1fr auto auto; gap:6px 10px;">
           <div class="sv-h">섹터</div>
-          <div class="sv-h" style="text-align:right;">갭 (가격 − EPS)</div>
+          <div class="sv-h" style="text-align:center;">밸류</div>
+          <div class="sv-h" style="text-align:right;">갭</div>
           ${rows}
         </div>`;
     } catch (e) {
@@ -239,6 +242,17 @@
     if (z > 0)  return `rgba(220, 38, 38, ${a})`;
     if (z < 0)  return `rgba(37, 99, 235, ${a})`;
     return 'rgba(156, 163, 175, 0.2)';
+  }
+
+  // 갭 % (per 컬럼, 0.05 = 5%) 5단계 라벨 — 고평가/약간 고평가/부합/약간 저평가/저평가
+  // 갭 절대값 기반 (직관) — z-score 의 historical 분포 보정은 색상으로만 반영.
+  function labelByGap(p) {
+    if (p == null)   return { text: '–',          color: '#9ca3af' };
+    if (p >=  0.20)  return { text: '고평가',     color: '#dc2626' };
+    if (p >=  0.05)  return { text: '약간 고평가', color: '#f97316' };
+    if (p >  -0.05)  return { text: '부합',       color: '#9ca3af' };
+    if (p >  -0.20)  return { text: '약간 저평가', color: '#3b82f6' };
+    return              { text: '저평가',     color: '#1d4ed8' };
   }
 
   // 섹터 모멘텀 랭킹 테이블 (1주일 수익률 기준 랭킹)

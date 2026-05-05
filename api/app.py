@@ -136,9 +136,13 @@ app.add_middleware(
 # GZip 압축 — 마지막 add 가 outermost (Starlette 규약). JSON/HTML/JS/CSS 1KB+ 자동 압축.
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
-# 정적 파일을 /static url로 요청을 보냄
-app.mount('/static', StaticFiles(directory='static'), name='static')
-templates = Jinja2Templates(directory='templates')
+# 정적 파일을 /static url로 요청을 보냄.
+# STATIC_DIR/TEMPLATES_DIR env 미지정 시 기본값(상대경로) → production 동작 동일.
+# 디자인 전용 서버는 env 로 "/root/UI 디자인/static" "/root/UI 디자인/templates" 지정.
+_STATIC_DIR = os.getenv('STATIC_DIR', 'static')
+_TEMPLATES_DIR = os.getenv('TEMPLATES_DIR', 'templates')
+app.mount('/static', StaticFiles(directory=_STATIC_DIR), name='static')
+templates = Jinja2Templates(directory=_TEMPLATES_DIR)
 
 # regime.router의 요청을 /api/regime 경로로 등록
 app.include_router(regime.router,     prefix='/api/regime', tags=['시장 국면'])
@@ -173,7 +177,7 @@ def stats_page(request: Request):
 @app.get('/realestate')
 @app.get('/realestate/{path:path}')
 def realestate_spa(request: Request, path: str = ''):
-    return FileResponse('static/realestate/index.html')
+    return FileResponse(os.path.join(_STATIC_DIR, 'realestate/index.html'))
 
 # 파이프라인 헬스체크: 스케줄러 상태 + 모델 파일 존재 여부
 @app.get('/api/health')
@@ -265,7 +269,7 @@ def robots_txt():
 # TikTok 도메인 인증 파일
 @app.get('/tiktokPFHpLA0MzDof0SYGfC4gfqJEhsk65ZrR.txt')
 def tiktok_verify():
-    file_path = os.path.join('static', 'tiktokPFHpLA0MzDof0SYGfC4gfqJEhsk65ZrR.txt')
+    file_path = os.path.join(_STATIC_DIR, 'tiktokPFHpLA0MzDof0SYGfC4gfqJEhsk65ZrR.txt')
     with open(file_path, 'r') as f:
         return PlainTextResponse(f.read())
 

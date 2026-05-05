@@ -123,7 +123,7 @@ Passive-Financial-Data-Analysis/
 │   ├─ sync_ui_design.sh        ★ 본 → "/root/UI 디자인" 단방향 프론트 미러 (rsync --delete, node_modules 제외)
 │   └─ upload_dim.py
 ├─ .claude/
-│   └─ settings.json            ★ Stop hook (sync_ui_design.sh 자동 실행)
+│   └─ settings.json            schema 키만 (hook 없음 — [98] 에서 자동 sync 해제)
 ├─ models/                     pkl 학습 모델 (HMM, XGBoost, ensemble)
 ├─ supabase_tables.sql         전체 DDL (~20 테이블)
 ├─ Dockerfile                  multi-stage (Node build → Python serve)
@@ -697,3 +697,7 @@ Stage 2: python:3.11-slim
 마지막 갱신 시점: 2026-05-05 (홈 헤드라인 에러 멘트 통일 [97] — 사용자 보고: [95] 적용 후에도 홈 화면 "오늘의 종합 판단" 카드가 "AI 요약을 생성할 수 없습니다." 표시 (별도 dict _ERR_MSGS, [95] 의 _EXPLAIN_ERR 와 분리). market_summary.py:_ERR_MSGS 의 ko/en × no_data/no_service/fail 6개 항목을 모두 "해설 서비스 개선중." / "Commentary service is being improved." 로 통일. 캐시 hit 인 정상 헤드라인은 그대로, 토큰 소진 후 만료된 호출만 새 멘트. update.py [97])
 
 마지막 갱신 시점: 2026-05-05 (UI 디자인 워크스페이스 분리 + Stop hook 자동 미러 [96] — 디자인 시안 작업을 본 레포와 격리된 별도 폴더("/root/UI 디자인")에서 진행. 본→디자인 단방향 미러 자동화. (1) scripts/sync_ui_design.sh 신규: rsync -a --delete 로 static/templates/frontend-realestate 미러, node_modules/dist/.next 제외, 약 3.2MB 규모(node_modules 96MB 제외). (2) .claude/settings.json 신규: Stop hook (matcher="", command=bash sync_ui_design.sh, timeout 30s, statusMessage "UI 디자인 폴더 동기화 중...") — Claude Code 매 턴 종료 시 자동 실행. (3) /root/UI 디자인/CLAUDE.md 신규: 단방향 미러 규약·시안 확정 후 본 레포에 사람이 옮기는 워크플로우·node_modules 심링크 가이드. 양방향 sync 는 충돌 위험으로 배제 (사용자 결정). 백엔드(api/processor/scheduler/models/database/scripts/notebooks/logic) 는 미러 대상 아님 — 디자인 폴더는 프론트만. settings.json 이 세션 시작 시점에 부재했으므로 watcher 가 즉시 인지하지 못할 수 있음 → /hooks 한 번 열거나 Claude Code 재시작 시 활성화. update.py [96])
+
+마지막 갱신 시점: 2026-05-05 (디자인 전용 호스트 서버 (port 8001) + STATIC/TEMPLATES env [99] — 사용자 명시 "디자인 전용으로 따른 호스트 서버 사용하길 원함" → api/app.py 3곳 수정: _STATIC_DIR=os.getenv('STATIC_DIR', 'static') / _TEMPLATES_DIR=os.getenv('TEMPLATES_DIR', 'templates') 추가, StaticFiles directory + Jinja2Templates directory + realestate SPA FileResponse + tiktok verify file_path 4군데 모두 env 변수 사용. env 미지정 시 기본값 'static'/'templates' 라 production 동작 동일. 디자인 서버 명령: cd 본 레포 + RUN_SCHEDULER=false + STATIC_DIR/TEMPLATES_DIR='/root/UI 디자인/static·templates' + uvicorn --port 8001 --reload-dir '/root/UI 디자인/static' --reload-dir '/root/UI 디자인/templates'. cwd=본 레포라 .env/models/catboost_info/Supabase 의존성 그대로, 화면 자원만 디자인 폴더로 분기. 두 서버 동시 운영: 8000(production) + 8001(디자인 hot reload). 워크플로우: 디자인 변경 → 8001 즉시 확인 → "본폴더에도 넣어" → 8000 reload. 검증: 한글 경로 watch OK, /stocks 200, 백엔드 startup complete. update.py [99])
+
+마지막 갱신 시점: 2026-05-05 (UI 디자인 워크플로우 재정의 — Stop hook 해제 [98] — 사용자 명시 "디자인(프론트) 를 그대로 본 폴더에서 클론해오는거야. 이후 디자인 변경점을 말하면 그 부분만 바꾸는거지" → [96] 의 자동 미러는 디자인 폴더 작업물을 매 턴 덮어쓰므로 의도와 충돌. .claude/settings.json 의 hooks.Stop 제거 (schema 키만 남김). scripts/sync_ui_design.sh 는 보존 — 사용자가 "sync 시켜" 요청 시 수동 호출용. /root/UI 디자인/CLAUDE.md 재작성 (자동 sync 없음 명시, 디자인 변경은 디자인 폴더에서 직접 / 본폴더 반영은 "이거 본폴더에도 넣어" 명시 요청 시에만 / sync_ui_design.sh 는 --delete 라 디자인 작업 중 실행 금지 경고). 동작: 본폴더 변경 → 사용자 "sync 시켜" → Claude rsync 실행. 디자인 변경 → 사용자 요청 → Claude 디자인 폴더 직접 수정. 매 턴 종료 시 아무 자동 동작 없음. update.py [98])
