@@ -866,14 +866,16 @@ def _build_explain_text(tab: str, lang: str = 'ko', region: str = 'us') -> str:
 
 
 _EXPLAIN_ERR = {                                             # 해설 에러 메시지 (한/영)
+    # 토큰 한도 초과 / API 실패 / 데이터 미준비 등 모든 실패 케이스를 동일 멘트로 통일
+    # (사용자 요청: 토큰 소진 시 등 일관된 안내). bad_tab 만 별도 — 잘못된 호출 표시.
     'ko': {'bad_tab': '지원하지 않는 탭입니다.',
-           'no_data': '분석 데이터가 아직 준비되지 않았습니다.',
-           'no_service': 'AI 해설 서비스가 설정되지 않았습니다.',
-           'fail': 'AI 해설을 생성할 수 없습니다.'},
+           'no_data': '해설 서비스 개선중.',
+           'no_service': '해설 서비스 개선중.',
+           'fail': '해설 서비스 개선중.'},
     'en': {'bad_tab': 'Unsupported tab.',
-           'no_data': 'Analysis data is not yet available.',
-           'no_service': 'AI commentary service is not configured.',
-           'fail': 'Unable to generate AI commentary.'},
+           'no_data': 'Commentary service is being improved.',
+           'no_service': 'Commentary service is being improved.',
+           'fail': 'Commentary service is being improved.'},
 }
 
 def _generate_ai_explain(tab: str, lang: str, region: str) -> dict | None:

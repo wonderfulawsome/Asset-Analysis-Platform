@@ -123,7 +123,8 @@
       </div>
     </div>
     <div class="header-right">
-      <div id="btn-region" class="region-toggle" role="button" aria-label="Region toggle">
+      <!-- 국내주식 탭 완성 전까지 region 토글 숨김 (region.js 도 강제 'us' 반환) -->
+      <div id="btn-region" class="region-toggle" role="button" aria-label="Region toggle" style="display:none;">
         <span class="region-flag region-us">미국주식</span>
         <span class="region-flag region-kr">국내주식</span>
       </div>
@@ -512,8 +513,8 @@
     <div id="detail-body" class="detail-body"></div>
   </div>
 
-  <script src="/static/js/region.js?v=3"></script>
-  <script src="/static/js/i18n.js?v=5"></script>
+  <script src="/static/js/region.js?v=4"></script>
+  <script src="/static/js/i18n.js?v=6"></script>
   <script>
     // ── 다크모드 토글 (헤더 + setup 화면 동기화) ──
     var _sunSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';

@@ -7451,3 +7451,43 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - KR sector ETF 중 일부 (341850 리츠 등) 상장 후 21 거래일 미만이면 1M return None 표시
 #   (정상 동작 — index_price_raw 누적 21일 이후 자동 채워짐)
 # - sector-mom AI 해설은 [93] 의 ai_explain_cache 에 저장 — 24시간 캐시 (TTL)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [95] 2026-05-04 (UTC) — region 토글 임시 숨김 + AI 해설 에러 멘트 통일
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자 요청 두 건:
+# 1. 국내주식 탭이 미완성 상태이므로 헤더의 US/KR 토글을 일단 숨기고 강제 'us' 모드로 고정
+# 2. Groq 토큰 소진 등으로 AI 해설이 실패할 때 모든 에러 메시지를 "해설 서비스 개선중." 로 통일
+#
+# [수정 — 1. region 토글 숨김]
+# - templates/stocks.html: <div id="btn-region"> 에 style="display:none;" 추가 (HTML 임시 숨김)
+# - static/js/region.js: const _FORCE_US_ONLY = true; flag 추가 → getRegion() 이 무조건 'us'
+#   반환. localStorage 에 'kr' 잔여 값이 있어도 무시. 토글 클릭 핸들러는 동작하지만 버튼 안
+#   보여서 무관.
+# - 복원 방법: HTML style 제거 + region.js _FORCE_US_ONLY = false 두 줄 변경
+# - cache-bust: region.js v=3 → v=4
+#
+# [수정 — 2. AI 해설 에러 멘트 통일]
+# - api/routers/market_summary.py:_EXPLAIN_ERR
+#   ko: no_data/no_service/fail = '해설 서비스 개선중.'
+#   en: no_data/no_service/fail = 'Commentary service is being improved.'
+#   bad_tab 만 별도 (잘못된 호출 — 사용자가 볼 일 없음)
+# - static/js/i18n.js:'ai.explainError' (frontend catch 블록 fallback) 도 같은 멘트로 통일
+# - 결과: 토큰 소진 → endpoint 'fail' → frontend 가 d.explanation 표시 → "해설 서비스 개선중."
+#         네트워크 에러 → frontend catch → t('ai.explainError') → 같은 멘트
+# - cache-bust: i18n.js v=5 → v=6
+#
+# [Why]
+# - region 토글: KR 모드 진입 시 미구현 화면 다수 (홈 일부 타일 회색, 탭 컨텐츠 빈 영역) →
+#   사용자에게 노출되면 미완성 인상. KR 인프라 80% 완성될 때까지 임시 숨김.
+# - 에러 멘트 통일: "AI 해설을 생성할 수 없습니다" 같은 기술적 메시지 대신 "개선중" 으로 부드럽게.
+#   토큰 소진 / API 다운 등 사용자가 알 필요 없는 내부 상황을 일관되게 처리.
+#
+# [검증]
+# - python -m ast market_summary.py OK
+# - 브라우저 hard refresh: 헤더에서 US/KR 토글 사라짐 (settings/lang/theme 만 남음)
+# - localStorage region='kr' 인 사용자도 자동 'us' 데이터 호출 (region.js getRegion 강제)
+# - AI 해설 실패 시: 본문 "해설 서비스 개선중." (회색 sub 색상)

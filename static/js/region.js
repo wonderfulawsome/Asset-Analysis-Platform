@@ -7,7 +7,12 @@
   const STORAGE_KEY = 'region';
   const VALID = new Set(['us', 'kr']);
 
+  // ⚠️ 국내주식 탭 완성 전까지 KR 모드 강제 비활성화. 토글 버튼도 HTML 에서 display:none.
+  // KR 완성 후 이 플래그만 false 로 되돌리면 토글 복구. (HTML btn-region 의 style 도 함께 제거)
+  const _FORCE_US_ONLY = true;
+
   function getRegion() {
+    if (_FORCE_US_ONLY) return 'us';
     const r = localStorage.getItem(STORAGE_KEY) || 'us';
     return VALID.has(r) ? r : 'us';
   }

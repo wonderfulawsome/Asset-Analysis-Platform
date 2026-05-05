@@ -123,7 +123,7 @@ const I18N = {
     'chart.hint': '차트를 터치하면 상세 정보를 볼 수 있어요',
 
     // ── AI 해설 에러 ──
-    'ai.explainError': 'AI 해설을 불러올 수 없습니다.',
+    'ai.explainError': '해설 서비스 개선중.',
 
     // ── 방향성 ──
     'dir.cardLabel': '향후 방향성',               // 카드 라벨
@@ -595,7 +595,7 @@ const I18N = {
     'chart.hint': 'Touch the chart to see details',
 
     // ── AI Explanation Error ──
-    'ai.explainError': 'Unable to load AI explanation.',
+    'ai.explainError': 'Commentary service is being improved.',
 
     // ── Direction ──
     'dir.cardLabel': 'Future Direction',
