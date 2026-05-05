@@ -120,7 +120,10 @@ Passive-Financial-Data-Analysis/
 │   ├─ backfill_metro.py        ★ 수도권 77 LAWD_CD × N개월 backfill — 부천(41194)은 41192/41196 / 화성(41590)은 41591/41593/41595/41597 합산 (mapping/pop/trade/rent), --only/--start-from 분할 실행
 │   ├─ flip_noise_score_sign.py noise_score 부호 일괄 반전 (1회성)
 │   ├─ train_kr_sector_cycle.py ★ KR Sector Cycle (HMM 4-state) 1회 학습 + sector_macro/cycle/valuation 적재
+│   ├─ sync_ui_design.sh        ★ 본 → "/root/UI 디자인" 단방향 프론트 미러 (rsync --delete, node_modules 제외)
 │   └─ upload_dim.py
+├─ .claude/
+│   └─ settings.json            ★ Stop hook (sync_ui_design.sh 자동 실행)
 ├─ models/                     pkl 학습 모델 (HMM, XGBoost, ensemble)
 ├─ supabase_tables.sql         전체 DDL (~20 테이블)
 ├─ Dockerfile                  multi-stage (Node build → Python serve)
@@ -690,3 +693,7 @@ Stage 2: python:3.11-slim
 마지막 갱신 시점: 2026-05-04 (region 토글 임시 숨김 + AI 해설 에러 멘트 통일 [95] — 사용자 요청 2건. (1) KR 미완성 상태라 헤더 US/KR 토글 임시 숨김: templates/stocks.html btn-region 에 style="display:none", static/js/region.js 에 _FORCE_US_ONLY flag → getRegion() 강제 'us' 반환 (localStorage 'kr' 잔여 무시). 복원은 두 줄만 변경. region.js v=4. (2) Groq 토큰 소진 등 AI 해설 모든 실패 케이스를 "해설 서비스 개선중." (en: "Commentary service is being improved.") 으로 통일: market_summary._EXPLAIN_ERR 의 no_data/no_service/fail 3종 동일, i18n 'ai.explainError' (frontend catch) 도 동일. i18n.js v=6. update.py [95])
 
 마지막 갱신 시점: 2026-05-04 (KR 섹터 모멘텀 sector-mom 별 탭 KR 포팅 [94] — 미국 11종 SPDR → KR 10종 KODEX/TIGER 분기. processor/feature7_sector_momentum.py: _ticker_map_for_region helper 신규 + compute_sector_momentum(region='us') 시그니처 + DB query .eq('region', region) 필터 + 반환 dict 'region' 필드. api/routers/sector_cycle.py: get_momentum(region: str = Query('us')) + _momentum_cache region 별 dict 분리 (us 캐시가 kr 응답 덮어쓰는 버그 방지). api/routers/market_summary.py: _build_explain_text('sector-mom') 의 compute_sector_momentum 호출에 region=region 인자 추가. static/js/home.js: SECTOR_KR dict KR 10 ticker 한글 매핑 추가 (139260=IT 등) + KR_SUPPORTED_TILES 에 'sector-mom' 추가. scheduler/job_kr.py Step 10 ai-explain 탭 리스트에 'sector-mom' 추가 (KR × 4탭 × 2lang = 8 entry). templates/stocks.html home.js v=31 → v=32. 5 파일 ~55 LOC. update.py [94])
+
+마지막 갱신 시점: 2026-05-05 (홈 헤드라인 에러 멘트 통일 [97] — 사용자 보고: [95] 적용 후에도 홈 화면 "오늘의 종합 판단" 카드가 "AI 요약을 생성할 수 없습니다." 표시 (별도 dict _ERR_MSGS, [95] 의 _EXPLAIN_ERR 와 분리). market_summary.py:_ERR_MSGS 의 ko/en × no_data/no_service/fail 6개 항목을 모두 "해설 서비스 개선중." / "Commentary service is being improved." 로 통일. 캐시 hit 인 정상 헤드라인은 그대로, 토큰 소진 후 만료된 호출만 새 멘트. update.py [97])
+
+마지막 갱신 시점: 2026-05-05 (UI 디자인 워크스페이스 분리 + Stop hook 자동 미러 [96] — 디자인 시안 작업을 본 레포와 격리된 별도 폴더("/root/UI 디자인")에서 진행. 본→디자인 단방향 미러 자동화. (1) scripts/sync_ui_design.sh 신규: rsync -a --delete 로 static/templates/frontend-realestate 미러, node_modules/dist/.next 제외, 약 3.2MB 규모(node_modules 96MB 제외). (2) .claude/settings.json 신규: Stop hook (matcher="", command=bash sync_ui_design.sh, timeout 30s, statusMessage "UI 디자인 폴더 동기화 중...") — Claude Code 매 턴 종료 시 자동 실행. (3) /root/UI 디자인/CLAUDE.md 신규: 단방향 미러 규약·시안 확정 후 본 레포에 사람이 옮기는 워크플로우·node_modules 심링크 가이드. 양방향 sync 는 충돌 위험으로 배제 (사용자 결정). 백엔드(api/processor/scheduler/models/database/scripts/notebooks/logic) 는 미러 대상 아님 — 디자인 폴더는 프론트만. settings.json 이 세션 시작 시점에 부재했으므로 watcher 가 즉시 인지하지 못할 수 있음 → /hooks 한 번 열거나 Claude Code 재시작 시 활성화. update.py [96])

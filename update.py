@@ -7491,3 +7491,98 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - 브라우저 hard refresh: 헤더에서 US/KR 토글 사라짐 (settings/lang/theme 만 남음)
 # - localStorage region='kr' 인 사용자도 자동 'us' 데이터 호출 (region.js getRegion 강제)
 # - AI 해설 실패 시: 본문 "해설 서비스 개선중." (회색 sub 색상)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [96] 2026-05-05 (UTC) — UI 디자인 워크스페이스 분리 + Stop hook 자동 미러
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 디자인 시안 작업을 본 레포와 격리된 별도 폴더("/root/UI 디자인")에서 진행하기 위한 인프라
+# 구축. 본 레포 → 디자인 폴더 단방향 미러를 Stop hook 으로 자동화. 디자인 폴더는
+# 시안·실험장이며 본 레포 변경분이 다음 턴 종료 시 자동 흘러옴.
+#
+# [신규 파일]
+# - scripts/sync_ui_design.sh : 본 → 디자인 단방향 rsync (--delete, node_modules 제외)
+#     SRC=/root/Passive-Financial-Data-Analysis
+#     DST=/root/UI 디자인
+#     rsync -a --delete --exclude=node_modules --exclude=dist --exclude=.next \
+#       "$SRC/static" "$SRC/templates" "$SRC/frontend-realestate" "$DST/"
+# - .claude/settings.json : Stop hook 등록
+#     "hooks": { "Stop": [{ "matcher": "", "hooks": [{
+#       "type": "command",
+#       "command": "bash /root/Passive-Financial-Data-Analysis/scripts/sync_ui_design.sh",
+#       "timeout": 30,
+#       "statusMessage": "UI 디자인 폴더 동기화 중..."
+#     }] }] }
+# - /root/UI 디자인/CLAUDE.md : 디자인 폴더 워크플로우 안내 (단방향 미러, 시안 확정 후 본
+#   레포에 사람이 옮김, node_modules 는 심링크 또는 본폴더 dev 활용)
+# - 초기 미러본: /root/UI 디자인/{static,templates,frontend-realestate} 약 3.2MB
+#   (node_modules 제외 — 본 레포 frontend-realestate 97MB 중 96MB가 node_modules)
+#
+# [수정 파일]
+# - logic/structure.md : UI 디자인 워크스페이스 섹션 신규 추가
+#
+# [동작 흐름]
+# Claude Code 턴 종료 → Stop hook 발동 → sync_ui_design.sh 실행 →
+# rsync 가 본 레포 static/templates/frontend-realestate 를 /root/UI 디자인/ 에 미러 →
+# 디자인 폴더는 늘 최신 상태에서 시안 시작
+#
+# [Why — 단방향 vs 양방향]
+# 양방향 sync 는 동시 편집 시 충돌·오버라이트 위험. 단방향이 명확:
+# - 본 레포 = 진실의 소스 (production 코드)
+# - 디자인 폴더 = 시안·실험장 (확정 후 사람이 본 레포로 옮김)
+# 시안이 오버라이트되더라도 git history (본 레포) + 작업자 메모리에 남아있어 재구성 가능.
+#
+# [Why — Stop hook vs 수동 sync]
+# 매 턴 종료 시 자동 실행 → 사용자/Claude 가 동기화를 잊어버릴 여지 없음. rsync 는
+# 변경분만 전송하므로 매번 실행해도 부담 없음 (3MB 규모, --delete 포함 1초 미만).
+#
+# [Why — node_modules 제외]
+# 본 레포 frontend-realestate node_modules 96MB → 동기화 부담만 늘리고 실익 없음.
+# 디자인 폴더에서 dev 서버를 띄우려면 본 레포 node_modules 를 심링크하거나
+# 본 레포에서 dev 띄우고 디자인 폴더는 코드 비교용으로만 사용 (CLAUDE.md 에 명시).
+#
+# [검증 결과]
+# - 초기 rsync 수동 실행: 3.2MB 미러 완료
+#     /root/UI 디자인/static (2.5M), templates (80K), frontend-realestate (600K)
+# - sync 스크립트 파이프 테스트: echo '{}' | bash sync_ui_design.sh → exit=0
+# - settings.json 스키마 검증: Stop matcher="" command 인식 OK
+# - CLAUDE.md 보존 확인: rsync --delete 는 sub-디렉토리 단위만 정리, 최상위 미보호 파일 유지
+#
+# [한계 / 후속 조치]
+# - 이번 세션 시작 시점에 .claude/settings.json 이 존재하지 않았음. Claude Code watcher 가
+#   디렉토리를 감시 중이 아니라면 hook 이 다음 세션부터 활성화될 수 있음. 사용자가 한 번
+#   /hooks 메뉴를 열거나 Claude Code 재시작하면 즉시 적용.
+# - 백엔드 변경(api/, processor/, scheduler/, models/, database/, scripts/, notebooks/,
+#   logic/) 은 디자인 폴더로 미러되지 않음 — 의도적. 디자인 폴더는 프론트만.
+# - 디자인 폴더에서 직접 코드 수정 후 본 레포에 반영하려면 사람이 수동으로 옮겨야 함 (양방향
+#   금지 규약).
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [97] 2026-05-05 (UTC) — 홈 헤드라인 에러 멘트도 [95] 와 동일하게 통일
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# [95] 에서 _EXPLAIN_ERR (5탭 AI 해설) 만 "해설 서비스 개선중." 으로 통일했는데, 사용자 보고
+# 홈 화면 "오늘의 종합 판단" 카드가 여전히 "AI 요약을 생성할 수 없습니다." 로 표시됨. 이건
+# 별도 dict (_ERR_MSGS, home-headline endpoint) 라서 [95] 변경 영향권 밖이었음.
+#
+# [수정 — api/routers/market_summary.py:_ERR_MSGS]
+# - ko: no_data/no_service/fail = '해설 서비스 개선중.'
+# - en: no_data/no_service/fail = 'Commentary service is being improved.'
+# - 패턴 [95] 의 _EXPLAIN_ERR 와 동일.
+#
+# [Why]
+# 사용자 입장에서 "토큰 소진" 등 내부 사정은 알 필요 없음. 홈 헤드라인이든 5탭 AI 해설이든
+# 모든 LLM 실패 케이스를 동일 멘트로 보여주는 게 일관됨.
+#
+# [효과]
+# - Groq 토큰 소진 → home-headline endpoint 'fail' 반환 → 카드에 "해설 서비스 개선중."
+# - ai_headline_cache 의 기존 정상 헤드라인은 그대로 표시 (캐시 hit) — 토큰 소진 시점 이후
+#   캐시 만료 호출에서만 fail 메시지.
+#
+# [검증]
+# - python -m ast market_summary.py OK
+# - 사용자 화면 새로고침 시 즉시 적용 (frontend cache-bust 불필요 — 백엔드 응답만 변경)

@@ -307,13 +307,15 @@ Rules:
 
 _ai_cache: dict = {}                                         # 키: f"{lang}_{region}", 값: {summary, generated_at, expires}
 
-_ERR_MSGS = {                                                # 에러 메시지 (한/영)
-    'ko': {'no_data': '지표 데이터가 아직 준비되지 않았습니다.',
-           'no_service': 'AI 요약 서비스가 설정되지 않았습니다.',
-           'fail': 'AI 요약을 생성할 수 없습니다.'},
-    'en': {'no_data': 'Indicator data is not yet available.',
-           'no_service': 'AI summary service is not configured.',
-           'fail': 'Unable to generate AI summary.'},
+_ERR_MSGS = {                                                # 홈 헤드라인 에러 메시지 (한/영)
+    # 토큰 한도 초과 / API 실패 / 데이터 미준비 등 모든 실패 케이스 동일 멘트로 통일
+    # ([95] 와 동일한 패턴 — _EXPLAIN_ERR 의 home-headline 등가).
+    'ko': {'no_data': '해설 서비스 개선중.',
+           'no_service': '해설 서비스 개선중.',
+           'fail': '해설 서비스 개선중.'},
+    'en': {'no_data': 'Commentary service is being improved.',
+           'no_service': 'Commentary service is being improved.',
+           'fail': 'Commentary service is being improved.'},
 }
 
 def _build_home_indicator_text(lang: str = 'ko', region: str = 'us') -> str:
