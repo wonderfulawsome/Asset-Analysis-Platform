@@ -393,8 +393,8 @@
       // 2) 게이지 — composite z 기반
       gEl.innerHTML = renderGauge(zComp, t.label);
 
-      // 3) 분해 — Raw 5행 + 가중 점수 4행 (구분선)
-      dEl.innerHTML = `
+      // 3) 분해 — 별도 상세페이지로 이동, 메인엔 요약 + "자세히 보기" 트리거
+      const decomposeHtml = `
         <div class="mv-row">
           <span class="mv-key"><span class="mv-op"></span>${L.per_label}</span>
           <span class="mv-val">${(t.spy_per || 0).toFixed(1)}배</span>
@@ -431,6 +431,17 @@
           <span class="mv-key"><span class="mv-op">=</span>종합 점수 → ${escapeHtml(t.label || '-')}</span>
           <span class="mv-val" style="color:${zComp >= 0 ? '#10b981' : '#ef4444'};">${sgn(zComp)}${zComp.toFixed(2)}σ</span>
         </div>`;
+      dEl.innerHTML = `
+        <button class="mv-detail-trigger" type="button">
+          <span class="mv-trigger-label">분해 보기</span>
+          <span class="mv-trigger-sub">PER · 국채 · 매력도 · ${L.vix_label.split(' ')[0]} · 60일 하락 + 가중 점수</span>
+          <span class="mv-trigger-arrow">▸</span>
+        </button>`;
+      dEl.querySelector('.mv-detail-trigger').addEventListener('click', () => {
+        if (typeof window.openDetail === 'function') {
+          window.openDetail('시장 밸류 분해', body => { body.innerHTML = decomposeHtml; });
+        }
+      });
 
       // 4) 60일 추이 — z_comp 시계열 + ±1σ 가이드
       hEl.innerHTML = renderCompositeHistory(d.history || []);

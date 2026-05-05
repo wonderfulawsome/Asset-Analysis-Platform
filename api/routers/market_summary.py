@@ -615,21 +615,21 @@ _explain_lock = threading.Lock()                             # 해설 캐시 동
 _EXPLAIN_TTL = 900                                           # 해설 캐시 유효 시간 (15분)
 
 _EXPLAIN_PROMPTS = {                                         # 탭별 AI 해설 시스템 프롬프트 (압축본)
-    # 토큰 절약: 시스템 프롬프트 ~600 → ~120 토큰. max_tokens 300 → 150. temperature 0.7 → 0.3.
-    # 배경 지식·예시 모두 제거 — 사용자 입력 텍스트가 이미 라벨/구조 충분.
+    # 핵심 원칙: 요인을 "단순 나열" 하지 않고 "왜 그 요인이 그 결과를 만드는지" 메커니즘을 한 줄로.
+    # 예 (나쁨): "VIX 30 기여도 +0.4". 예 (좋음): "VIX 30(공포 확대) → 이성 약화 기여 +0.4".
     'ko': {
-        'fundamental': "/no_think 한국 투자자 대상 해설. 시장 이성 점수(양수=이성/음수=감정·절대값↑=감정↑)와 피처 기여도 상위 2~3개로 현 상태→원인→투자 의미 3문장. ≤140자, 마크다운 X, 부드러운 어투.",
-        'signal':      "/no_think 한국 투자자 대상 해설. 간극=상승−하락(양수=상승우위) + 30일 추세(증가/감소/안정) + SHAP 상위 1~2개 요인. 현 간극→추세→의미 3문장. ≤140자, 마크다운 X, 부드러운 어투.",
-        'sector':      "/no_think 한국 투자자 대상 해설. 현 경기 국면 특징 + 유리한 섹터 + 투자 포인트 3문장. ≤140자, 마크다운 X, 부드러운 어투.",
-        'sector-val':  "/no_think 한국 투자자 대상 해설. 펀더멘털 갭(가격성장−EPS성장, 양수=비싸짐) z-score 기준 비싼 섹터 1~2 + 싼 섹터 1~2 + 시장 메시지 3문장. ≤160자, 마크다운 X, 부드러운 어투.",
-        'sector-mom':  "/no_think 한국 투자자 대상 해설. 3M 모멘텀 상위 + 예상 대비 오버/언더퍼폼 + 경기국면과 일치/배반 3문장. ≤160자, 마크다운 X, 부드러운 어투.",
+        'fundamental': "/no_think 한국 투자자 대상. 시장 이성 점수(양수=이성/음수=감정)와 상위 피처 2~3개. 단순 나열 X — 각 피처가 왜 그 방향으로 점수에 영향 주는지 메커니즘을 한 줄로 (예: 'VIX↑=공포 확대→이성 약화'). 3문장 ≤160자, 마크다운 X, 부드러운 어투.",
+        'signal':      "/no_think 한국 투자자 대상. 간극=상승−하락(양수=상승우위) + 30일 추세 + SHAP 상위 1~2개. 단순 나열 X — 왜 그 요인이 상승/하락에 작용하는지 메커니즘 한 줄 (예: '신용 스프레드↑=자금 경색→하락 압력'). 3문장 ≤160자, 마크다운 X, 부드러운 어투.",
+        'sector':      "/no_think 한국 투자자 대상. 현 경기 국면 + 유리한 섹터 1~2. 단순 나열 X — 왜 그 국면이 그 섹터에 유리한지 인과 한 줄 (예: '확장 국면=수요 회복→경기소비재 수혜'). 3문장 ≤160자, 마크다운 X, 부드러운 어투.",
+        'sector-val':  "/no_think 한국 투자자 대상. 펀더멘털 갭(가격성장−EPS성장, 양수=비쌈) z-score. 비싼 1~2 + 싼 1~2 섹터. 단순 나열 X — 왜 갭이 고/저평가를 의미하는지 메커니즘 한 줄 (예: '가격이 EPS보다 빨리 상승→밸류 부담'). 3문장 ≤180자, 마크다운 X, 부드러운 어투.",
+        'sector-mom':  "/no_think 한국 투자자 대상. 1주일 모멘텀 상위/하위 + 경기국면 일치/배반. 단순 나열 X — 왜 일치(또는 배반)이 그 신호를 의미하는지 한 줄 (예: '침체국면+상승=회복 기대 선반영'). 3문장 ≤180자, 마크다운 X, 부드러운 어투.",
     },
     'en': {
-        'fundamental': "/no_think Plain-English commentary. Market Rationality (+rational/−emotional, larger |negative|=stronger emotion) + top 2-3 feature contributors. State→cause→investor meaning, 3 sentences ≤180 chars. No markdown.",
-        'signal':      "/no_think Plain-English commentary. Gap = surge − crash (+upside / −downside) + 30-day trend (rising/falling/stable) + top 1-2 SHAP factors. Current→trend→meaning, 3 sentences ≤180 chars. No markdown.",
-        'sector':      "/no_think Plain-English commentary. Current cycle phase + favorable sectors + investor takeaway, 3 sentences ≤180 chars. No markdown.",
-        'sector-val':  "/no_think Plain-English commentary. Fundamental Gap (price growth − EPS growth, + = expensive). Top 1-2 expensive + top 1-2 cheap sectors by z-score + market signal, 3 sentences ≤200 chars. No markdown.",
-        'sector-mom':  "/no_think Plain-English commentary. Top 3M momentum + biggest over/underperform vs expected + alignment with cycle phase, 3 sentences ≤200 chars. No markdown.",
+        'fundamental': "/no_think Plain-English. Market Rationality (+rational / −emotional) + top 2-3 features. Don't just list — explain WHY each feature drives the score in one short clause (e.g., 'VIX↑=fear→weakens rationality'). 3 sentences ≤200 chars. No markdown.",
+        'signal':      "/no_think Plain-English. Gap = surge − crash (+upside / −downside) + 30-day trend + top 1-2 SHAP. Don't just list — explain WHY each factor pushes up or down (e.g., 'credit spread↑=liquidity stress→downside pressure'). 3 sentences ≤200 chars. No markdown.",
+        'sector':      "/no_think Plain-English. Current cycle phase + 1-2 favorable sectors. Don't just list — explain WHY this phase favors those sectors (e.g., 'expansion=demand recovery→benefits cyclicals'). 3 sentences ≤200 chars. No markdown.",
+        'sector-val':  "/no_think Plain-English. Fundamental Gap z-score (price − EPS growth, + = expensive). Top 1-2 expensive + 1-2 cheap. Don't just list — explain WHY the gap signals over/underpricing (e.g., 'price outpaces EPS→valuation stretch'). 3 sentences ≤220 chars. No markdown.",
+        'sector-mom':  "/no_think Plain-English. 1-week momentum top/bottom + alignment with cycle phase. Don't just list — explain WHY alignment (or divergence) matters (e.g., 'recession + rally=early recovery pricing'). 3 sentences ≤220 chars. No markdown.",
     },
 }
 
