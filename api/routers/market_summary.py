@@ -106,7 +106,7 @@ def _groq_call(system_prompt: str, user_text: str, max_tokens: int = 300):
             {'role': 'system', 'content': system_prompt},    # 시스템 프롬프트 (역할+규칙)
             {'role': 'user', 'content': user_text},          # 사용자 입력 (지표 데이터)
         ],
-        temperature=0.7,                                     # 창의성 수준 (0~1)
+        temperature=0.3,                                     # 창의성 수준 (0~1) — 해설은 일관성 中
         max_tokens=max_tokens,                               # 최대 출력 토큰 수
     )
     raw = completion.choices[0].message.content or ''         # LLM 응답 텍스트 추출
@@ -662,205 +662,22 @@ _explain_cache = {}                                          # 탭별 AI 해설 
 _explain_lock = threading.Lock()                             # 해설 캐시 동시 접근 보호용 Lock
 _EXPLAIN_TTL = 900                                           # 해설 캐시 유효 시간 (15분)
 
-_EXPLAIN_PROMPTS = {                                         # 탭별 AI 해설 시스템 프롬프트
+_EXPLAIN_PROMPTS = {                                         # 탭별 AI 해설 시스템 프롬프트 (압축본)
+    # 토큰 절약: 시스템 프롬프트 ~600 → ~120 토큰. max_tokens 300 → 150. temperature 0.7 → 0.3.
+    # 배경 지식·예시 모두 제거 — 사용자 입력 텍스트가 이미 라벨/구조 충분.
     'ko': {
-        'fundamental': """/no_think
-너는 한국어 금융 해설가다. 주어진 시장 이성 점수 분석 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
-
-배경 지식:
-- "시장 이성 점수"는 주가가 펀더멘털(기업 가치)을 얼마나 이성적으로 반영하는지를 나타내는 점수다
-- 양수(+): 주가가 펀더멘털을 잘 반영 중 (이성적 시장)
-- 음수(-): 주가가 펀더멘털에서 벗어나 감정·유동성에 의해 움직임 (감정적 시장)
-- 음수가 클수록(절대값↑) 감정 지배가 심함 (0~-2: 약간 감정적, -2 이하: 강한 감정 지배)
-- 피처(feature)는 이 점수를 구성하는 개별 지표들이다 (양수 기여 = 이성으로 미는 힘)
-
-설명할 내용:
-1. 현재 어떤 상태인지 (이성 점수 값이 의미하는 것 — 부호와 절대값)
-2. 왜 이런 결과가 나왔는지 (피처 기여도 상위 3개를 쉬운 말로)
-3. 투자자에게 어떤 의미인지
-
-규칙:
-- 3~4문장, 총 150자 이내
-- 전문 용어 사용 시 괄호로 쉬운 설명 추가
-- 줄바꿈으로 문단 구분
-- 마크다운/불릿 금지
-- 부드러운 어투""",
-
-        'signal': """/no_think
-너는 한국어 금융 해설가다. 주어진 하락/상승 예측 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
-
-배경 지식:
-- "간극(Gap)"은 상승 기대도에서 하락 위험도를 뺀 값이다
-- 간극이 양수(+)이면 상승 기대가 더 높고, 음수(-)이면 하락 위험이 더 높다
-- 간극의 절대값이 클수록 한쪽으로 강하게 기울어진 것이다
-- 30일 추세에서 간극이 상승하면 상승 기대 증가, 하락하면 하락 위험 증가를 의미한다
-
-설명할 내용:
-1. 현재 간극이 얼마이고, 어느 쪽으로 기울어져 있는지 (점수 자체보다 간극의 크기와 방향에 집중)
-2. 30일간 이 간극이 어떻게 변해왔는지 (확대/축소/안정 추세)
-3. 이 간극 추세가 투자자에게 의미하는 바 (SHAP 상위 요인 1~2개 언급)
-
-규칙:
-- 3~4문장, 총 150자 이내
-- 전문 용어 사용 시 괄호로 쉬운 설명 추가
-- 줄바꿈으로 문단 구분
-- 마크다운/불릿 금지
-- 부드러운 어투""",
-
-        'sector': """/no_think
-너는 한국어 금융 해설가다. 주어진 경기 국면 분석 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
-
-설명할 내용:
-1. 현재 어떤 경기 국면인지, 이 국면의 특징
-2. 이 국면에서 유리한 섹터와 이유
-3. 투자자가 참고할 포인트
-
-규칙:
-- 3~4문장, 총 150자 이내
-- 전문 용어 사용 시 괄호로 쉬운 설명 추가
-- 줄바꿈으로 문단 구분
-- 마크다운/불릿 금지
-- 부드러운 어투""",
-
-        'sector-val': """/no_think
-너는 한국어 금융 해설가다. 주어진 13개 섹터 ETF 의 "펀더멘털 갭" 결과를 일반 투자자가 이해하도록 쉽게 설명하라.
-
-배경 지식:
-- "펀더멘털 갭" = 12개월 가격 성장률 − 12개월 EPS 성장률
-- 양수(+)면 가격이 EPS 보다 빨리 올랐다 = 비싸짐 (PER 상승)
-- 음수(−)면 EPS 가 가격보다 빨리 늘었다 = 싸짐 (PER 하락)
-- z-score 는 그 ETF 의 historical 평균 대비 얼마나 비/싸진 정도 (양수=상대적으로 비쌈)
-
-설명할 내용:
-1. 가장 비싸진 섹터 1~2개와 가장 싸진 섹터 1~2개 (z-score 절대값 기준)
-2. 이 분포가 보여주는 시장 메시지 (어디에 거품/기회가 있는지)
-3. 투자자에게 어떤 의미인지
-
-규칙:
-- 3~4문장, 총 180자 이내
-- 줄바꿈으로 문단 구분
-- 마크다운/불릿 금지
-- 부드러운 어투""",
-
-        'sector-mom': """/no_think
-너는 한국어 금융 해설가다. 주어진 13개 섹터 ETF 의 모멘텀 랭킹을 일반 투자자가 이해하도록 쉽게 설명하라.
-
-배경 지식:
-- 1M / 3M / 6M = 1개월 / 3개월 / 6개월 누적 가격 수익률
-- "현재 순위" = 3개월 수익률 기준 1~13위
-- "예상 순위" = 현재 경기 국면에서 historical 평균 수익률 순위
-- "괴리" = 예상 − 현재 (양수=언더퍼폼, 음수=오버퍼폼)
-- 즉 괴리 음수가 큰 섹터는 "예상보다 잘 가는" 추세 우위 섹터
-
-설명할 내용:
-1. 현재 모멘텀 1~2위 섹터 (3M 수익률 강한 곳)
-2. 예상 대비 가장 오버퍼폼 / 언더퍼폼 한 섹터 (괴리 절대값 큰 곳)
-3. 현재 경기 국면을 함께 언급해서 추세가 국면과 일치/배반 하는지
-
-규칙:
-- 3~4문장, 총 180자 이내
-- 줄바꿈으로 문단 구분
-- 마크다운/불릿 금지
-- 부드러운 어투""",
+        'fundamental': "/no_think 한국 투자자 대상 해설. 시장 이성 점수(양수=이성/음수=감정·절대값↑=감정↑)와 피처 기여도 상위 2~3개로 현 상태→원인→투자 의미 3문장. ≤140자, 마크다운 X, 부드러운 어투.",
+        'signal':      "/no_think 한국 투자자 대상 해설. 간극=상승−하락(양수=상승우위) + 30일 추세(증가/감소/안정) + SHAP 상위 1~2개 요인. 현 간극→추세→의미 3문장. ≤140자, 마크다운 X, 부드러운 어투.",
+        'sector':      "/no_think 한국 투자자 대상 해설. 현 경기 국면 특징 + 유리한 섹터 + 투자 포인트 3문장. ≤140자, 마크다운 X, 부드러운 어투.",
+        'sector-val':  "/no_think 한국 투자자 대상 해설. 펀더멘털 갭(가격성장−EPS성장, 양수=비싸짐) z-score 기준 비싼 섹터 1~2 + 싼 섹터 1~2 + 시장 메시지 3문장. ≤160자, 마크다운 X, 부드러운 어투.",
+        'sector-mom':  "/no_think 한국 투자자 대상 해설. 3M 모멘텀 상위 + 예상 대비 오버/언더퍼폼 + 경기국면과 일치/배반 3문장. ≤160자, 마크다운 X, 부드러운 어투.",
     },
     'en': {
-        'fundamental': """/no_think
-You are a financial commentator. Explain the given Market Rationality analysis in plain English for everyday investors.
-
-Background:
-- "Market Rationality Score" measures how rationally price reflects fundamentals (company value)
-- Positive (+): price reflects fundamentals well (rational market)
-- Negative (-): price has deviated from fundamentals, driven by sentiment or liquidity (emotional market)
-- Larger negative |score| = stronger emotional dominance (0~-2: mild, -2 or below: strong)
-- Features are individual indicators composing this score (positive contribution = pushes toward rationality)
-
-Explain:
-1. Current state (what the rationality score value means — sign and magnitude)
-2. Why this result occurred (top 3 feature contributors in plain language)
-3. What it means for investors
-
-Rules:
-- 3-4 sentences, under 200 characters total
-- Add parenthetical explanations for technical terms
-- Separate paragraphs with line breaks
-- No markdown/bullets
-- Professional yet approachable tone""",
-
-        'signal': """/no_think
-You are a financial commentator. Explain the given crash/surge prediction results in plain English for everyday investors.
-
-Background:
-- "Gap" is surge potential minus crash risk
-- Positive gap = tilted toward upside; Negative gap = tilted toward downside risk
-- Larger absolute gap = stronger tilt in one direction
-- A rising 30-day gap trend signals increasing upside; falling signals increasing downside risk
-
-Explain:
-1. Current gap size and direction (focus on the gap rather than individual scores)
-2. How this gap has evolved over the past 30 days (widening/narrowing/stable trend)
-3. What this gap trend means for investors (mention 1-2 top SHAP factors)
-
-Rules:
-- 3-4 sentences, under 200 characters total
-- Add parenthetical explanations for technical terms
-- Separate paragraphs with line breaks
-- No markdown/bullets
-- Professional yet approachable tone""",
-
-        'sector': """/no_think
-You are a financial commentator. Explain the given business cycle analysis in plain English for everyday investors.
-
-Explain:
-1. Current business cycle phase and its characteristics
-2. Which sectors benefit in this phase and why
-3. Key takeaways for investors
-
-Rules:
-- 3-4 sentences, under 200 characters total
-- Add parenthetical explanations for technical terms
-- Separate paragraphs with line breaks
-- No markdown/bullets
-- Professional yet approachable tone""",
-
-        'sector-val': """/no_think
-You are a financial commentator. Explain the 13-sector ETF "Fundamental Gap" results in plain English.
-
-Background:
-- Fundamental Gap = 12-month price growth − 12-month EPS growth
-- Positive: price grew faster than EPS = sector got more expensive (PER rising)
-- Negative: EPS grew faster than price = sector got cheaper (PER falling)
-- z-score: how expensive/cheap relative to that ETF's historical average
-
-Explain:
-1. The 1-2 most expensive and 1-2 cheapest sectors (by z-score magnitude)
-2. What this distribution implies about market mispricings
-3. Practical takeaway for investors
-
-Rules:
-- 3-4 sentences, under 220 characters total
-- Separate paragraphs with line breaks
-- No markdown/bullets
-- Professional yet approachable tone""",
-
-        'sector-mom': """/no_think
-You are a financial commentator. Explain the 13-sector ETF momentum ranking in plain English.
-
-Background:
-- 1M / 3M / 6M = 1 / 3 / 6 month cumulative returns
-- "Current rank" = ranked by 3M return (1 to 13)
-- "Expected rank" = historical average rank in the current business cycle phase
-- "Diff" = expected − current (positive = underperform, negative = outperform)
-
-Explain:
-1. Top 1-2 sectors by current momentum (strong 3M returns)
-2. Biggest outperformers / underperformers vs expected (largest |diff|)
-3. Reference the current business cycle phase: do these align or contradict it?
-
-Rules:
-- 3-4 sentences, under 220 characters total
-- Separate paragraphs with line breaks
-- No markdown/bullets
-- Professional yet approachable tone""",
+        'fundamental': "/no_think Plain-English commentary. Market Rationality (+rational/−emotional, larger |negative|=stronger emotion) + top 2-3 feature contributors. State→cause→investor meaning, 3 sentences ≤180 chars. No markdown.",
+        'signal':      "/no_think Plain-English commentary. Gap = surge − crash (+upside / −downside) + 30-day trend (rising/falling/stable) + top 1-2 SHAP factors. Current→trend→meaning, 3 sentences ≤180 chars. No markdown.",
+        'sector':      "/no_think Plain-English commentary. Current cycle phase + favorable sectors + investor takeaway, 3 sentences ≤180 chars. No markdown.",
+        'sector-val':  "/no_think Plain-English commentary. Fundamental Gap (price growth − EPS growth, + = expensive). Top 1-2 expensive + top 1-2 cheap sectors by z-score + market signal, 3 sentences ≤200 chars. No markdown.",
+        'sector-mom':  "/no_think Plain-English commentary. Top 3M momentum + biggest over/underperform vs expected + alignment with cycle phase, 3 sentences ≤200 chars. No markdown.",
     },
 }
 
@@ -1068,7 +885,7 @@ def _generate_ai_explain(tab: str, lang: str, region: str) -> dict | None:
         text = _build_explain_text(tab, lang, region=region)
         if not text.strip():
             return None
-        result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 300)
+        result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 150)
         if not result:
             return None
         return {'explanation': result.strip(), 'generated_at': _kst_now_str()}
