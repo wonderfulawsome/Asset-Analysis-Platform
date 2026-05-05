@@ -1318,7 +1318,7 @@ def fetch_ai_headline(region: str, lang: str) -> dict | None:
 
 
 # ── ai_explain_cache (5탭 AI 해설) ────────────────────────────
-# 스케줄러가 tab+lang+region 조합 미리 생성 → endpoint 3-tier (memory → DB → LLM 즉석).
+# 스케줄러가 tab+lang+region 조합 미리 생성 → endpoint 는 memory → DB 즉시 응답.
 
 def upsert_ai_explain(tab: str, lang: str, region: str, explanation: str,
                        generated_at: str | None = None) -> None:

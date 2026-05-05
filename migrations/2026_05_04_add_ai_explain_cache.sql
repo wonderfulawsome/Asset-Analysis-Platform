@@ -1,7 +1,7 @@
 -- 5탭 AI 해설 (fundamental/signal/sector/sector-val/sector-mom) 캐시.
 --
 -- 기존: in-memory _explain_cache (TTL 만료/재시작 시 LLM 즉석 호출 1~3초 → 사용자 체감 느림)
--- 변경: 스케줄러가 tab × lang × region 조합 미리 생성 → endpoint 3-tier (memory → DB → LLM)
+-- 변경: 스케줄러가 tab × lang × region 조합 미리 생성 → endpoint 즉시 응답 (memory → DB)
 --
 -- 5 tab × 2 lang × 2 region = 최대 20 entry. 'sector-mom' 은 region 무관 (전역) 이라 더 적음.
 

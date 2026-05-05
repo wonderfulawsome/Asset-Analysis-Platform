@@ -661,6 +661,7 @@ def get_ai_summary(lang: str = Query('ko'), region: str = Query('us')):
 # ═══════════════════════════════════════════════════════════════
 
 _explain_cache = {}                                          # 탭별 AI 해설 캐시 딕셔너리
+_explain_inflight = set()                                    # 캐시 미스 백그라운드 생성 중복 방지
 _explain_lock = threading.Lock()                             # 해설 캐시 동시 접근 보호용 Lock
 _EXPLAIN_TTL = 900                                           # 해설 캐시 유효 시간 (15분)
 
@@ -920,13 +921,44 @@ def precompute_ai_explain(tab: str, lang: str, region: str) -> bool:
     return True
 
 
+def _warm_ai_explain_cache(tab: str, lang: str, region: str, cache_key: str) -> None:
+    """사용자 응답을 막지 않고 누락된 해설 캐시를 백그라운드로 채움."""
+    try:
+        out = _generate_ai_explain(tab, lang, region)
+        if not out:
+            return
+        upsert_ai_explain(tab, lang, region, out['explanation'], out['generated_at'])
+        with _explain_lock:
+            _explain_cache[cache_key] = {
+                'text': out['explanation'],
+                'expires': time.time() + _EXPLAIN_TTL,
+            }
+    finally:
+        with _explain_lock:
+            _explain_inflight.discard(cache_key)
+
+
+def _schedule_ai_explain_warm(tab: str, lang: str, region: str, cache_key: str) -> None:
+    """캐시 미스 때 LLM을 동기 호출하지 않도록 1회성 백그라운드 생성 예약."""
+    with _explain_lock:
+        if cache_key in _explain_inflight:
+            return
+        _explain_inflight.add(cache_key)
+    threading.Thread(
+        target=_warm_ai_explain_cache,
+        args=(tab, lang, region, cache_key),
+        daemon=True,
+    ).start()
+
+
 @router.get('/ai-explain')                                   # GET /api/market-summary/ai-explain
 def get_ai_explain(tab: str = Query(..., description='fundamental, signal, sector, sector-val, sector-mom'),
                    lang: str = Query('ko'),
                    region: str = Query('us')):
-    """3-tier fallback: in-memory cache → DB (ai_explain_cache) → LLM 즉석 호출.
+    """2-tier 즉시 응답: in-memory cache → DB (ai_explain_cache).
 
-    스케줄러가 미리 생성해 DB 적재 — 사용자 첫 진입에서도 즉시 응답.
+    스케줄러가 미리 생성해 DB 적재한다. 캐시가 비면 사용자 요청 안에서는
+    LLM을 기다리지 않고 백그라운드 생성만 예약한다.
     """
     lang = lang if lang in ('ko', 'en') else 'ko'
     region = _norm_region(region)
@@ -962,24 +994,6 @@ def get_ai_explain(tab: str = Query(..., description='fundamental, signal, secto
             'generated_at': row.get('generated_at'),
         }
 
-    # 3차: LLM 즉석 호출 (캐시 미스 fallback)
-    try:
-        out = _generate_ai_explain(tab, lang, region)
-        if not out:
-            return {'explanation': err['no_data'], 'tab': tab, 'error': True}
-        # DB + memory 모두 채워 다음 호출 즉시 hit
-        upsert_ai_explain(tab, lang, region, out['explanation'], out['generated_at'])
-        with _explain_lock:
-            _explain_cache[cache_key] = {
-                'text': out['explanation'],
-                'expires': now + _EXPLAIN_TTL,
-            }
-        return {
-            'explanation': out['explanation'],
-            'tab': tab,
-            'cached': False,
-            'generated_at': out['generated_at'],
-        }
-    except Exception as e:
-        print(f'[AI Explain {tab}] error: {e}')
-        return {'explanation': err['fail'], 'tab': tab, 'error': True}
+    # 캐시 미스: 사용자 요청은 즉시 끝내고, 다음 호출을 위해 백그라운드로만 생성.
+    _schedule_ai_explain_warm(tab, lang, region, cache_key)
+    return {'explanation': err['no_data'], 'tab': tab, 'error': True, 'cached': False}
