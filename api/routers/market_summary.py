@@ -453,74 +453,23 @@ def _build_home_indicator_text(lang: str = 'ko', region: str = 'us') -> str:
 
 
 _HEADLINE_PROMPTS = {
-    'ko': """/no_think
-너는 한국어 금융 애널리스트다. 아래는 패시브 대시보드 5개 탭(시장·펀더멘털·신호·섹터·시장 밸류)의 핵심 지표다.
-홈 화면 헤드라인을 정확히 다음 **고정 형식** 으로 작성하라.
-
-**[필수 — 첫 문장 고정 템플릿]**
-"시장이 {밸류 라벨} 상태{연결어} 시장 이성 점수가 {부호}{수치}점으로, {판단}인 밸류를 가지고 있습니다."
-
-세 슬롯 채우는 법:
-1) {밸류 라벨}: 시장 밸류 탭의 label 그대로 사용 ("저평가", "적정", "다소 고평가", "고평가" 등)
-2) {연결어}: 라벨 방향과 이성 점수 부호의 부호 일치 여부로 결정
-   - 라벨 부정적(고평가류) + 이성 점수 양수 → **"이지만"** (반전 — 고평가지만 합리적)
-   - 라벨 긍정적(저평가/적정) + 이성 점수 음수 → **"이지만"** (반전 — 적정이지만 비합리적)
-   - 라벨 부정적 + 이성 점수 음수 → **"이며"** (강화 — 고평가에 비합리적)
-   - 라벨 긍정적 + 이성 점수 양수 → **"이며"** (강화 — 저평가에 합리적)
-3) {부호}{수치}: 시장 이성 점수 그대로. 양수면 "+0.9", 음수면 "-1.2" 등
-4) {판단}:
-   - 이성 점수 양수(+) → "합리적"
-   - 이성 점수 음수(-) → "비합리적"
-
-**[선택] 두 번째 문장 — 보조 신호**
-다음 중 가장 두드러진 신호 하나를 1문장으로 보조 언급 (없으면 생략):
-- 공포탐욕 극단값 (25 미만 / 75 초과)
-- RSI 극단값 (30 미만 / 70 초과)
-- 신호 탭 |gap| 20 이상
-- VIX 25 초과
-- 시장 이성 점수 절대값 ±2 이상이면 "감정적/이성적 흐름이 두드러집니다" 로 강조
-
-출력 규칙:
-- 1~2 문장, 각 문장 끝에 마침표
-- 총 180자 이내
-- 부드럽고 신중한 어투
-- 이모지·마크다운·대시(—)·콜론(:) 금지
-- **첫 문장은 반드시 위 고정 템플릿 형식 그대로** — "시장이 ... 상태{이지만/이며} 시장 이성 점수가 ...점으로, ...인 밸류를 가지고 있습니다."
-
-예시:
-시장이 다소 고평가 상태이지만 시장 이성 점수가 +0.9점으로, 합리적인 밸류를 가지고 있습니다.
-시장이 적정 상태이며 시장 이성 점수가 +1.5점으로, 합리적인 밸류를 가지고 있습니다. 공포탐욕 78로 탐욕 구간이 부각됩니다.
-시장이 고평가 상태이며 시장 이성 점수가 -2.3점으로, 비합리적인 밸류를 가지고 있습니다. 감정적 흐름이 두드러집니다.
-시장이 저평가 상태이지만 시장 이성 점수가 -1.2점으로, 비합리적인 밸류를 가지고 있습니다.""",
-
-    'en': """/no_think
-You are a financial analyst. Below are key indicators across 5 tabs (market, fundamental, signal, sector, market valuation).
-Write a home headline using exactly this **fixed template** for the first sentence.
-
-**[REQUIRED — first-sentence fixed template]**
-"The market is {label}{connector} Market Rationality at {sign}{value}, indicating a {judgment} valuation."
-
-Slots:
-1) {label}: valuation label verbatim ("undervalued", "fair", "somewhat overvalued", "overvalued")
-2) {connector}: choose by direction agreement
-   - Negative label (overvalued) + positive rationality → ", but with" (reversal)
-   - Positive label (under/fair) + negative rationality → ", but with" (reversal)
-   - Negative label + negative rationality → ", and with" (alignment)
-   - Positive label + positive rationality → ", and with" (alignment)
-3) {sign}{value}: rationality score with sign (e.g., "+0.9", "-1.2")
-4) {judgment}:
-   - positive rationality → "reasonable"
-   - negative rationality → "unreasonable"
-
-**[OPTIONAL] Second sentence — supporting signal** (omit if all moderate):
-F&G extreme, RSI extreme, |gap| >= 20, VIX > 25, or |rationality| >= 2.
-
-Output: 1-2 sentences, under 220 chars, professional tone, no emoji/markdown/em-dash/colon.
-
-Examples:
-The market is somewhat overvalued, but with Market Rationality at +0.9, indicating a reasonable valuation.
-The market is fair, and with Market Rationality at +1.5, indicating a reasonable valuation.
-The market is overvalued, and with Market Rationality at -2.3, indicating an unreasonable valuation. Strong emotional flow stands out.""",
+    # 압축본 — fixed template 만 강제, 슬롯 규칙은 예시로 추론하도록.
+    'ko': (
+        "/no_think 한국어 금융 해설. 아래 지표로 다음 형식 1문장 작성.\n"
+        '형식: "시장이 {밸류 라벨} 상태{이지만/이며} 시장 이성 점수가 {±수치}점으로, {합리적/비합리적}인 밸류를 가지고 있습니다."\n'
+        "규칙: 라벨·이성 부호 일치 → 이며, 불일치 → 이지만. 양수 → 합리적, 음수 → 비합리적.\n"
+        "필요 시 보조 1문장 추가 (공포탐욕 극단·RSI 극단·VIX>25·|이성|>2 등).\n"
+        "≤180자, 마침표 끝, 이모지·마크다운·대시·콜론 X.\n"
+        "예: 시장이 다소 고평가 상태이지만 시장 이성 점수가 +0.9점으로, 합리적인 밸류를 가지고 있습니다."
+    ),
+    'en': (
+        "/no_think English financial commentary. Write 1 sentence in this exact format from indicators below.\n"
+        'Format: "The market is {label}{connector} Market Rationality at {±value}, indicating a {reasonable/unreasonable} valuation."\n'
+        "Rules: matching label-rationality direction → ', and with'; mismatch → ', but with'. + → reasonable, − → unreasonable.\n"
+        "Optional 2nd sentence for extreme F&G/RSI/VIX>25/|rationality|>2.\n"
+        "≤220 chars, period-ended, no emoji/markdown/em-dash/colon.\n"
+        "Example: The market is somewhat overvalued, but with Market Rationality at +0.9, indicating a reasonable valuation."
+    ),
 }
 
 _headline_cache: dict = {}  # 키: f"{lang}_{region}", 값: {summary, generated_at, expires}
@@ -540,7 +489,7 @@ def _generate_home_headline(lang: str, region: str) -> dict | None:
     text = _build_home_indicator_text(lang, region=region)
     if not text.strip():
         return None
-    result = _groq_call(_HEADLINE_PROMPTS[lang], text, 350)
+    result = _groq_call(_HEADLINE_PROMPTS[lang], text, 150)
     if not result:
         return None
     cleaned = result.strip().replace('\n', ' ')
