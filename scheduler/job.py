@@ -569,6 +569,25 @@ def run_pipeline(light: bool = False) -> None:
             print(f'[Step 6b] 섹터 펀더멘털 갭 실패, 건너뜀: {e}')
             traceback.print_exc()
 
+        # Step 6c: 섹터 ETF 가중평균 PER (US, per_weighted 컬럼) — yfinance trailingPE
+        # 종목별 비중 가중. 갭과 별도 컬럼, 갭과 공존.
+        print('\n[Step 6c] 섹터 가중평균 PER (per_weighted)...')
+        try:
+            from collector.sector_per_us import fetch_sector_etf_per_us
+            from database.repositories import upsert_sector_valuation
+            per_rows = fetch_sector_etf_per_us()
+            if per_rows:
+                # sector_name 가 응답에 없으니 ticker 그대로 (UNIQUE 키는 region+date+ticker)
+                enriched = [{'date': r['date'], 'ticker': r['ticker'],
+                             'sector_name': r['ticker'],
+                             'per_weighted': r['per_weighted']}
+                            for r in per_rows]
+                upsert_sector_valuation(enriched, region='us')
+                print(f'[Step 6c] per_weighted {len(per_rows)}건 적재')
+        except Exception as e:
+            print(f'[Step 6c] per_weighted 실패, 건너뜀: {e}')
+            traceback.print_exc()
+
         # Step 7: XGBoost 폭락/급등 전조 탐지 (모델 학습 + 오늘 예측)
         print('\n[Step 7] 폭락/급등 전조 탐지...')
         cs_datasets = None
@@ -793,18 +812,34 @@ def run_pipeline(light: bool = False) -> None:
         print(f'[Step 10] 홈 헤드라인 실패, 건너뜀: {e}')
         traceback.print_exc()
 
-    # Step 11: 5탭 AI 해설 — US × (ko, en) 미리 생성 (ai_explain_cache 적재)
+    # Step 11: 무거운 화면 응답 사전 계산 — endpoint 는 app_cache 즉시 응답.
+    try:
+        print('\n[Step 11] 화면 응답 캐시 미리 생성 (US)...')
+        from api.routers.market_summary import precompute_ai_summary
+        from api.routers.sector_cycle import precompute_valuation, precompute_momentum
+        for _lang in ('ko', 'en'):
+            ok = precompute_ai_summary(_lang, 'us')
+            print(f"[Step 11] ai-summary us/{_lang} {'OK' if ok else 'FAIL'}")
+        ok_val = precompute_valuation('us')
+        ok_mom = precompute_momentum('us')
+        print(f"[Step 11] sector valuation cache us {'OK' if ok_val else 'FAIL'}")
+        print(f"[Step 11] sector momentum cache us {'OK' if ok_mom else 'FAIL'}")
+    except Exception as e:
+        print(f'[Step 11] 화면 응답 캐시 precompute 실패, 건너뜀: {e}')
+        traceback.print_exc()
+
+    # Step 12: 5탭 AI 해설 — US × (ko, en) 미리 생성 (ai_explain_cache 적재)
     # 각 탭의 endpoint /api/market-summary/ai-explain 는 DB 즉시 응답 → 첫 진입 빠름.
     # sector-val / sector-mom 은 region 무관이라 US 파이프라인에서만 처리.
     try:
-        print('\n[Step 11] 5탭 AI 해설 미리 생성 (US × ko/en)...')
+        print('\n[Step 12] 5탭 AI 해설 미리 생성 (US × ko/en)...')
         from api.routers.market_summary import precompute_ai_explain
         for _tab in ('fundamental', 'signal', 'sector', 'sector-val', 'sector-mom'):
             for _lang in ('ko', 'en'):
                 ok = precompute_ai_explain(_tab, _lang, 'us')
-                print(f"[Step 11] ai-explain {_tab}/{_lang}/us {'OK' if ok else 'SKIP'}")
+                print(f"[Step 12] ai-explain {_tab}/{_lang}/us {'OK' if ok else 'SKIP'}")
     except Exception as e:
-        print(f'[Step 11] AI 해설 precompute 실패, 건너뜀: {e}')
+        print(f'[Step 12] AI 해설 precompute 실패, 건너뜀: {e}')
         traceback.print_exc()
 
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산

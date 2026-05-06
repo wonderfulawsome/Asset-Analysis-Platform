@@ -1,0 +1,549 @@
+{
+  "XLK": [
+    {
+      "stock_code": "NVDA",
+      "weight": 14.7841
+    },
+    {
+      "stock_code": "AAPL",
+      "weight": 12.1446
+    },
+    {
+      "stock_code": "MSFT",
+      "weight": 9.2311
+    },
+    {
+      "stock_code": "AVGO",
+      "weight": 6.0335
+    },
+    {
+      "stock_code": "MU",
+      "weight": 4.3219
+    },
+    {
+      "stock_code": "AMD",
+      "weight": 4.2915
+    },
+    {
+      "stock_code": "INTC",
+      "weight": 3.2939
+    },
+    {
+      "stock_code": "CSCO",
+      "weight": 2.6844
+    },
+    {
+      "stock_code": "LRCX",
+      "weight": 2.3909
+    },
+    {
+      "stock_code": "PLTR",
+      "weight": 2.3595
+    }
+  ],
+  "XLF": [
+    {
+      "stock_code": "BRK-B",
+      "weight": 11.6572
+    },
+    {
+      "stock_code": "JPM",
+      "weight": 11.3361
+    },
+    {
+      "stock_code": "V",
+      "weight": 7.4429
+    },
+    {
+      "stock_code": "MA",
+      "weight": 5.4977
+    },
+    {
+      "stock_code": "BAC",
+      "weight": 4.7615
+    },
+    {
+      "stock_code": "GS",
+      "weight": 3.719
+    },
+    {
+      "stock_code": "WFC",
+      "weight": 3.4135
+    },
+    {
+      "stock_code": "MS",
+      "weight": 3.0778
+    },
+    {
+      "stock_code": "C",
+      "weight": 3.002
+    },
+    {
+      "stock_code": "AXP",
+      "weight": 2.3223
+    }
+  ],
+  "XLE": [
+    {
+      "stock_code": "XOM",
+      "weight": 22.184
+    },
+    {
+      "stock_code": "CVX",
+      "weight": 16.6058
+    },
+    {
+      "stock_code": "COP",
+      "weight": 7.0619
+    },
+    {
+      "stock_code": "SLB",
+      "weight": 4.6208
+    },
+    {
+      "stock_code": "WMB",
+      "weight": 4.3725
+    },
+    {
+      "stock_code": "VLO",
+      "weight": 4.1854
+    },
+    {
+      "stock_code": "EOG",
+      "weight": 4.1437
+    },
+    {
+      "stock_code": "MPC",
+      "weight": 3.9792
+    },
+    {
+      "stock_code": "PSX",
+      "weight": 3.9215
+    },
+    {
+      "stock_code": "BKR",
+      "weight": 3.7405
+    }
+  ],
+  "XLV": [
+    {
+      "stock_code": "LLY",
+      "weight": 14.0695
+    },
+    {
+      "stock_code": "JNJ",
+      "weight": 10.523
+    },
+    {
+      "stock_code": "ABBV",
+      "weight": 7.0952
+    },
+    {
+      "stock_code": "UNH",
+      "weight": 6.3755
+    },
+    {
+      "stock_code": "MRK",
+      "weight": 5.1481
+    },
+    {
+      "stock_code": "AMGN",
+      "weight": 3.5421
+    },
+    {
+      "stock_code": "TMO",
+      "weight": 3.4186
+    },
+    {
+      "stock_code": "ISRG",
+      "weight": 3.0873
+    },
+    {
+      "stock_code": "GILD",
+      "weight": 3.0839
+    },
+    {
+      "stock_code": "ABT",
+      "weight": 2.9992
+    }
+  ],
+  "XLY": [
+    {
+      "stock_code": "AMZN",
+      "weight": 27.579
+    },
+    {
+      "stock_code": "TSLA",
+      "weight": 17.9343
+    },
+    {
+      "stock_code": "HD",
+      "weight": 5.4694
+    },
+    {
+      "stock_code": "TJX",
+      "weight": 3.9899
+    },
+    {
+      "stock_code": "MCD",
+      "weight": 3.9081
+    },
+    {
+      "stock_code": "BKNG",
+      "weight": 3.1098
+    },
+    {
+      "stock_code": "LOW",
+      "weight": 3.0703
+    },
+    {
+      "stock_code": "SBUX",
+      "weight": 2.7507
+    },
+    {
+      "stock_code": "ORLY",
+      "weight": 1.9182
+    },
+    {
+      "stock_code": "MAR",
+      "weight": 1.8232
+    }
+  ],
+  "XLI": [
+    {
+      "stock_code": "CAT",
+      "weight": 7.6057
+    },
+    {
+      "stock_code": "GE",
+      "weight": 5.5844
+    },
+    {
+      "stock_code": "GEV",
+      "weight": 5.363
+    },
+    {
+      "stock_code": "RTX",
+      "weight": 4.3402
+    },
+    {
+      "stock_code": "BA",
+      "weight": 3.3033
+    },
+    {
+      "stock_code": "ETN",
+      "weight": 3.0886
+    },
+    {
+      "stock_code": "UNP",
+      "weight": 2.9367
+    },
+    {
+      "stock_code": "UBER",
+      "weight": 2.8201
+    },
+    {
+      "stock_code": "DE",
+      "weight": 2.7309
+    },
+    {
+      "stock_code": "HON",
+      "weight": 2.499
+    }
+  ],
+  "XLB": [
+    {
+      "stock_code": "LIN",
+      "weight": 14.143
+    },
+    {
+      "stock_code": "NEM",
+      "weight": 7.3267
+    },
+    {
+      "stock_code": "NUE",
+      "weight": 5.6794
+    },
+    {
+      "stock_code": "FCX",
+      "weight": 5.0188
+    },
+    {
+      "stock_code": "CRH",
+      "weight": 4.9318
+    },
+    {
+      "stock_code": "VMC",
+      "weight": 4.8487
+    },
+    {
+      "stock_code": "APD",
+      "weight": 4.6799
+    },
+    {
+      "stock_code": "MLM",
+      "weight": 4.4871
+    },
+    {
+      "stock_code": "SHW",
+      "weight": 4.4809
+    },
+    {
+      "stock_code": "CTVA",
+      "weight": 4.4623
+    }
+  ],
+  "XLU": [
+    {
+      "stock_code": "NEE",
+      "weight": 13.9953
+    },
+    {
+      "stock_code": "SO",
+      "weight": 7.3102
+    },
+    {
+      "stock_code": "DUK",
+      "weight": 6.9169
+    },
+    {
+      "stock_code": "CEG",
+      "weight": 6.6968
+    },
+    {
+      "stock_code": "AEP",
+      "weight": 5.0913
+    },
+    {
+      "stock_code": "SRE",
+      "weight": 4.2625
+    },
+    {
+      "stock_code": "D",
+      "weight": 3.7815
+    },
+    {
+      "stock_code": "ETR",
+      "weight": 3.6617
+    },
+    {
+      "stock_code": "VST",
+      "weight": 3.4512
+    },
+    {
+      "stock_code": "XEL",
+      "weight": 3.3688
+    }
+  ],
+  "XLRE": [
+    {
+      "stock_code": "WELL",
+      "weight": 10.3209
+    },
+    {
+      "stock_code": "PLD",
+      "weight": 8.9846
+    },
+    {
+      "stock_code": "EQIX",
+      "weight": 7.2408
+    },
+    {
+      "stock_code": "AMT",
+      "weight": 5.8212
+    },
+    {
+      "stock_code": "DLR",
+      "weight": 4.7627
+    },
+    {
+      "stock_code": "SPG",
+      "weight": 4.5999
+    },
+    {
+      "stock_code": "VTR",
+      "weight": 4.3597
+    },
+    {
+      "stock_code": "CBRE",
+      "weight": 4.3326
+    },
+    {
+      "stock_code": "PSA",
+      "weight": 4.3166
+    },
+    {
+      "stock_code": "O",
+      "weight": 4.2493
+    }
+  ],
+  "XLC": [
+    {
+      "stock_code": "META",
+      "weight": 13.487
+    },
+    {
+      "stock_code": "GOOGL",
+      "weight": 9.877
+    },
+    {
+      "stock_code": "GOOG",
+      "weight": 7.875
+    },
+    {
+      "stock_code": "TTWO",
+      "weight": 4.6225
+    },
+    {
+      "stock_code": "DIS",
+      "weight": 4.5928
+    },
+    {
+      "stock_code": "LYV",
+      "weight": 4.4351
+    },
+    {
+      "stock_code": "SATS",
+      "weight": 4.3753
+    },
+    {
+      "stock_code": "OMC",
+      "weight": 4.2529
+    },
+    {
+      "stock_code": "NFLX",
+      "weight": 4.2041
+    },
+    {
+      "stock_code": "EA",
+      "weight": 4.1712
+    }
+  ],
+  "XLP": [
+    {
+      "stock_code": "WMT",
+      "weight": 12.1389
+    },
+    {
+      "stock_code": "COST",
+      "weight": 9.4519
+    },
+    {
+      "stock_code": "PG",
+      "weight": 7.1751
+    },
+    {
+      "stock_code": "KO",
+      "weight": 6.4001
+    },
+    {
+      "stock_code": "PM",
+      "weight": 5.3935
+    },
+    {
+      "stock_code": "MDLZ",
+      "weight": 4.932
+    },
+    {
+      "stock_code": "MO",
+      "weight": 4.8666
+    },
+    {
+      "stock_code": "PEP",
+      "weight": 4.5464
+    },
+    {
+      "stock_code": "CL",
+      "weight": 4.2332
+    },
+    {
+      "stock_code": "TGT",
+      "weight": 3.8289
+    }
+  ],
+  "SOXX": [
+    {
+      "stock_code": "AMD",
+      "weight": 8.0296
+    },
+    {
+      "stock_code": "AVGO",
+      "weight": 7.9459
+    },
+    {
+      "stock_code": "MU",
+      "weight": 7.6266
+    },
+    {
+      "stock_code": "NVDA",
+      "weight": 6.8494
+    },
+    {
+      "stock_code": "INTC",
+      "weight": 6.2986
+    },
+    {
+      "stock_code": "MRVL",
+      "weight": 6.1466
+    },
+    {
+      "stock_code": "AMAT",
+      "weight": 4.8052
+    },
+    {
+      "stock_code": "MPWR",
+      "weight": 4.2956
+    },
+    {
+      "stock_code": "TXN",
+      "weight": 4.0293
+    },
+    {
+      "stock_code": "NXPI",
+      "weight": 3.9324
+    }
+  ],
+  "IGV": [
+    {
+      "stock_code": "MSFT",
+      "weight": 8.7914
+    },
+    {
+      "stock_code": "ORCL",
+      "weight": 8.6362
+    },
+    {
+      "stock_code": "PLTR",
+      "weight": 8.0097
+    },
+    {
+      "stock_code": "CRM",
+      "weight": 6.68
+    },
+    {
+      "stock_code": "PANW",
+      "weight": 5.8519
+    },
+    {
+      "stock_code": "APP",
+      "weight": 4.885
+    },
+    {
+      "stock_code": "CRWD",
+      "weight": 4.5931
+    },
+    {
+      "stock_code": "ADBE",
+      "weight": 4.1292
+    },
+    {
+      "stock_code": "INTU",
+      "weight": 4.0761
+    },
+    {
+      "stock_code": "SNPS",
+      "weight": 3.7739
+    }
+  ],
+  "updated_at": "2026-05-07T04:01:49.934586"
+}

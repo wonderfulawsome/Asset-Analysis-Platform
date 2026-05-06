@@ -272,7 +272,7 @@ def fetch_valuation_signal_today_kr() -> dict | None:
     폴백: PER → 14.0, KR 10Y → 3.5%, VKOSPI → KOSPI 20D RV.
     """
     try:
-        # KOSPI PER — pykrx 만 지원, 실패시 14.0
+        # KOSPI PER fallback 체인: pykrx → DART 시총가중 → 캐시 → 14.0
         kospi_per = None
         try:
             from pykrx import stock
@@ -284,7 +284,18 @@ def fetch_valuation_signal_today_kr() -> dict | None:
                 if len(pv) > 0:
                     kospi_per = float(pv.iloc[-1])
         except Exception as e:
-            print(f'[valuation_kr] PER fetch 실패: {e}')
+            print(f'[valuation_kr] PER pykrx 실패: {e}')
+        # DART fallback — pykrx 차단 시 KOSPI200 시총가중 시장 PER (24h 캐시)
+        if not kospi_per or kospi_per <= 0:
+            try:
+                from collector.dart_fundamentals import compute_kospi_market_per_dart
+                dart_result = compute_kospi_market_per_dart()
+                if dart_result and dart_result.get('per') and dart_result['per'] > 0:
+                    kospi_per = dart_result['per']
+                    print(f"[valuation_kr] PER fallback (DART KOSPI200 시총가중 {kospi_per:.2f}, "
+                          f"cov {dart_result['coverage']*100:.0f}%, n={dart_result['n_per']}) 사용")
+            except Exception as e:
+                print(f'[valuation_kr] DART PER fallback 실패: {e}')
         if not kospi_per or kospi_per <= 0:
             cached = _load_last_known_per()
             if cached:
@@ -391,7 +402,7 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
         print('[valuation_kr] KOSPI close 비어있음 — backfill 중단')
         return []
 
-    # KOSPI fundamental (PER) — pykrx 만 지원. 실패시 캐싱된 last_known_per → 없으면 _HARD_FALLBACK_PER
+    # KOSPI PER backfill 체인: pykrx → DART 시총가중 (오늘자 평탄) → 캐시 → 14.0
     per_series = None
     try:
         from pykrx import stock
@@ -400,7 +411,18 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
         if fund is not None and not fund.empty and 'PER' in fund.columns:
             per_series = fund['PER'].replace(0, np.nan)
     except Exception as e:
-        print(f'[valuation_kr] PER pykrx 실패 → fallback 사용: {e}')
+        print(f'[valuation_kr] PER pykrx 실패: {e}')
+    # DART fallback — KOSPI200 시총가중. backfill 은 오늘자 시장 PER 을 평탄 적용 (24h 캐시)
+    if per_series is None or per_series.empty:
+        try:
+            from collector.dart_fundamentals import compute_kospi_market_per_dart
+            dart_result = compute_kospi_market_per_dart()
+            if dart_result and dart_result.get('per') and dart_result['per'] > 0:
+                per_series = pd.Series(dart_result['per'], index=close.index)
+                print(f"[valuation_kr] PER backfill (DART KOSPI200 시총가중 {dart_result['per']:.2f}, "
+                      f"cov {dart_result['coverage']*100:.0f}%, 평탄) 사용")
+        except Exception as e:
+            print(f'[valuation_kr] DART PER backfill 실패: {e}')
     if per_series is None or per_series.empty:
         cached = _load_last_known_per()
         fallback_per = cached if cached else _HARD_FALLBACK_PER

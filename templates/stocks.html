@@ -29,7 +29,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=110">
+  <link rel="stylesheet" href="/static/css/main.css?v=112">
   <!-- Tailwind CDN 제거: preflight 가 body 의 margin:0 auto 를 덮어써 홈 뷰가 좌측 정렬됨.
        홈 뷰는 home.css 자체 grid 로 처리하므로 Tailwind 없이도 동작 -->
   <link rel="stylesheet" href="/static/css/home.css?v=13">
@@ -123,16 +123,21 @@
       </div>
     </div>
     <div class="header-right">
-      <!-- 국내주식 탭 완성 전까지 region 토글 숨김 (region.js 도 강제 'us' 반환) -->
-      <div id="btn-region" class="region-toggle" role="button" aria-label="Region toggle" style="display:none;">
-        <span class="region-flag region-us">미국주식</span>
-        <span class="region-flag region-kr">국내주식</span>
-      </div>
       <button id="btn-theme" class="theme-btn" aria-label="Toggle dark mode"></button>
       <button id="btn-lang" class="lang-btn">EN</button>
       <div id="btn-edit-holdings" class="settings-btn">⚙️</div>
     </div>
   </header>
+
+  <!-- Region Toggle Bar — 헤더 바로 아래, 가로 정중앙. -->
+  <!-- KR 화면 완성 전까지 wrapper style="display:none;" 유지 + region.js _FORCE_US_ONLY=true (두 곳 모두 풀어야 활성). -->
+  <div class="region-toggle-bar" style="display:none;">
+    <div id="btn-region" class="region-toggle" role="button" aria-label="시장 선택">
+      <span class="region-indicator"></span>
+      <span class="region-flag region-us">미국 주식</span>
+      <span class="region-flag region-kr">국내 주식</span>
+    </div>
+  </div>
 
   <!-- Pull-to-refresh indicator -->
   <div class="ptr-indicator" id="ptr-indicator">
@@ -513,7 +518,7 @@
     <div id="detail-body" class="detail-body"></div>
   </div>
 
-  <script src="/static/js/region.js?v=4"></script>
+  <script src="/static/js/region.js?v=6"></script>
   <script src="/static/js/i18n.js?v=6"></script>
   <script>
     // ── 다크모드 토글 (헤더 + setup 화면 동기화) ──
@@ -551,8 +556,8 @@
     document.getElementById('setup-lang').addEventListener('click', switchLang);
   </script>
   <script src="/static/js/chart.js?v=25"></script>
-  <script src="/static/js/main.js?v=130"></script>
+  <script src="/static/js/main.js?v=132"></script>
   <script src="/static/js/sector.js?v=7"></script>
-  <script src="/static/js/home.js?v=35"></script>
+  <script src="/static/js/home.js?v=42"></script>
 </body>
 </html>

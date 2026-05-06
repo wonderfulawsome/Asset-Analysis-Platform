@@ -7749,3 +7749,330 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - 토큰 비용: 시스템 프롬프트 +30~40 토큰 (메커니즘 가이드). max_tokens 150 그대로.
 #   하루 호출 빈도 (5탭 × 2lang × 2region = 20) 기준 미미.
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [101] 2026-05-06 (UTC) — region 토글 디자인 재설계 (헤더 아래 별도 row, 가로 정중앙)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 디자인 폴더("/root/UI 디자인") 에서 region 토글 디자인을 다듬고 사용자 확인 후 본 레포에
+# 반영. 사용자 요청 흐름:
+# (1) "더 눈에 잘 띄고 세련되게" → 그라데이션 + region 색 액센트
+# (2) "상단 중앙으로"            → 헤더 우측 → 가로 정중앙
+# (3) "미국 주식 / 국내 주식"     → 4글자 띄어쓰기 라벨, width 200px
+# (4) "로고와 겹친다"            → 헤더 외부 별도 row 로 분리
+#
+# [수정 파일]
+# - static/css/main.css : region-toggle 섹션 통째 교체
+#     /* Region Toggle Bar (헤더 외부, 가로 정중앙) */
+#     .region-toggle-bar { display: flex; justify-content: center; padding: 6px 16px 10px; }
+#     /* Region Toggle (시장 선택) */
+#     .region-toggle {
+#       display: inline-flex; position: relative;
+#       width: 200px; height: 38px; padding: 3px;
+#       border-radius: 12px;
+#       background: linear-gradient(180deg, rgba(17,24,39,0.06), rgba(17,24,39,0.03));
+#       letter-spacing: 0.4px; font-weight: 800;
+#     }
+#     /* 슬라이딩 인디케이터 */
+#     .region-toggle .region-indicator {
+#       position: absolute; top:3 bottom:3 left:3 width:calc(50%-3px);
+#       transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1);
+#     }
+#     .region-toggle.region-mode-us .region-indicator { 라이트:네이비 / 다크:파스텔 블루 }
+#     .region-toggle.region-mode-kr .region-indicator { transform: translateX(100%); 라이트:적갈 / 다크:파스텔 레드 }
+#     /* hover 시 box-shadow 가 region 색으로 발광 */
+#     .region-toggle.region-mode-us:hover .region-indicator { 0 5px 14px rgba(37,99,235,0.45) }
+#     .region-toggle.region-mode-kr:hover .region-indicator { 0 5px 14px rgba(239,68,68,0.45) }
+#
+# - templates/stocks.html:
+#     · 기존 header-right 안 region-toggle 마크업 제거
+#     · </header> 직후 .region-toggle-bar wrapper 신규 (style="display:none;" 유지)
+#     · region-indicator span 추가 (CSS 슬라이딩 배경)
+#     · 라벨 "미국주식" → "미국 주식", "국내주식" → "국내 주식" (띄어쓰기)
+#     · cache-bust v=110 → v=111
+#
+# [Why — 헤더 외부 row 분리]
+# 모바일 480px 폭 헤더: 좌측 logo+title(~120px) + 우측 3버튼(~100px) = 220px 점유. 가운데
+# 200px toggle 끼우면 좌측 'Passive' 와 가로 충돌 (사용자 스크린샷 확인). 헤더 아래 전용
+# row 로 영구 분리. wrapper(.region-toggle-bar) 가 노출 토글 단위 — display:none/block
+# 으로 KR 화면 완성 시 일괄 활성화 가능.
+#
+# [Why — region 별 색 액센트]
+# 사용자가 디자인 폴더에서 직접 만든 quiet baseline (인디케이터 단색 검정) 위에 region
+# 컬러 hint 추가: US 네이비, KR 적갈. baseline 의 절제는 유지하면서 선택 상태가 의미적으로
+# 구분되도록. hover 시 box-shadow 가 region 색으로 발광 → 동적 인상.
+#
+# [Why — production 노출 보류]
+# region-toggle-bar 에 style="display:none;" 유지 — [95] KR 미완성 정책 그대로. region.js
+# _FORCE_US_ONLY=true 도 유지. KR 화면 완성 시 두 곳만 풀면 즉시 활성. 새 디자인은 코드
+# 베이스에 미리 들어가고 노출만 보류.
+#
+# [검증]
+# - 디자인 서버 (port 8001) hot reload OK
+# - 본 레포 main.css?v=111 cache-bust → 다음 사용자 새로고침 시 신 CSS 적용
+# - production 화면 영향 없음 (display:none 유지)
+# - region.js 의 region-mode-us/kr 클래스 토글 로직 그대로 호환 (셀렉터 변경 없음)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [102] 2026-05-06 (UTC) — region.js: localhost 노출 시 wrapper(.region-toggle-bar) 도 풀기
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# [101] 에서 region toggle 마크업을 헤더 외부 wrapper(.region-toggle-bar) 로 분리하면서
+# wrapper 에 inline style="display:none;" 적용. 사용자가 region.js 에 hostname 자동 감지
+# 로직을 추가해놓음 (localhost/사설 IP → _IS_LOCAL_DEV=true → _FORCE_US_ONLY=false +
+# btn-region 의 inline display 무력화). 그러나 새 마크업에선 wrapper 가 display:none 이라
+# 자식인 btn-region 의 display 만 풀어도 wrapper 가 가려서 안 보임. 사용자 보고
+# "로컬페이지에서 아직 토글이 안 나와있어" → wrapper 도 같이 풀어야.
+#
+# [수정 파일]
+# - static/js/region.js (DOMContentLoaded 안):
+#     if (_IS_LOCAL_DEV) {
+#       btn.style.display = '';
+#       const bar = document.querySelector('.region-toggle-bar');
+#       if (bar) bar.style.display = '';
+#     }
+# - templates/stocks.html: region.js?v=5 → v=6 cache-bust
+#
+# [Why — wrapper 까지 풀기]
+# 새 마크업: <div class="region-toggle-bar" style="display:none;"><div id="btn-region">…</div></div>
+# wrapper 는 별도 row 로 가로 정중앙 정렬용 + production 에서 toggle 노출 차단용 가드.
+# localhost 에선 wrapper 와 btn 모두 풀어야 토글이 화면에 나옴.
+#
+# [Why — production 가드는 그대로]
+# _IS_LOCAL_DEV 는 hostname 검사 (localhost/127.0.0.1/사설 IP) 라 dinsightlab.com 등
+# production 에선 false → wrapper 도 btn 도 안 풀림. KR 미완성 가림 정책 [95] 그대로.
+#
+# [검증]
+# - localhost:8000/stocks 새로고침 → wrapper + btn 모두 inline display 비우기 → 토글 노출
+# - production (dinsightlab.com) → _IS_LOCAL_DEV=false → wrapper display:none 유지 → 가려짐
+# - region.js?v=6 cache-bust 적용
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [102] 2026-05-07 (UTC) — DART 기반 KOSPI 시장 PER/PBR 시총가중 fallback
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# valuation_signal_kr 의 KOSPI PER fallback 이 pykrx 차단 시 항상 _HARD_FALLBACK_PER=14.0
+# (KOSPI 장기 평균) 를 사용. 14.0 은 현재 시장 PER (~25) 과 차이 커서 ERP 가 항상 양수로
+# 편향 → composite z 의 z_erp 가 항상 "저평가" 신호. DART API 로 시총 상위 25 종목의
+# 시총가중 시장 PER 을 산출해 pykrx 와 _HARD_FALLBACK 사이 fallback 으로 끼워넣음.
+#
+# [신규 — collector/dart_fundamentals.py 끝에 추가]
+# 1) `_market_cap_yf(stock_code)`: yfinance Ticker(.KS/.KQ).info['marketCap'] 으로 종목 시총
+#    fetch. KOSPI(.KS) 우선 → KOSDAQ(.KQ) fallback.
+# 2) `compute_kospi_market_per_dart(stock_codes=None, force_refresh=False) -> dict | None`:
+#    - default stock_codes = noise_regime_data_kr.ALL_STOCKS_KR (5섹터×5=25 종목, 시총상위 proxy)
+#    - 절차: yfinance 시총 fetch → DART fetch_per_pbr_dart → 시총 가중평균
+#    - 공식: market_per = Σcap / Σni (음수 NI 제외), market_pbr = Σcap / Σeq (음수 EQ 제외)
+#    - 24h 캐시 (_load_metrics_cache 내 'kospi_market_per' 키)
+#    - dotenv 자동 로드 (모듈 상단)
+#
+# [수정 — collector/valuation_signal_kr.py PER fallback 체인 2곳]
+# - fetch_valuation_signal_today_kr: pykrx → **DART** → 캐시 → 14.0 (3단계 → 4단계)
+# - backfill_valuation_signal_kr: 동일 패턴 (DART 결과는 시계열 평탄 적용)
+# - DART 결과 사용 시 콘솔 로그: "PER fallback (DART 시총가중 24.82, cov 84%, n=20) 사용"
+#
+# [Why]
+# - pykrx KRX 차단 환경 (개발/일부 production) 에서 valuation_signal_kr 가 매번 14.0 평탄 PER
+#   사용 → ERP 신호 왜곡. DART API 는 KRX 상태와 무관하게 작동 (한도 일 20,000 호출 충분).
+# - 25 종목 cov 84% 면 KOSPI 시총 약 70~80% 커버 → 시장 평균 proxy 로 충분.
+#
+# [검증]
+# - python -c "from collector.dart_fundamentals import compute_kospi_market_per_dart;
+#              print(compute_kospi_market_per_dart(force_refresh=True))"
+#   → {per: 24.82, pbr: 3.06, coverage: 0.84, n_per: 20, n_pbr: 21}
+# - python -c "from collector.valuation_signal_kr import fetch_valuation_signal_today_kr;
+#              print(fetch_valuation_signal_today_kr())"
+#   → spy_per=24.82, ERP=0.001, z_erp=-1.27, z_comp=0.31, label='다소 저평가'
+#   (이전 14.0 fallback 시: spy_per=14, ERP=3.64%, z_erp ≫ 0, label='명확한 저평가' 편향)
+#
+# [한계 / 후속]
+# - 25 종목은 KOSPI 시총 상위 proxy — 정확한 KOSPI200 가중평균은 KODEX 200 PDF holdings 가
+#   필요. ETF holdings 는 pykrx.get_etf_portfolio_deposit_file 인데 KRX 차단 시 fail.
+#   → 추후 KOSPI200 정적 리스트 추가 시 cov 향상 가능.
+# - 사업보고서 (연간) 기준 — TTM (4분기 합산) 확장은 우선순위 2번 작업으로 남김.
+# - yfinance marketCap 은 stale 가능 (실시간 아님) — 일별 1회 캐시면 무관.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [103] 2026-05-07 (UTC) — DART KOSPI 시장 PER/PBR: 25종목 proxy → KOSPI200 시총가중
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# [102] 의 DART 기반 KOSPI PER/PBR fallback 은 pykrx 차단 시 14.0 hard fallback 을 피하는
+# 효과는 있었지만, default universe 가 noise_regime_data_kr.ALL_STOCKS_KR 25종목 proxy 라
+# 사용자 요청의 "KOSPI200 종목 시총 가중" 과 정확히 맞지 않았음. 1번 태스크를 실제 KOSPI200
+# 기반으로 확장.
+#
+# [수정 — collector/dart_fundamentals.py]
+# - `_fetch_kospi200_codes()` 신규:
+#   pykrx `stock.get_index_portfolio_deposit_file('1028')` 로 KOSPI200 구성종목 로드.
+#   pykrx 실패/부족 시에만 기존 25종목 proxy 로 fallback.
+# - `_market_caps_pykrx(stock_codes)` 신규:
+#   pykrx `stock.get_market_cap_by_ticker(date, market='KOSPI')` 로 최근 거래일 시총을
+#   최대 14일 lookback 하며 조회.
+# - `compute_kospi_market_per_dart(stock_codes=None, ...)` 변경:
+#   default universe = KOSPI200, 시총 = pykrx KRX 시총 우선 + 누락분만 yfinance .KS/.KQ 보강.
+#   시장 PER/PBR 공식은 유지:
+#     market_per = Σcap / Σnet_income, market_pbr = Σcap / Σequity
+#   음수 순이익은 PER 산출에서 제외, 음수/0 자본은 PBR 산출에서 제외.
+# - 캐시 키 `kospi_market_per` → `kospi200_market_per` 로 분리:
+#   기존 25종목 캐시가 남아 있어도 KOSPI200 계산을 건너뛰지 않게 함.
+#
+# [수정 — collector/valuation_signal_kr.py]
+# - 로그/주석을 "DART KOSPI200 시총가중" 으로 정정.
+# - today/backfill 모두 pykrx → DART KOSPI200 → last_known_per → 14.0 순서 유지.
+#
+# [수정 — collector/sector_etf_kr.py]
+# - 섹터 ETF valuation fallback 의 시장 평균 PER/PBR 도 pykrx 실패 시 DART KOSPI200
+#   `compute_kospi_market_per_dart()` 를 사용하도록 연결.
+# - 기존에는 pykrx 실패 시 last_known_per + PBR 1.0 으로 바로 내려가 섹터 valuation fallback
+#   도 14.0/1.0 에 고정될 수 있었음.
+#
+# [검증]
+# - .venv/bin/python -m py_compile collector/dart_fundamentals.py
+#   collector/valuation_signal_kr.py collector/sector_etf_kr.py OK
+# - .venv/bin/python import check:
+#   compute_kospi_market_per_dart / _fetch_kospi200_codes / _market_caps_pykrx /
+#   _fetch_kospi_market_per_pbr callable 확인 OK
+#
+# [운영]
+# - 첫 KOSPI200 full 계산은 DART 재무 + 시총 조회 때문에 느릴 수 있음. 24h 캐시 후
+#   valuation_signal_kr 와 sector_valuation_kr 의 fallback 은 캐시 hit 로 빠르게 동작.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [104] 2026-05-07 (UTC) — KR 섹터 밸류에이션 표 빈칸 보정
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 사용자 스크린샷: 국내주식 "섹터 밸류에이션" 표에서 10Y 평균/현재 컬럼이 전부 `-`.
+# 원인 후보:
+# 1) `sector_valuation` 최신 row 는 있으나 PER/PBR 이 null 로 적재된 과거 app_cache payload.
+# 2) 히스토리 표본이 HIST_MIN_N=5 미만이면 `per_mean` 도 null 로 숨김.
+# 3) home.js 가 region.js fetch monkeypatch 에 의존해 `/api/sector-cycle/valuation` 호출.
+#
+# [수정 — api/routers/sector_cycle.py]
+# - `compute_valuation_payload(region='kr')` 에 최신 row 보정 추가:
+#   PER/PBR null 이면 `valuation_signal_kr._load_last_known_per()` → `_HARD_FALLBACK_PER`
+#   로 PER 을 채우고, PBR 은 1.0 fallback.
+# - 평균 표시 기준 분리:
+#   `HIST_MIN_N=5` 는 z-score/%diff 색상 판단용으로 유지.
+#   `MEAN_MIN_N=1` 을 새로 둬서 히스토리가 1개뿐이어도 10Y 평균 칸은 "현재까지 누적 평균"
+#   으로 표시.
+# - KR 에서 해당 ticker history 가 비어 있으면 현재값 1개를 sample 로 넣어
+#   `per_mean` 과 `pbr_mean` 이 `-` 로 남지 않게 함. z-score 는 stdev=0 이라 null 유지.
+# - app_cache payload 검사 `_valuation_payload_incomplete()` 추가:
+#   cached payload 의 valuations 가 비어 있거나 모든 row 의 `per/per_mean` 이 null 이면
+#   캐시를 그대로 반환하지 않고 DB 최신 row 로 재구성 후 app_cache 갱신.
+#
+# [수정 — static/js/home.js / templates/stocks.html]
+# - sector valuation fetch 를 `window.withRegion('/api/sector-cycle/valuation')` 로 명시.
+#   region.js monkeypatch 가 있어도 이 호출 자체가 region-aware 임을 코드상 보장.
+# - home.js cache-bust v=40 → v=41.
+#
+# [검증]
+# - .venv/bin/python -m py_compile api/routers/sector_cycle.py OK
+# - localhost:8000 은 현재 미실행이라 curl endpoint 검증은 불가.
+# - 기대 표시: KR 최신 row 가 존재하면 현재 컬럼은 `24.8배` 등 fallback PER 로 채워지고,
+#   10Y 평균은 표본 부족 시에도 현재까지 누적 평균으로 표시. 색상은 표본 5개 이상부터.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [105] 2026-05-07 (UTC) — KR 섹터 밸류에이션 동일 PER(24.8배) 문제 수정
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# [104] 의 null PER 보정이 너무 넓게 적용되어 ETF holdings/PER 산출이 실패한 경우 모든 KR
+# 섹터가 `last_known_per=24.82` 로 동일 표시됨. 표는 채워졌지만 섹터별 비교 의미가 없어짐.
+# 실제 원인 확인: `models/etf_holdings_kr.json` 의 10개 ETF holdings 가 전부 빈 배열.
+# KRX PDF fetch 는 로컬 환경에서 DNS/인증 문제로 실패 가능.
+#
+# [수정 — collector/etf_holdings_kr.py]
+# - 빈 holdings 캐시를 fresh 로 보지 않음:
+#   모든 ETF list 가 비어 있으면 TTL 이 남아도 재시도.
+# - KRX PDF 실패 시 ETF별 대표 구성종목 fallback 추가:
+#   139260 IT, 091160 반도체, 091170 은행, 091180 자동차, 117680 철강,
+#   139250 에너지화학, 227560 필수소비재, 266420 헬스케어, 300610 게임, 341850 리츠.
+#   실제 PDF 가 확보되면 PDF 가 우선이고, fallback 은 "모든 섹터 KOSPI PER 동일" 을 피하기 위한
+#   proxy 로만 사용.
+#
+# [수정 — collector/sector_etf_kr.py]
+# - coverage < 50% 라는 이유만으로 KOSPI 시장 PER 로 덮어쓰지 않음.
+# - 대표 구성종목 중 일부라도 PER 산출 가능하면 그 섹터별 가중평균 PER 을 유지.
+# - PER 이 전혀 없을 때만 최후 fallback 으로 KOSPI 시장 PER 사용.
+#
+# [수정 — api/routers/sector_cycle.py]
+# - [104] 에서 넣은 "PER null → last_known_per 로 일괄 채우기" 제거.
+#   앞으로는 collector 단계에서 섹터별 값을 만들고, API 는 DB 값을 그대로 표시.
+#
+# [검증]
+# - .venv/bin/python -m py_compile collector/etf_holdings_kr.py collector/sector_etf_kr.py
+#   api/routers/sector_cycle.py OK
+# - 대표 holdings helper 확인: 091160/091170/139260/341850 모두 weight 합계 100.0.
+#
+# [운영]
+# - 기존 app_cache/sector_valuation 에 동일 24.8배 값이 남아 있으므로
+#   `python -m scheduler.job_kr` 를 다시 실행해야 화면이 섹터별 값으로 갱신됨.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [106] 2026-05-07 (UTC) — KR sector_valuation DART None PER crash fix
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 사용자 수동 실행 `python -m scheduler.job_kr` 로그:
+# - KRX/PDF 는 실패했지만 static representative holdings + yfinance marketCap + DART metrics 는 동작.
+# - `[sector_valuation_kr] DART PER/PBR 40 종목 산출`
+# - 이후 `_weighted_avg()` 에서 `TypeError: unsupported operand type(s) for *: 'float' and 'NoneType'`
+#
+# 원인:
+# `fetch_per_pbr_dart()` 결과 중 적자/순이익 부재 종목은 `{'per': None, 'pbr': 값}` 또는 반대 형태가
+# 가능. 기존 `_weighted_avg()` 는 key 존재 여부만 보고 `w * stock_fund[sc][key]` 를 수행해
+# None 곱셈으로 crash.
+#
+# [수정 — collector/sector_etf_kr.py]
+# - `_weighted_avg()` 에서 value 가 None 이거나 float 변환 불가이거나 <=0 이면 skip.
+# - 정상 value 만 `valid_sum += w * value`, `valid_w += w`.
+# - 결과적으로 일부 구성종목만 PER 산출되어도 해당 valid 비중 기준으로 섹터별 PER 계산 가능.
+#
+# [검증]
+# - .venv/bin/python -m py_compile collector/sector_etf_kr.py OK
+# - synthetic test:
+#   holdings A/B 50:50, A per=None, B per=20 → `_weighted_avg(...,'per') == (20.0, 0.5)`
+#   A pbr=1.2, B pbr=None → `_weighted_avg(...,'pbr') == (1.2, 0.5)`
+#
+# [사용자 액션]
+# - 다시 `python -m scheduler.job_kr` 실행.
+# - 기대 로그: `DART PER/PBR N 종목 산출` 이후 `sector_valuation 10건 적재`, `sector valuation cache kr OK`.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [107] 2026-05-07 (UTC) — KR sector valuation cache 를 LLM quota 실패와 분리
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 사용자 재실행 로그에서 `sector_valuation 10건 (kr) upsert 완료` 는 성공했지만,
+# 직후 Step 10 의 `precompute_ai_summary()` 가 Groq 429 로 예외를 던지면서 같은 try 블록에
+# 있던 `precompute_valuation('kr')`, `precompute_momentum('kr')` 가 실행되지 않음.
+# 결과: DB 는 갱신됐지만 app_cache 는 오래된 "모든 섹터 24.8배" payload 를 계속 반환할 수 있음.
+#
+# [수정 — scheduler/job_kr.py]
+# - Step 10 을 LLM cache(ai-summary) 와 non-LLM sector cache 로 분리.
+# - Groq quota 실패해도 `sector valuation cache kr OK`, `sector momentum cache kr OK` 가 별도 실행.
+#
+# [수정 — api/routers/sector_cycle.py]
+# - `_valuation_payload_incomplete(payload, region)` 에 KR degenerate cache 검사 추가:
+#   valuations 의 PER 값이 2개 이상인데 모두 같은 값이면 이전 fallback 버그 캐시로 보고 무효화.
+# - `/valuation?region=kr` endpoint 가 그런 캐시를 만나면 DB 최신 row 로 payload 재구성 후 upsert.
+#
+# [검증]
+# - .venv/bin/python -m py_compile api/routers/sector_cycle.py scheduler/job_kr.py OK
+#
+# [운영]
+# - 이미 DB 에 `sector_valuation 10건 (kr)` 이 적재되었으므로 서버가 켜진 상태에서
+#   `/api/sector-cycle/valuation?region=kr` 또는 화면 새로고침 시 cache 가 새 payload 로 교체됨.

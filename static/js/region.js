@@ -7,9 +7,16 @@
   const STORAGE_KEY = 'region';
   const VALID = new Set(['us', 'kr']);
 
-  // ⚠️ 국내주식 탭 완성 전까지 KR 모드 강제 비활성화. 토글 버튼도 HTML 에서 display:none.
-  // KR 완성 후 이 플래그만 false 로 되돌리면 토글 복구. (HTML btn-region 의 style 도 함께 제거)
-  const _FORCE_US_ONLY = true;
+  // ⚠️ production 은 US-only, 로컬 개발 환경 (localhost / 사설 IP) 에선 KR 토글 허용.
+  // hostname 으로 자동 감지 — production (dinsightlab.com 등) 은 _FORCE_US_ONLY=true.
+  const _IS_LOCAL_DEV = (() => {
+    const h = location.hostname;
+    return h === 'localhost' || h === '127.0.0.1'
+        || /^192\.168\./.test(h)
+        || /^10\./.test(h)
+        || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h);
+  })();
+  const _FORCE_US_ONLY = !_IS_LOCAL_DEV;
 
   function getRegion() {
     if (_FORCE_US_ONLY) return 'us';
@@ -82,6 +89,13 @@
     injectKrComingSoon();
     const btn = document.getElementById('btn-region');
     if (btn) {
+      // 로컬 개발에선 토글 노출 (production 의 inline display:none 무력화).
+      // wrapper(.region-toggle-bar) 가 별도 row 로 분리됐으므로 wrapper 까지 같이 풀어야 함.
+      if (_IS_LOCAL_DEV) {
+        btn.style.display = '';
+        const bar = document.querySelector('.region-toggle-bar');
+        if (bar) bar.style.display = '';
+      }
       btn.addEventListener('click', function () {
         const next = getRegion() === 'us' ? 'kr' : 'us';
         setRegion(next);

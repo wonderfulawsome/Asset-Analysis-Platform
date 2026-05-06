@@ -195,7 +195,10 @@
     const target = document.getElementById('sector-val-content');
     target.innerHTML = '<div class="loading-placeholder"><div class="loading-spinner sm"></div></div>';
     try {
-      const r = await fetch('/api/sector-cycle/valuation');
+      const url = (typeof window.withRegion === 'function')
+        ? window.withRegion('/api/sector-cycle/valuation')
+        : '/api/sector-cycle/valuation';
+      const r = await fetch(url);
       const data = await r.json();
       if (!data.valuations || !data.valuations.length) {
         target.innerHTML = '<div style="color:#9ca3af;font-size:13px;">데이터 미수집 (sector_valuation 테이블 비어있음). 다음 스케줄 사이클 후 표시됩니다.</div>';
@@ -209,26 +212,58 @@
       const histLine = minSamples < minN
         ? `<div class="sv-phase" style="color:#f59e0b;">⏳ 히스토리 누적 중 — 표본 ${minSamples}/${minN}점. ${minN}점 이상 쌓이면 각 ETF 의 historical 평균 대비 z-score 로 색상이 칠해집니다.</div>`
         : '';
-      // fundamental_gap (per 컬럼에 저장됨) — 양수=가격이 EPS 보다 빨리 성장 (비싸짐)
-      const rows = data.valuations.map(v => {
-        const fgCol = colorByZ(v.per_z);
-        const fgPct = v.per != null ? (v.per * 100).toFixed(1) + '%' : '-';
-        const sign = v.per != null && v.per >= 0 ? '+' : '';
-        const lbl = labelByGap(v.per);   // 갭 절대값 기반 (직관적)
-        return `
-          <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
-          <div class="sv-label" style="color:${lbl.color};">${lbl.text}</div>
-          <div class="sv-cell" style="background:${fgCol};">${sign}${fgPct}</div>`;
-      }).join('');
+      // 컬럼 구성:
+      //   US: 섹터 / 갭 (fundamental_gap %) / PER (가중평균) / PER 10Y 평균
+      //   KR: 섹터 / PER 가중평균 (배수) / 10Y 평균   ← 갭 컬럼 없음 (US 만 적용)
+      const isKr = (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+      const fmtGap = (p) => {
+        if (p == null) return '–';
+        const sign = p >= 0 ? '+' : '';
+        return `${sign}${(p * 100).toFixed(1)}%`;
+      };
+      const fmtPer = (p) => {
+        if (p == null) return '–';
+        return `${p.toFixed(1)}배`;
+      };
+      let headerHtml, rowsHtml, gridCols, sourceText;
+      if (isKr) {
+        headerHtml = `
+          <div class="sv-h">섹터</div>
+          <div class="sv-h" style="text-align:right;">10Y 평균</div>
+          <div class="sv-h" style="text-align:right;">현재</div>`;
+        gridCols = '1fr auto auto';
+        sourceText = `PER 가중평균 = ETF 보유 종목별 PER 을 비중 가중평균. 10년 평균과 현재값 비교.`;
+        rowsHtml = data.valuations.map(v => {
+          const fgCol = colorByZ(v.per_z);
+          return `
+            <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
+            <div class="sv-cell" style="text-align:right;color:#9ca3af;">${fmtPer(v.per_mean)}</div>
+            <div class="sv-cell" style="background:${fgCol};">${fmtPer(v.per)}</div>`;
+        }).join('');
+      } else {
+        headerHtml = `
+          <div class="sv-h">섹터</div>
+          <div class="sv-h" style="text-align:right;">갭 (가격−EPS)</div>
+          <div class="sv-h" style="text-align:right;">PER (가중평균)</div>
+          <div class="sv-h" style="text-align:right;">PER 10Y 평균</div>`;
+        gridCols = '1fr auto auto auto';
+        sourceText = `갭 = 12개월 가격성장률 − 12개월 EPS 성장률 (모멘텀). PER = ETF 보유 종목 PER 을 비중 가중평균 (절대 수준).`;
+        rowsHtml = data.valuations.map(v => {
+          const fgCol = colorByZ(v.per_z);
+          return `
+            <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
+            <div class="sv-cell" style="background:${fgCol};">${fmtGap(v.per)}</div>
+            <div class="sv-cell" style="text-align:right;">${fmtPer(v.per_weighted)}</div>
+            <div class="sv-cell" style="text-align:right;color:#9ca3af;">${fmtPer(v.per_weighted_mean)}</div>`;
+        }).join('');
+      }
       const sourceLine = data.as_of_date
-        ? `<div class="sv-phase" style="font-size:11px;line-height:1.5;">Fundamental Gap = log(P_t/P_{t-12}) − log(EPS_t/EPS_{t-12}) = 12개월 가격 성장률 − 12개월 EPS 성장률. <strong style="color:#ef4444;">양수=가격이 EPS 보다 빨리</strong> (비싸짐) / <strong style="color:#3b82f6;">음수=EPS 가 가격보다 빨리</strong> (싸짐). as of <strong>${data.as_of_date}</strong>.</div>`
+        ? `<div class="sv-phase" style="font-size:11px;line-height:1.5;">${sourceText} as of <strong>${data.as_of_date}</strong>.</div>`
         : '';
       target.innerHTML = phaseLine + histLine + sourceLine + `
-        <div class="sv-grid" style="grid-template-columns: 1fr auto auto; gap:6px 10px;">
-          <div class="sv-h">섹터</div>
-          <div class="sv-h" style="text-align:center;">밸류</div>
-          <div class="sv-h" style="text-align:right;">갭</div>
-          ${rows}
+        <div class="sv-grid" style="grid-template-columns: ${gridCols}; gap:6px 10px;">
+          ${headerHtml}
+          ${rowsHtml}
         </div>`;
     } catch (e) {
       target.innerHTML = '<div style="color:#ef4444;">로드 실패: ' + e + '</div>';
@@ -242,6 +277,16 @@
     if (z > 0)  return `rgba(220, 38, 38, ${a})`;
     if (z < 0)  return `rgba(37, 99, 235, ${a})`;
     return 'rgba(156, 163, 175, 0.2)';
+  }
+
+  // z-score 5단계 라벨 — KR 모드용 (PER 배수 자체는 라벨 못 매기니 historical z 기준)
+  function labelByZ(z) {
+    if (z == null)   return { text: '–',          color: '#9ca3af' };
+    if (z >=  1.0)   return { text: '고평가',     color: '#dc2626' };
+    if (z >=  0.5)   return { text: '약간 고평가', color: '#f97316' };
+    if (z >  -0.5)   return { text: '부합',       color: '#9ca3af' };
+    if (z >  -1.0)   return { text: '약간 저평가', color: '#3b82f6' };
+    return              { text: '저평가',     color: '#1d4ed8' };
   }
 
   // 갭 % (per 컬럼, 0.05 = 5%) 5단계 라벨 — 고평가/약간 고평가/부합/약간 저평가/저평가

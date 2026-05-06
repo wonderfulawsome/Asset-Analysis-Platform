@@ -1,14 +1,257 @@
 {
-  "139260": [],
-  "091160": [],
-  "300610": [],
-  "091170": [],
-  "139250": [],
-  "266420": [],
-  "091180": [],
-  "117680": [],
-  "341850": [],
-  "227560": [],
-  "updated_at": "2026-05-04T04:27:26.311090",
-  "ref_date": "20260504"
+  "139260": [
+    {
+      "stock_code": "005930",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "000660",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "035420",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "035720",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "006400",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "051910",
+      "weight": 16.6667
+    }
+  ],
+  "091160": [
+    {
+      "stock_code": "005930",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "000660",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "042700",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "039030",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "036930",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "240810",
+      "weight": 16.6667
+    }
+  ],
+  "300610": [
+    {
+      "stock_code": "259960",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "036570",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "251270",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "112040",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "263750",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "293490",
+      "weight": 16.6667
+    }
+  ],
+  "091170": [
+    {
+      "stock_code": "105560",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "055550",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "086790",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "316140",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "024110",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "138930",
+      "weight": 16.6667
+    }
+  ],
+  "139250": [
+    {
+      "stock_code": "051910",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "096770",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "010950",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "011170",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "009830",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "078930",
+      "weight": 16.6667
+    }
+  ],
+  "266420": [
+    {
+      "stock_code": "207940",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "068270",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "326030",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "196170",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "128940",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "145020",
+      "weight": 16.6667
+    }
+  ],
+  "091180": [
+    {
+      "stock_code": "005380",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "000270",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "012330",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "011210",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "161390",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "204320",
+      "weight": 16.6667
+    }
+  ],
+  "117680": [
+    {
+      "stock_code": "005490",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "010130",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "004020",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "001230",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "016380",
+      "weight": 20.0
+    }
+  ],
+  "341850": [
+    {
+      "stock_code": "088260",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "330590",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "348950",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "357120",
+      "weight": 20.0
+    },
+    {
+      "stock_code": "365550",
+      "weight": 20.0
+    }
+  ],
+  "227560": [
+    {
+      "stock_code": "097950",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "271560",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "004370",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "007310",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "280360",
+      "weight": 16.6667
+    },
+    {
+      "stock_code": "001680",
+      "weight": 16.6667
+    }
+  ],
+  "updated_at": "2026-05-07T01:44:04.872249",
+  "ref_date": "20260507",
+  "source": "krx_pdf_or_static_representative"
 }

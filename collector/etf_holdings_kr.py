@@ -23,6 +23,31 @@ _CACHE_PATH = os.path.join(
 _TTL_DAYS = 7
 
 
+# KRX PDF fetch 가 막힌 환경용 대표 구성종목 fallback.
+# 실제 ETF PDF 가 확보되면 그 값이 우선이고, 이 목록은 "전부 같은 KOSPI PER" 으로
+# 내려가는 마지막 fallback 을 피하기 위한 섹터별 proxy 로만 쓴다.
+_REPRESENTATIVE_HOLDINGS = {
+    '139260': ['005930', '000660', '035420', '035720', '006400', '051910'],  # IT
+    '091160': ['005930', '000660', '042700', '039030', '036930', '240810'],  # 반도체
+    '091170': ['105560', '055550', '086790', '316140', '024110', '138930'],  # 은행
+    '091180': ['005380', '000270', '012330', '011210', '161390', '204320'],  # 자동차
+    '117680': ['005490', '010130', '004020', '001230', '016380'],            # 철강
+    '139250': ['051910', '096770', '010950', '011170', '009830', '078930'],  # 에너지화학
+    '227560': ['097950', '271560', '004370', '007310', '280360', '001680'],  # 필수소비재
+    '266420': ['207940', '068270', '326030', '196170', '128940', '145020'],  # 헬스케어
+    '300610': ['259960', '036570', '251270', '112040', '263750', '293490'],  # 게임
+    '341850': ['088260', '330590', '348950', '357120', '365550'],            # 리츠
+}
+
+
+def _representative_holdings(etf_ticker: str) -> list[dict]:
+    codes = _REPRESENTATIVE_HOLDINGS.get(etf_ticker, [])
+    if not codes:
+        return []
+    weight = round(100.0 / len(codes), 4)
+    return [{'stock_code': c, 'weight': weight} for c in codes]
+
+
 def _load_cache() -> Optional[dict]:
     """캐시 JSON 로드. 없거나 손상이면 None."""
     try:
@@ -47,6 +72,11 @@ def _save_cache(data: dict) -> None:
 def _is_fresh(cache: dict) -> bool:
     """캐시가 TTL 7일 이내면 True."""
     try:
+        # 모든 ETF holdings 가 빈 배열인 캐시는 실패 결과라 fresh 로 보지 않는다.
+        holdings = [v for k, v in cache.items()
+                    if k not in ('updated_at', 'ref_date', 'source') and isinstance(v, list)]
+        if holdings and all(len(v) == 0 for v in holdings):
+            return False
         updated = datetime.fromisoformat(cache.get('updated_at', '2000-01-01'))
         return (datetime.now() - updated).days < _TTL_DAYS
     except Exception:
@@ -118,9 +148,14 @@ def fetch_etf_holdings_kr(force_refresh: bool = False) -> dict:
     holdings_by_ticker = {}
     for etf_ticker in SECTOR_ETF_KR.keys():
         h = _fetch_pdf_for_ticker(etf_ticker, ref_date)
+        source = 'krx_pdf'
+        if not h:
+            h = _representative_holdings(etf_ticker)
+            source = 'static_representative'
         holdings_by_ticker[etf_ticker] = h
         if h:
-            print(f'[etf_holdings_kr] {etf_ticker}: {len(h)} 종목, sum_weight={sum(x["weight"] for x in h):.1f}')
+            print(f'[etf_holdings_kr] {etf_ticker}: {len(h)} 종목, '
+                  f'sum_weight={sum(x["weight"] for x in h):.1f}, source={source}')
         else:
             print(f'[etf_holdings_kr] {etf_ticker}: 빈 holdings (PDF 실패)')
 
@@ -128,6 +163,7 @@ def fetch_etf_holdings_kr(force_refresh: bool = False) -> dict:
         **holdings_by_ticker,
         'updated_at': datetime.now().isoformat(),
         'ref_date': ref_date,
+        'source': 'krx_pdf_or_static_representative',
     }
     _save_cache(bundle)
     return bundle

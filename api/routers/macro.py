@@ -282,16 +282,21 @@ def get_valuation_signal(region: str = Query('us')):
     baseline_snapshot = today.get('baseline_snapshot')
 
     # 안전망: 사전 적재 안 됐으면 on-the-fly (느림 — 스케줄러 정상 동작 시 도달 X)
+    # region 별 분기 — KR 은 valuation_signal_kr.get_kr_baselines, US 는 valuation_signal.get_baselines
     if not interpretation or not baseline_snapshot:
         try:
-            from collector.valuation_signal import get_baselines
-            baselines = get_baselines()
+            if region == 'kr':
+                from collector.valuation_signal_kr import get_kr_baselines
+                baselines = get_kr_baselines()
+            else:
+                from collector.valuation_signal import get_baselines
+                baselines = get_baselines()
             if not baseline_snapshot:
                 baseline_snapshot = build_baseline_snapshot(baselines)
             if not interpretation:
                 interpretation = build_valuation_interpretation(today, baselines)
         except Exception as e:
-            print(f'[valuation_signal] fallback 실패: {e}')
+            print(f'[valuation_signal] {region} fallback 실패: {e}')
 
     response = {
         'today': today,

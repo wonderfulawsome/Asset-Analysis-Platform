@@ -1358,3 +1358,35 @@ def fetch_ai_explain(tab: str, lang: str, region: str) -> dict | None:
         print(f"[DB] ai_explain_cache fetch 실패 ({tab}/{lang}/{region}): {e}")
         return None
     return r.data[0] if r.data else None
+
+
+# ── app_cache (무거운 API 응답 사전 계산 캐시) ─────────────────────
+# 스케줄러가 payload 를 미리 계산해 적재 → endpoint 는 cache_key 1건 조회만 수행.
+
+def upsert_app_cache(cache_key: str, payload: dict | list) -> None:
+    """app_cache 에 JSON payload 1건 upsert."""
+    client = get_client()
+    try:
+        client.table("app_cache").upsert(
+            {"cache_key": cache_key, "payload": payload},
+            on_conflict="cache_key",
+        ).execute()
+    except Exception as e:
+        print(f"[DB] app_cache upsert 실패 ({cache_key}): {e}")
+
+
+def fetch_app_cache(cache_key: str) -> dict | list | None:
+    """app_cache payload 1건 조회. 없으면 None."""
+    client = get_client()
+    try:
+        r = (
+            client.table("app_cache")
+            .select("payload")
+            .eq("cache_key", cache_key)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[DB] app_cache fetch 실패 ({cache_key}): {e}")
+        return None
+    return r.data[0]["payload"] if r.data else None

@@ -136,27 +136,59 @@ def fetch_sector_etf_returns_kr(macro_start: str,
 
 
 def _fetch_kospi_market_per_pbr() -> tuple[float | None, float | None]:
-    """KOSPI 시장 평균 PER/PBR (fallback 용)."""
+    """KOSPI 시장 평균 PER/PBR (fallback 용).
+
+    1차 pykrx 실시간 → 2차 DART KOSPI200 시총가중 → 3차 last_known_per 캐시
+    → 4차 14.0 하드 fallback.
+    PBR 은 캐시 없으면 KOSPI 장기 평균 1.0 하드 fallback.
+    """
     try:
         from collector.market_data_kr import fetch_kospi_per_pbr
         df = fetch_kospi_per_pbr(days=14)
-        if df is None or df.empty:
-            return None, None
-        per = float(df['PER'].dropna().iloc[-1]) if 'PER' in df.columns and not df['PER'].dropna().empty else None
-        pbr = float(df['PBR'].dropna().iloc[-1]) if 'PBR' in df.columns and not df['PBR'].dropna().empty else None
+        if df is not None and not df.empty:
+            per = float(df['PER'].dropna().iloc[-1]) if 'PER' in df.columns and not df['PER'].dropna().empty else None
+            pbr = float(df['PBR'].dropna().iloc[-1]) if 'PBR' in df.columns and not df['PBR'].dropna().empty else None
+            if per is not None or pbr is not None:
+                return per, pbr
+    except Exception as e:
+        print(f'[sector_valuation_kr] KOSPI PER/PBR fetch 실패 → DART fallback: {e}')
+
+    # 2차: DART KOSPI200 구성종목 시총가중 시장 PER/PBR
+    try:
+        from collector.dart_fundamentals import compute_kospi_market_per_dart
+        dart_result = compute_kospi_market_per_dart()
+        if dart_result and (dart_result.get('per') or dart_result.get('pbr')):
+            per = dart_result.get('per')
+            pbr = dart_result.get('pbr')
+            print(f"[sector_valuation_kr] KOSPI DART fallback 사용: "
+                  f"PER={per}, PBR={pbr}, cov={dart_result.get('coverage', 0)*100:.0f}%, "
+                  f"n={dart_result.get('n_per')}/{dart_result.get('n_stocks')}")
+            return per, pbr
+    except Exception as e:
+        print(f'[sector_valuation_kr] DART KOSPI PER/PBR fallback 실패: {e}')
+
+    # 3차: valuation_signal_kr 의 last_known_per 캐시 (공유)
+    try:
+        from collector.valuation_signal_kr import _load_last_known_per, _HARD_FALLBACK_PER
+        cached = _load_last_known_per()
+        per = cached if cached else _HARD_FALLBACK_PER
+        pbr = 1.0   # KOSPI 장기 평균 PBR ~1.0 하드 fallback
+        src = '캐싱된 last_known_per' if cached else f'하드 fallback {_HARD_FALLBACK_PER}'
+        print(f'[sector_valuation_kr] KOSPI fallback 사용 ({src}): PER={per}, PBR={pbr}')
         return per, pbr
     except Exception as e:
-        print(f'[sector_valuation_kr] KOSPI PER/PBR fetch 실패: {e}')
-        return None, None
+        print(f'[sector_valuation_kr] last_known_per 캐시 로드 실패: {e}')
+        return 14.0, 1.0   # 마지막 보루
 
 
 def _fetch_all_stock_fundamentals(ref_date: str) -> dict:
-    """KOSPI 전체 종목 PER/PBR 1회 호출 — pykrx.get_market_fundamental.
+    """KOSPI/KOSDAQ 전체 종목 PER/PBR — 1차 pykrx, 2차 DART + yfinance marketCap fallback.
 
     Returns: {stock_code: {'per': float, 'pbr': float}, ...}
     적자(per≤0)/부재 종목은 dict 에 포함 안 됨 — 호출측에서 covered 비중으로 판단.
     """
     out = {}
+    # ── 1차: pykrx get_market_fundamental ──
     try:
         from pykrx import stock
         for market in ('KOSPI', 'KOSDAQ'):
@@ -181,7 +213,52 @@ def _fetch_all_stock_fundamentals(ref_date: str) -> dict:
                 print(f'[sector_valuation_kr] {market} fundamental fetch 실패: {e}')
     except Exception as e:
         print(f'[sector_valuation_kr] pykrx import 실패: {e}')
-    return out
+
+    # pykrx 정상 → DART fallback 불필요
+    if out:
+        return out
+
+    # ── 2차: DART + yfinance marketCap fallback (KRX 차단 환경) ──
+    print('[sector_valuation_kr] pykrx 0건 → DART + yfinance marketCap fallback 시도')
+    try:
+        from collector.dart_fundamentals import fetch_per_pbr_dart
+        from collector.etf_holdings_kr import fetch_etf_holdings_kr
+        import yfinance as yf
+
+        # ETF holdings union 의 unique stock_code list
+        bundle = fetch_etf_holdings_kr()
+        codes = set()
+        for ticker, holdings in bundle.items():
+            if ticker in ('updated_at', 'ref_date') or not isinstance(holdings, list):
+                continue
+            for h in holdings:
+                sc = h.get('stock_code')
+                if sc:
+                    codes.add(sc)
+        codes = sorted(codes)
+        if not codes:
+            print('[sector_valuation_kr] holdings 비어있음 — DART fallback 중단')
+            return out
+
+        # 시가총액 — yfinance .KS marketCap (대형주 대부분 가용)
+        market_caps = {}
+        for sc in codes:
+            try:
+                info = yf.Ticker(f'{sc}.KS').info
+                cap = info.get('marketCap')
+                if cap and cap > 0:
+                    market_caps[sc] = float(cap)
+            except Exception:
+                continue
+        print(f'[sector_valuation_kr] yfinance marketCap {len(market_caps)}/{len(codes)} 종목 fetch')
+
+        # DART PER/PBR 계산 (사업보고서 기준)
+        dart_metrics = fetch_per_pbr_dart(codes, market_caps)
+        print(f'[sector_valuation_kr] DART PER/PBR {len(dart_metrics)} 종목 산출')
+        return {**out, **dart_metrics}
+    except Exception as e:
+        print(f'[sector_valuation_kr] DART fallback 실패: {e}')
+        return out
 
 
 def _weighted_avg(holdings: list[dict], stock_fund: dict, key: str) -> tuple[float | None, float]:
@@ -201,7 +278,16 @@ def _weighted_avg(holdings: list[dict], stock_fund: dict, key: str) -> tuple[flo
         w = h.get('weight', 0)
         if w <= 0 or sc not in stock_fund or key not in stock_fund[sc]:
             continue
-        valid_sum += w * stock_fund[sc][key]
+        value = stock_fund[sc].get(key)
+        if value is None:
+            continue
+        try:
+            value = float(value)
+        except (TypeError, ValueError):
+            continue
+        if value <= 0:
+            continue
+        valid_sum += w * value
         valid_w += w
     if valid_w <= 0:
         return None, 0.0
@@ -251,14 +337,17 @@ def fetch_sector_etf_per_pbr_kr(today: date | None = None) -> list[dict]:
         pbr_val, pbr_cov = _weighted_avg(holdings, stock_fund, 'pbr')
         avg_cov = (per_cov + pbr_cov) / 2
 
-        # coverage < 50% 또는 holdings 빈 → KOSPI 평균 fallback
-        if avg_cov < 0.5 or per_val is None:
+        # holdings/PER 이 전혀 없을 때만 KOSPI 평균 fallback.
+        # 낮은 coverage 라도 섹터별 대표 종목에서 산출된 PER 이 있으면 유지한다.
+        if per_val is None:
             per_val = market_per
             pbr_val = market_pbr
             fallback_count += 1
             print(f'[sector_valuation_kr] {ticker} fallback (coverage {avg_cov*100:.0f}%)')
         else:
             coverage_list.append(avg_cov)
+            if pbr_val is None:
+                pbr_val = market_pbr
 
         out.append({
             'date': today_str,

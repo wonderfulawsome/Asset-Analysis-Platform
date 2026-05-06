@@ -83,26 +83,36 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] noise_regime 실패: {e}')
             traceback.print_exc()
 
-        # 5) KODEX/TIGER 10종 섹터 ETF — index_price_raw 에 같이 적재
+        # 5) KODEX/TIGER 10종 섹터 ETF — index_price_raw 에 90일치 일별 적재
+        # 1주/1개월 모멘텀 계산을 위해 최소 21일 누적 필요 → days=90 + 모든 일자 적재.
         try:
-            by_ticker = fetch_sector_etf_prices_kr(days=10)
+            by_ticker = fetch_sector_etf_prices_kr(days=90)
             sector_rows = []
             for ticker, df in by_ticker.items():
                 if df is None or df.empty or len(df) < 2:
                     continue
-                last = df.iloc[-1]
-                prev = df.iloc[-2]
-                close = float(last['종가'])
-                change_pct = round((close - float(prev['종가'])) / float(prev['종가']) * 100, 2)
-                sector_rows.append({
-                    'date': df.index[-1].strftime('%Y-%m-%d'),
-                    'ticker': ticker,
-                    'close': close,
-                    'change_pct': change_pct,
-                })
+                # 모든 일자 적재 (i=0 은 prev 없으니 change_pct=0)
+                for i in range(len(df)):
+                    cur = df.iloc[i]
+                    close = float(cur['종가'])
+                    if i == 0:
+                        change_pct = 0.0
+                    else:
+                        prev = df.iloc[i - 1]
+                        prev_close = float(prev['종가'])
+                        change_pct = round((close - prev_close) / prev_close * 100, 2) if prev_close else 0.0
+                    sector_rows.append({
+                        'date': df.index[i].strftime('%Y-%m-%d'),
+                        'ticker': ticker,
+                        'close': close,
+                        'change_pct': change_pct,
+                    })
             if sector_rows:
-                upsert_index_prices(sector_rows, region='kr')
-                print(f'[KR-Pipeline] sector ETF {len(sector_rows)}건 적재')
+                # 청크 분할 (Supabase 단일 upsert 한도 ~500 안전)
+                CHUNK = 200
+                for i in range(0, len(sector_rows), CHUNK):
+                    upsert_index_prices(sector_rows[i:i + CHUNK], region='kr')
+                print(f'[KR-Pipeline] sector ETF {len(sector_rows)}건 적재 (90일×10종)')
         except Exception as e:
             print(f'[KR-Pipeline] sector ETF 실패: {e}')
             traceback.print_exc()
@@ -206,7 +216,29 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] crash_surge 실패: {e}')
             traceback.print_exc()
 
-        # 10) 5탭 AI 해설 미리 생성 — fundamental/signal/sector/sector-mom × ko/en × region=kr.
+        # 10) 무거운 화면 응답 사전 계산 — 사용자 클릭 시 app_cache select 만 수행.
+        # AI 요약은 LLM quota 에 의존하므로, 실패해도 sector valuation/momentum cache 를 막지 않게
+        # non-LLM cache 와 분리한다.
+        try:
+            from api.routers.market_summary import precompute_ai_summary
+            for _lang in ('ko', 'en'):
+                ok = precompute_ai_summary(_lang, 'kr')
+                print(f"[KR-Pipeline] ai-summary kr/{_lang} {'OK' if ok else 'FAIL'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] ai-summary precompute 실패: {e}')
+            traceback.print_exc()
+
+        try:
+            from api.routers.sector_cycle import precompute_valuation, precompute_momentum
+            ok_val = precompute_valuation('kr')
+            ok_mom = precompute_momentum('kr')
+            print(f"[KR-Pipeline] sector valuation cache kr {'OK' if ok_val else 'FAIL'}")
+            print(f"[KR-Pipeline] sector momentum cache kr {'OK' if ok_mom else 'FAIL'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] sector app_cache precompute 실패: {e}')
+            traceback.print_exc()
+
+        # 11) 5탭 AI 해설 미리 생성 — fundamental/signal/sector/sector-mom × ko/en × region=kr.
         # endpoint /api/market-summary/ai-explain 가 DB 즉시 응답 → 사용자 첫 진입 빠름.
         # sector-val 은 region='us' 통일이라 KR 파이프라인 제외. sector-mom 은 region 분리 — KR 도 적재.
         try:

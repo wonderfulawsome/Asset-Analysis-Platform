@@ -1209,6 +1209,10 @@ function setupTabSwipe() {
   wrap.addEventListener('touchstart', (e) => {
     const overlay = document.getElementById('detail-overlay');
     if (overlay && overlay.classList.contains('open')) { activeEl = null; return; }
+    // KR 모드는 탭 스와이프 비활성 (사용자 요청 — 좌우 스와이프로 다른 탭 이동 막음)
+    if (typeof window.getRegion === 'function' && window.getRegion() === 'kr') {
+      activeEl = null; isSwipe = false; return;
+    }
     startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     lastX = startX;
@@ -1697,15 +1701,20 @@ async function loadNoiseChart() {
       value: r.noise_score != null ? r.noise_score : 0,            // noise_score 값
     }));
 
-    // Y축을 게이지와 동일한 절대 범위로 고정 — 0 기준선·이성/감정 라벨 의미 일치
-    // KR: -25 ~ +5 (분포 깊음), US: -10 ~ +5
-    const isKr = _curRegion() === 'kr';
+    // Y축 — 데이터 분포 기반 동적 범위 + 0선 강제 포함 (이성/감정 영역 의미 유지)
+    // KR 데이터가 -3~-19 같이 한쪽에 몰리면 절대 범위 (-25~+5) 가 차트 절반만 채움 → 가독성 ↓
+    // 해결: data min/max 에 약간 padding + 0 항상 포함
+    const vals = points.map(p => p.value);
+    const dMin = Math.min(...vals), dMax = Math.max(...vals);
+    const pad = Math.max(2, (dMax - dMin) * 0.1);
+    const yMin = Math.min(dMin - pad, 0);   // 0 항상 포함
+    const yMax = Math.max(dMax + pad, 1);
     renderLineChart('nr-chart', points, {
       color: 'var(--accent)',
       zeroLine: true,
       dotColor: v => v >= 0 ? 'var(--green)' : 'var(--red)',
-      yFixedMin: isKr ? -25 : -10,
-      yFixedMax: 5,
+      yFixedMin: yMin,
+      yFixedMax: yMax,
       yTopLabel: t('chart.yTop'),                                  // 양수 영역 (0선 위)
       yBottomLabel: t('chart.yBottom'),                            // 음수 영역 (0선 아래)
     });
