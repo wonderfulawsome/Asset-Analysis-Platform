@@ -12,7 +12,22 @@ import xmltodict
 MOIS_POP_URL = "https://apis.data.go.kr/1741000/stdgPpltnHhStus/selectStdgPpltnHhStus"
 MOIS_HH_URL = "https://apis.data.go.kr/1741000/admmHsmbHh/selectAdmmHsmbHh"
 
-API_KEY = os.getenv("DATA_GO_KR_KEY")
+def _public_data_key() -> str | None:
+    for name in (
+        "DATA_GO_KR_KEY",
+        "DATA_GO_KR_API_KEY",
+        "DATA_GO_KR_SERVICE_KEY",
+        "PUBLIC_DATA_API_KEY",
+        "MOIS_API_KEY",
+        "SERVICE_KEY",
+    ):
+        value = os.getenv(name)
+        if value:
+            return value.strip()
+    return None
+
+
+API_KEY = _public_data_key()
 
 # MOIS(행안부) XML 응답 규약: Response/head, resultCode "0"
 _MOIS_SPEC = {"root": "Response", "head_key": "head", "ok_codes": {"0"}}

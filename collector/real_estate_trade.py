@@ -12,7 +12,22 @@ import xmltodict
 MOLIT_TRADE_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
 MOLIT_RENT_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent"
 
-API_KEY = os.getenv("DATA_GO_KR_KEY")
+def _public_data_key() -> str | None:
+    for name in (
+        "DATA_GO_KR_KEY",
+        "DATA_GO_KR_API_KEY",
+        "DATA_GO_KR_SERVICE_KEY",
+        "PUBLIC_DATA_API_KEY",
+        "MOLIT_API_KEY",
+        "SERVICE_KEY",
+    ):
+        value = os.getenv(name)
+        if value:
+            return value.strip()
+    return None
+
+
+API_KEY = _public_data_key()
 
 # MOLIT(국토부) XML 응답 규약: response/header, resultCode "000"
 _MOLIT_SPEC = {"root": "response", "head_key": "header", "ok_codes": {"000"}}
