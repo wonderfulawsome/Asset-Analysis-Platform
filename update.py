@@ -8188,3 +8188,27 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - python -m py_compile api/routers/sector_cycle.py
 # - 캐시 무효화 로직으로 사용자 새로고침 즉시 새 payload 서빙
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [111] 2026-05-07 (UTC) — home.js 캐시 버스팅 v=42 → v=43
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# [110] 의 PER 가중평균 색상 코드를 push 했지만 사용자가 hard refresh(Ctrl+Shift+R)
+# 후에도 색이 안 들어옴. curl 검증 결과 — Railway 배포는 성공했고, dinsightlab.com
+# 의 home.js 새 코드도 정상이지만 Cloudflare CDN 이 `?v=42` URL 의 옛 응답을
+# Cache-Control: max-age=14400 (4시간) 으로 캐시 중. URL 이 그대로면 hard refresh
+# 도 같은 cached URL 로 가서 옛 JS 받음.
+#
+# [수정 파일]
+#   1. templates/stocks.html - <script src="/static/js/home.js?v=42"> → ?v=43
+#
+# [왜]
+# - 브라우저 캐시 무효화는 query string 만 바뀌면 즉시. CDN edge cache 도 새 URL 은
+#   별개 리소스로 다시 origin 에 fetch.
+# - 이번처럼 JS 동작 변경 push 할 때마다 query 버전 ++ 하는 게 기존 패턴 (chart.js?v=25,
+#   main.js?v=132, sector.js?v=7 모두 같은 방식).
+#
+# [후속 과제 (선택)]
+# - 매번 수동 ++ 가 번거로우면 Jinja 컨텍스트에 build_id (commit hash 등) 자동 주입해서
+#   `?v={{ build_id }}` 로 통일 가능. 지금은 변경된 파일만 bump 하는 명시 패턴 유지.
+
