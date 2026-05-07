@@ -8669,3 +8669,78 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - compute_today_anomaly('us') 직접 호출 → knn_dates 3건 모두 1년+ 전, 서로 다른 분기.
 # - 새 라벨 매칭: findEvent("2022-02-08") = "연준 매파 회견·우크라이나 긴장 고조".
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [120] 2026-05-08 (UTC) — k-NN 방향 일치 매칭 (강세/약세 regime 분리)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 사용자 피드백: "지금 상당한 강세장인데 매칭된 시기는 다 인플레·금리 stress 같은
+# 약세 이벤트만 나옴". 원래 Mahalanobis 거리는 부호 무관 (제곱 거리) 이라 강세장
+# feature 조합 vs 약세장 feature 조합이 동일하게 매칭됨. "비슷했던 과거" 의 직관적
+# 의미 (같은 분위기) 와 알고리즘 출력이 어긋남.
+#
+# [해결 — 방향 일치 필터]
+# Mahalanobis 거리는 그대로 두고, **부호 일치 사전 필터** 추가.
+# 1. today 의 deviation = today - μ 를 계산.
+# 2. 각 피처별로 z-score 변환 (= deviation / σ_i, σ_i = sqrt(diag(Σ)_i)).
+# 3. 부호 일치 카운트: today 와 past 가 z-score 부호 같은 피처 개수.
+#    - 단, |z| < KNN_SIGN_NEUTRAL_TOL (=0.3) 인 피처는 'near zero' 로 간주, 자동 일치.
+# 4. 카운트 ≥ KNN_SIGN_AGREE_STRICT (=6/8) 인 후보만 거리 매칭 대상으로 통과.
+#    후보 < k*3 이면 RELAXED (=5/8) 로 완화. 그래도 부족하면 거리 매칭만 (fallback).
+# 5. 후보 중 거리 작은 순 + 시간 다양화 (±KNN_DIVERSITY_DAYS=30) 로 최종 K개 선택.
+#
+# [왜 6/8 임계값]
+# - 4/8 (50%): 절반만 일치 — 사실상 무필터. 변경 의미 없음.
+# - 6/8 (75%): 추천 — "대체로 같은 방향" 직관. 코사인 유사도 ~0.5 이상.
+# - 7/8 (87.5%): 엄격 — 후보 매우 부족, 자주 fallback. 의미 손실.
+# 단계적 완화 (6 → 5 → all) 로 최악의 경우에도 결과 보장.
+#
+# [왜 z-score 변환]
+# 피처 8개의 raw 단위가 다름 (예: VIX% / yield_spread% / amihud raw). 부호 자체는
+# 단위 무관이지만 'near zero' 기준은 σ 단위로 비교해야 robust. σ < 1e-12 이면 1.0
+# 으로 fallback (zero division 방어).
+#
+# [수정 파일]
+#   processor/feature_anomaly.py
+#     - KNN_SIGN_AGREE_STRICT=6, KNN_SIGN_AGREE_RELAXED=5, KNN_SIGN_NEUTRAL_TOL=0.3
+#       3개 상수 추가.
+#     - _sign_agreement_counts(today_dev, past_devs, sigmas, tol) 신규 — 벡터화된
+#       부호 일치 카운트 (z-score 변환 + near-zero 관용 처리).
+#     - _knn_diversified() 시그니처 확장: mu/cov 인자 추가. 둘 다 None 이면 기존
+#       거리 매칭만 (backward compatible).
+#     - 두 호출 사이트 (compute_anomaly_timeseries / compute_today_anomaly) 모두
+#       mu=mu, cov=cov 전달.
+#
+#   static/js/anomaly.js
+#     - MARKET_EVENTS_US +1: 2024-12-18~2025-01-03 "12월 FOMC 매파 dot plot·연말
+#       변동성" (재계산 결과 매칭된 2024-12-23 라벨링용).
+#
+#   templates/stocks.html
+#     - anomaly.js?v=4 → v=5 캐시 버스트.
+#
+# [Before / After 매칭 비교]
+# Before (방향 무관 거리만, gap=365):
+#   2022-02-08 d=2.86 (연준 매파·우크라 긴장 고조)
+#   2021-03-02 d=3.14 (美 국채금리 급등·재오픈 트레이드)
+#   2021-05-07 d=3.26 (美 CPI 4~5% 인플레 우려)
+#   → 사용자 직관 mismatch: "지금 강세장인데 왜 다 인플레 stress?"
+#
+# After (방향 일치 + 거리, gap=365):
+#   2025-02-06 d=2.13 (美 對中·캐나다·멕시코 관세 부과)
+#   2024-12-23 d=2.15 (12월 FOMC 매파 dot plot·연말 변동성)
+#   2024-11-15 d=2.74 (미 대선 — 트럼프 재선)
+#   → 모두 트럼프 트레이드 시대 (2024 Q4 ~ 2025 Q1) 안. 강세/조정 혼합이지만 같은
+#     macro regime, 사용자 인식 ("강세장") 과 일관.
+#
+# [trade-off 명시]
+# 방향 일치 매칭으로 인해 진짜 극단적 stress 시점 (2008, 2020-03 등) 매칭이 어려워질
+# 수 있음. 이는 의도된 비용 — 사용자가 "비슷한 분위기" 를 보고 싶어하기 때문에 진짜
+# 폭락 시점 매칭은 fallback (5/8 또는 거리만) 일 때만 등장.
+#
+# [검증]
+# - py_compile OK.
+# - compute_today_anomaly('us') → knn 3건 모두 2024 Q4 ~ 2025 Q1 범위, 사용자
+#   "강세장" 인식과 같은 macro regime.
+# - 3건 중 2건 즉시 라벨 매칭 (2025-02-06 / 2024-11-15). 12월 이벤트 추가로 3/3 매칭.
+

@@ -36,6 +36,9 @@ PERCENTILE_90D_WINDOW = 90                                   # 단기 분위수 
 KNN_K = 3                                                    # 유사 과거 시점 개수
 KNN_GAP_DAYS = 365                                           # 최근 N일은 k-NN 검색에서 제외 ("역사적 유사 시점" 의미 보장 — 90일은 같은 regime 클러스터로 빠짐)
 KNN_DIVERSITY_DAYS = 30                                      # 픽 1개당 ±N일 윈도 마스크 (연속 3일 같은 클러스터 방지)
+KNN_SIGN_AGREE_STRICT = 6                                    # 8개 피처 중 N개 이상 deviation 부호 일치 시 후보
+KNN_SIGN_AGREE_RELAXED = 5                                   # strict 후보 < k*3 면 완화
+KNN_SIGN_NEUTRAL_TOL = 0.3                                   # |deviation| < N σ 면 부호 무관 일치 처리
 TOP_CONTRIBUTORS_K = 3                                       # 상위 기여 피처 개수
 MAHAL_RIDGE = 1e-6                                           # Σ 정규화 (ill-conditioning 방지)
 
@@ -155,18 +158,80 @@ def _decompose_d2(x: np.ndarray, mu: np.ndarray, sig_inv: np.ndarray, names: lis
     return [{'name': n, 'contribution': float(c)} for n, c in zip(names, contribs)]
 
 
-def _knn_diversified(knn_pool, x: np.ndarray, sig_inv: np.ndarray, k: int = None, diversity_days: int = None) -> list[dict]:
-    """시간 다양화된 k-NN — 가까운 순서대로 픽하되, 픽한 날 ±diversity_days 윈도는 마스크.
+def _sign_agreement_counts(today_dev: np.ndarray, past_devs: np.ndarray, sigmas: np.ndarray, tol: float = KNN_SIGN_NEUTRAL_TOL) -> np.ndarray:
+    """피처별 deviation 부호 일치 개수 (배열 단위 vectorized).
 
-    같은 regime 의 연속일 클러스터(예: "2026-01-27/28/29") 가 모두 top-K 차지하는 걸 방지.
+    Args:
+        today_dev: 오늘 deviation = today - μ, shape (D,)
+        past_devs: 과거일 deviation = past - μ, shape (N, D)
+        sigmas: 피처별 std (Σ 대각 sqrt), shape (D,) — z-score 변환용
+        tol: |z-deviation| < tol 인 피처는 'near zero' 로 간주, 자동 부호 일치 처리
+
+    Returns:
+        (N,) 정수 배열, 각 행에서 today 와 일치한 피처 개수.
+    """
+    # z-score 변환 (피처 스케일 무관 부호 비교)
+    sig_safe = np.where(sigmas > 1e-12, sigmas, 1.0)
+    today_z = today_dev / sig_safe
+    past_z = past_devs / sig_safe[None, :]
+
+    today_sign = np.sign(today_z)
+    today_near_zero = np.abs(today_z) < tol  # (D,)
+    past_signs = np.sign(past_z)             # (N, D)
+    past_near_zero = np.abs(past_z) < tol    # (N, D)
+
+    same_sign = past_signs == today_sign[None, :]
+    near_zero = past_near_zero | today_near_zero[None, :]
+    is_match = same_sign | near_zero
+    return is_match.sum(axis=1)
+
+
+def _knn_diversified(knn_pool, x: np.ndarray, sig_inv: np.ndarray, mu: np.ndarray = None,
+                     cov: np.ndarray = None, k: int = None, diversity_days: int = None) -> list[dict]:
+    """방향 일치 + 시간 다양화 k-NN.
+
+    1. 후보 필터 — past day 의 피처 deviation 부호가 today 와 ≥ KNN_SIGN_AGREE_STRICT 개
+       일치하는 행만 (후보 < k*3 이면 RELAXED 로 완화, 그래도 부족하면 거리만).
+    2. 후보 중 Mahalanobis 거리 작은 순으로 정렬.
+    3. 픽 1건당 ±diversity_days 윈도 마스크 (같은 regime 클러스터 차단).
+
+    Args:
+        knn_pool: 과거 후보 DataFrame (index=date, columns=features)
+        x: 오늘 feature vector
+        sig_inv: Σ⁻¹ (Mahalanobis 거리용)
+        mu: 베이스라인 평균 (None 이면 부호 매칭 비활성, 거리만 사용)
+        cov: 공분산 행렬 (sigma 추출용; None 이면 sigma=1 가정)
     """
     k = k or KNN_K
     diversity_days = diversity_days or KNN_DIVERSITY_DAYS
+
     diff_p = knn_pool.values - x
     d_pair = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', diff_p, sig_inv, diff_p), 0))
-    order = np.argsort(d_pair)
+
+    # 방향 일치 필터 (mu 가 주어진 경우만)
+    if mu is not None:
+        sigmas = np.sqrt(np.diag(cov)) if cov is not None else np.ones_like(mu)
+        today_dev = x - mu
+        past_devs = knn_pool.values - mu
+        sign_matches = _sign_agreement_counts(today_dev, past_devs, sigmas)
+
+        # 단계적 임계값
+        candidate_indices = None
+        for min_match in (KNN_SIGN_AGREE_STRICT, KNN_SIGN_AGREE_RELAXED):
+            mask = sign_matches >= min_match
+            if mask.sum() >= k * 3:
+                candidate_indices = np.where(mask)[0]
+                break
+        if candidate_indices is None:
+            candidate_indices = np.arange(len(knn_pool))   # fallback: 전체
+    else:
+        candidate_indices = np.arange(len(knn_pool))
+
+    order = candidate_indices[np.argsort(d_pair[candidate_indices])]
+
     selected: list[dict] = []
-    remaining = np.ones(len(knn_pool), dtype=bool)
+    remaining = np.zeros(len(knn_pool), dtype=bool)
+    remaining[candidate_indices] = True
     for idx in order:
         if not remaining[idx]:
             continue
@@ -176,7 +241,6 @@ def _knn_diversified(knn_pool, x: np.ndarray, sig_inv: np.ndarray, k: int = None
         })
         if len(selected) >= k:
             break
-        # ±diversity_days 윈도 마스크
         pick_dt = knn_pool.index[idx]
         days_diff = np.abs((knn_pool.index - pick_dt).days)
         remaining = remaining & (days_diff > diversity_days)
@@ -256,12 +320,10 @@ def compute_anomaly_timeseries(
         else:
             pct_90d = None
 
-        # k-NN: hist 내에서 (오늘 ↔ 그날) pairwise Mahalanobis 거리 최소 K개
-        # gap: 최근 KNN_GAP_DAYS 일 제외 (1년 — 같은 regime 클러스터 회피).
-        # 다양화: 픽 1개당 ±KNN_DIVERSITY_DAYS 일 윈도 마스크 (연속일 클러스터 방지).
+        # k-NN: 방향 일치 + 시간 다양화 (자세한 로직은 _knn_diversified 참조).
         gap_cutoff = dt - pd.Timedelta(days=KNN_GAP_DAYS)
         knn_pool = hist.loc[hist.index < gap_cutoff]
-        knn = _knn_diversified(knn_pool, x, sig_inv) if len(knn_pool) > 0 else []
+        knn = _knn_diversified(knn_pool, x, sig_inv, mu=mu, cov=cov) if len(knn_pool) > 0 else []
 
         feature_vector = {n: round(float(v), 4) for n, v in zip(ALL_FEATURES, x)}
         rows.append({
@@ -322,7 +384,7 @@ def compute_today_anomaly(region: str = 'us') -> Optional[dict]:
 
     gap_cutoff = dt - pd.Timedelta(days=KNN_GAP_DAYS)
     knn_pool = hist.loc[hist.index < gap_cutoff]
-    knn = _knn_diversified(knn_pool, x, sig_inv) if len(knn_pool) > 0 else []
+    knn = _knn_diversified(knn_pool, x, sig_inv, mu=mu, cov=cov) if len(knn_pool) > 0 else []
 
     return {
         'date': str(dt.date()),
