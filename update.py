@@ -8212,3 +8212,39 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - 매번 수동 ++ 가 번거로우면 Jinja 컨텍스트에 build_id (commit hash 등) 자동 주입해서
 #   `?v={{ build_id }}` 로 통일 가능. 지금은 변경된 파일만 bump 하는 명시 패턴 유지.
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [112] 2026-05-07 (UTC) — ai_headline_cache RLS 비활성화 (홈 AI 해설 복구)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 홈화면 "오늘의 종합 판단" 카드가 "해설 서비스 개선중." 만 표시되는 상태가 지속.
+# 디버깅 결과:
+#   - GET /api/market-summary/home-headline?region=us&lang=ko → source: cache_miss
+#   - SELECT * FROM ai_headline_cache → 0 rows
+#   - 로컬에서 precompute_home_headline 직접 호출 → LLM 생성은 OK, upsert 단계에서
+#     SQLSTATE 42501 ("new row violates row-level security policy for table
+#     'ai_headline_cache'") 로 실패
+#
+# [원인]
+# 2026-05-03 마이그레이션 (add_ai_headline_cache.sql) 이 테이블만 생성하고 RLS 정책을
+# 누락. Supabase 는 신규 테이블에 RLS 를 기본 활성화하므로 anon 키로는 INSERT/UPDATE
+# 차단됨. 매 스케줄러 cycle 마다 LLM 호출 후 upsert 단계에서 조용히 실패하면서 DB 가
+# 0 rows 로 유지됨 (in-memory cache 는 서버 재시작 시 증발 → endpoint 가 항상 cache_miss).
+#
+# [DB 마이그레이션 — Supabase Dashboard 에서 선행 실행]
+#   ALTER TABLE ai_headline_cache DISABLE ROW LEVEL SECURITY;
+#
+# [신규 파일]
+#   1. migrations/2026_05_07_disable_rls_ai_headline_cache.sql - 마이그레이션 기록
+#
+# [후속 작업]
+#   - RLS 해제 후 로컬에서 precompute_home_headline('ko', 'us') 즉석 실행 → us/ko row 적재.
+#   - us/en 은 Groq 일일 quota (1000 RPD) 소진 상태라 다음 cycle (quota reset 후) 자동 채워짐.
+#   - 검증: GET /api/market-summary/home-headline?lang=ko&region=us → source: db 응답 확인.
+#
+# [왜 이 방식인가]
+# - ai_headline_cache 는 서버측 LLM 캐시이지 사용자별 데이터 아님. 같은 용도의 app_cache 도
+#   RLS 비활성. 권한 모델 일관성 + 부수효과 최소화.
+# - 대안 (anon insert 허용 정책 추가) 은 RLS 켜진 상태 유지하지만 결국 anon 이 아무 row 나
+#   쓸 수 있게 되므로 보안적 이득 없이 복잡도만 증가.
+
