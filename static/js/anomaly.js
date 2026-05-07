@@ -1,13 +1,13 @@
-/* 시장 이상 탐지 (Anomaly Detection) — 신호 탭 교체.
+/* 시장 평소 이탈도 (Anomaly Detection) — 신호 탭 교체.
  *
- * /api/anomaly/current + /api/anomaly/history 를 받아 4개 카드 렌더:
- *   1. 메인 점수 (D² + percentile + 라벨)
- *   2. 10년 D² 시계열 SVG 차트
- *   3. 무엇이 이상한가 (top contributors 막대)
- *   4. 과거 같은 패턴 (k-NN 시점 리스트)
+ * /api/anomaly/current + /api/anomaly/history 를 받아 3개 카드 렌더:
+ *   1. 10년 평소 이탈도 추이 차트 (메인, 맨 위)
+ *   2. 과거 같은 패턴 (k-NN + 시기별 시장 이벤트 라벨)
+ *   3. 무엇이 평소와 다른가 (top contributors 막대)
  *
  * 자문 리스크 차단 — descriptive 표현만:
  *   "현재 좌표는 historical 분포에서 X 위치", "비슷했던 과거 시점", 미래 단언 0.
+ *   k-NN 이벤트 라벨도 사실(사건)만 — 결과·해석 단어 배제.
  */
 (function() {
   'use strict';
@@ -43,6 +43,42 @@
     return map[name] || name;
   }
 
+  // ── 큐레이팅된 시장 이벤트 사전 (사실만, 해석·감정 단어 배제) ──
+  // 마할라노비스 거리가 보통 큰 시점 위주. 날짜 범위 매칭으로 k-NN 카드에 라벨 표시.
+  // 새 이벤트 추가 시: { from, to, label } 형식, label 은 사건 사실만 (예측·평가 X).
+  const MARKET_EVENTS_US = [
+    { from: '2015-08-11', to: '2015-09-04', label: '중국 위안화 평가절하·세계 증시 급락' },
+    { from: '2016-01-04', to: '2016-02-12', label: '중국 증시 서킷브레이커·유가 급락' },
+    { from: '2016-06-23', to: '2016-07-08', label: '브렉시트 국민투표 가결' },
+    { from: '2016-11-08', to: '2016-11-30', label: '미 대선 (트럼프 당선)' },
+    { from: '2018-02-02', to: '2018-02-15', label: 'VIX 폭등 (Volmageddon)' },
+    { from: '2018-10-01', to: '2018-12-26', label: '미·중 무역갈등 격화·연준 매파' },
+    { from: '2019-08-14', to: '2019-08-30', label: '美 2년/10년 수익률 곡선 역전' },
+    { from: '2020-02-24', to: '2020-04-30', label: '코로나19 팬데믹·NYSE 서킷브레이커 4회' },
+    { from: '2020-11-09', to: '2020-11-13', label: '화이자 백신 임상 성공 발표' },
+    { from: '2021-01-25', to: '2021-02-05', label: '게임스톱 short squeeze' },
+    { from: '2022-01-03', to: '2022-01-31', label: '연준 매파 회의록·빅테크 조정' },
+    { from: '2022-02-24', to: '2022-03-25', label: '러시아 우크라이나 침공' },
+    { from: '2022-06-10', to: '2022-06-24', label: '美 CPI 9.1%·연준 자이언트스텝' },
+    { from: '2022-09-13', to: '2022-10-21', label: '英 미니예산 위기·연준 자이언트스텝' },
+    { from: '2023-03-08', to: '2023-03-24', label: 'SVB·시그니처은행 파산·CS 위기' },
+    { from: '2023-10-07', to: '2023-10-31', label: '이스라엘-하마스 전쟁 발발' },
+    { from: '2024-04-12', to: '2024-04-22', label: '이란-이스라엘 직접 군사충돌' },
+    { from: '2024-08-02', to: '2024-08-09', label: '日 캐리트레이드 청산·VIX 65 폭등' },
+    { from: '2024-11-05', to: '2024-11-15', label: '미 대선 (트럼프 재선)' },
+    { from: '2025-04-02', to: '2025-04-30', label: '美 상호관세 발표·글로벌 무역갈등' },
+  ];
+
+  // YYYY-MM-DD 문자열 비교로 충분 (lex 정렬 = 시간 정렬)
+  function findEvent(dateStr) {
+    if (!dateStr) return null;
+    const d = dateStr.slice(0, 10);
+    for (const ev of MARKET_EVENTS_US) {
+      if (d >= ev.from && d <= ev.to) return ev.label;
+    }
+    return null;
+  }
+
   // percentile_10y 기반 5단계 라벨 (descriptive only — 위험/안전 미사용)
   // "평소 이탈도" 프레이밍 — 강도만 표현, 방향성·매수매도 단어 없음.
   function percentileLabel(pct) {
@@ -55,7 +91,7 @@
   }
 
   async function loadAnomaly() {
-    const sumEl = document.getElementById('an-summary');
+    // an-summary 카드는 사용자 요청으로 제거됨 — sumEl 없음.
     const chartEl = document.getElementById('an-chart');
     const contribEl = document.getElementById('an-contribs');
     const knnEl = document.getElementById('an-knn');
@@ -69,66 +105,21 @@
       const hist = await histRes.json();
 
       if (cur.empty || !cur.d2) {
-        if (sumEl) sumEl.innerHTML = '<div style="color:#9ca3af;font-size:13px;">데이터 미수집. 다음 스케줄 사이클 후 표시됩니다.</div>';
+        const msg = '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px">데이터 미수집. 다음 스케줄 사이클 후 표시됩니다.</div>';
+        if (chartEl) chartEl.innerHTML = msg;
         return;
       }
 
-      renderSummary(sumEl, cur);
       renderChart(chartEl, hist.series || [], cur);
-      renderContribs(contribEl, cur.top_contributors || []);
       renderKnn(knnEl, cur.knn_dates || []);
+      renderContribs(contribEl, cur.top_contributors || []);
     } catch (e) {
       console.error('[anomaly] load fail', e);
-      if (sumEl) sumEl.innerHTML = `<div style="color:#ef4444;font-size:13px;">로드 실패: ${e}</div>`;
+      if (chartEl) chartEl.innerHTML = `<div style="color:#ef4444;font-size:13px;">로드 실패: ${e}</div>`;
     }
   }
 
-  // ── 1. 메인 점수 카드 ──
-  function renderSummary(el, d) {
-    if (!el) return;
-    const lbl = percentileLabel(d.percentile_10y);
-    const pct10 = d.percentile_10y != null ? d.percentile_10y.toFixed(1) : '–';
-    const pct90 = d.percentile_90d != null ? d.percentile_90d.toFixed(1) : '–';
-    const pos = d.percentile_10y != null ? Math.max(0, Math.min(100, d.percentile_10y)) : 50;
-
-    el.innerHTML = `
-      <div style="text-align:center;padding:8px 0 16px">
-        <div style="font-size:11px;color:var(--sub);letter-spacing:0.06em">과거 10년 기준 위치</div>
-        <div style="font-size:36px;font-weight:800;color:${lbl.color};margin-top:6px">${pct10}<span style="font-size:18px;color:var(--sub);font-weight:600">%</span></div>
-        <div style="font-size:13px;color:${lbl.color};font-weight:600;margin-top:2px">${lbl.text}</div>
-        <div style="font-size:11px;color:var(--sub);margin-top:2px">${lbl.desc}</div>
-      </div>
-
-      <div style="position:relative;height:8px;border-radius:6px;background:linear-gradient(90deg,#1d4ed8,#9ca3af 50%,#dc2626);margin:0 8px 6px">
-        <div style="position:absolute;top:-4px;left:${pos}%;transform:translateX(-50%);width:4px;height:16px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,0.4)"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);padding:0 8px">
-        <span>평소에 가까움</span><span>보통</span><span>평소와 다름</span>
-      </div>
-
-      <div style="display:flex;gap:20px;justify-content:center;margin-top:18px;font-size:12px;color:var(--sub)">
-        <div style="text-align:center">
-          <div style="font-size:10px">평소와의 거리</div>
-          <div style="font-size:18px;font-weight:700;color:var(--text)">${d.d2 != null ? d.d2.toFixed(2) : '–'}</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:10px">최근 90일 기준 위치</div>
-          <div style="font-size:18px;font-weight:700;color:var(--text)">${pct90}<span style="font-size:11px;color:var(--sub)">%</span></div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:10px">비교 일수</div>
-          <div style="font-size:18px;font-weight:700;color:var(--text)">${d.n_history || '–'}</div>
-        </div>
-      </div>
-
-      <div style="text-align:center;font-size:11px;color:var(--sub);margin-top:14px;line-height:1.6">
-        여러 시장 지표를 한 번에 비교해, 현재 시장이 과거 10년의 평소 모습과 얼마나 다른지 계산합니다.<br/>
-        과거 데이터 기준의 거리 측정이며, 미래 방향을 예측하지 않습니다.
-      </div>
-    `;
-  }
-
-  // ── 2. 10년 D² 시계열 SVG 차트 ──
+  // ── 1. 10년 D² 시계열 SVG 차트 (메인) ──
   function renderChart(el, series, current) {
     if (!el || !series || series.length < 2) {
       if (el) el.innerHTML = '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:40px">시계열 데이터 부족</div>';
@@ -253,18 +244,25 @@
       el.innerHTML = '<div style="color:#9ca3af;font-size:13px;">유사 시점 없음</div>';
       return;
     }
-    const rows = knn.map((k, i) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card-bg-alt,rgba(255,255,255,0.02));border-radius:8px;margin-bottom:6px">
-        <div>
-          <div style="font-size:14px;font-weight:600;color:var(--text)">${k.date}</div>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px">평소 패턴 거리 ${k.distance != null ? k.distance.toFixed(2) : '–'}</div>
+    const rows = knn.map((k, i) => {
+      const event = findEvent(k.date);
+      const eventHtml = event
+        ? `<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.45">📌 ${event}</div>`
+        : `<div style="font-size:11px;color:var(--sub2,#6b7280);margin-top:4px;line-height:1.45;font-style:italic">기록된 시장 이벤트 없음</div>`;
+      return `
+        <div style="padding:12px 14px;background:var(--card-bg-alt,rgba(255,255,255,0.02));border-radius:10px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="font-size:14px;font-weight:700;color:var(--text)">${k.date}</div>
+            <div style="font-size:11px;color:var(--sub)">#${i+1} 가까움 · 거리 ${k.distance != null ? k.distance.toFixed(2) : '–'}</div>
+          </div>
+          ${eventHtml}
         </div>
-        <div style="font-size:11px;color:var(--sub)">#${i+1} 가까움</div>
-      </div>
-    `).join('');
+      `;
+    }).join('');
     el.innerHTML = `
       <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">
-        오늘의 시장 지표 조합이 과거 어느 날과 가장 비슷했는지. 강도와 방향 모두 매칭. 최근 90일은 자명한 매칭이라 제외.
+        오늘의 시장 지표 조합이 과거 어느 날과 가장 비슷했는지. 강도와 방향 모두 매칭. 최근 90일은 자명한 매칭이라 제외.<br/>
+        📌 = 그 시기 주요 시장 이벤트 (사실 기록만, 결과 해석 없음).
       </div>
       ${rows}
     `;
