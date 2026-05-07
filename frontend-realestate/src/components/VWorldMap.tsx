@@ -59,7 +59,6 @@ export default function VWorldMap({
         const r = await fetch("/api/realestate/config");
         const cfg = await r.json();
         const apiKey: string = cfg.vworld_api_key || "";
-        if (!apiKey) throw new Error("VWORLD_API_KEY 미설정");
         if (cancelled || !containerRef.current) return;
 
         const initialZoom = kakaoLevelToZoom(level);
@@ -74,10 +73,15 @@ export default function VWorldMap({
           attributionControl: false,
         });
 
-        // VWorld 야간(midnight) 타일 — 터미널 검정 테마와 매칭
+        // Prefer VWorld when configured; otherwise keep the map usable with a
+        // keyless dark basemap so region polygons still render in production.
+        const tileUrl = apiKey
+          ? `https://api.vworld.kr/req/wmts/1.0.0/${apiKey}/midnight/{z}/{y}/{x}.png`
+          : "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png";
+        const attribution = apiKey ? "" : "&copy; OpenStreetMap &copy; CARTO";
         L.tileLayer(
-          `https://api.vworld.kr/req/wmts/1.0.0/${apiKey}/midnight/{z}/{y}/{x}.png`,
-          { maxZoom: 18, tileSize: 256 }
+          tileUrl,
+          { maxZoom: 18, tileSize: 256, attribution }
         ).addTo(map);
 
         mapRef.current = map;
@@ -172,7 +176,7 @@ export default function VWorldMap({
         <div className="absolute inset-0 flex items-center justify-center bg-gray-900/80 text-red-300 p-4 text-sm">
           지도 로드 실패: {error}
           <br />
-          VWorld 개발자 콘솔에서 API 키 발급 + 도메인 등록을 확인하세요.
+          잠시 후 다시 시도해 주세요.
         </div>
       )}
     </div>
