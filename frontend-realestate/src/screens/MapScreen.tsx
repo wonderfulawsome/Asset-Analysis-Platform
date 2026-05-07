@@ -25,6 +25,27 @@ async function fetchGeoJson() {
   return _cachedGeoJson;
 }
 
+function fallbackOverviewsFromGeo(geo: any): SggOverview[] {
+  const bySgg = new Map<string, SggOverview>();
+  for (const feat of geo.features ?? []) {
+    const sggCd = feat.properties?.sgg_cd as string | undefined;
+    const name = feat.properties?.name as string | undefined;
+    if (!sggCd || bySgg.has(sggCd)) continue;
+    bySgg.set(sggCd, {
+      sgg_cd: sggCd,
+      sgg_nm: name ?? null,
+      stats_ym: "",
+      median_price_per_py: null,
+      change_pct_3m: null,
+      change_pct_1m: null,
+      trade_count: 0,
+      top_stdg_cd: null,
+      top_stdg_nm: name ?? null,
+    });
+  }
+  return [...bySgg.values()];
+}
+
 interface SelectedRegion {
   sggCd: string;
   sggNm: string;
@@ -84,8 +105,10 @@ export default function MapScreen() {
     apiFetch<SggOverview[]>(ENDPOINTS.sggOverview())
       .then(async (rows) => {
         if (cancelled) return;
+        const geo = await fetchGeoJson();
+        const sourceRows = rows.length > 0 ? rows : fallbackOverviewsFromGeo(geo);
         const map = new Map<string, SggOverview>();
-        rows.forEach((r) => map.set(r.sgg_cd, r));
+        sourceRows.forEach((r) => map.set(r.sgg_cd, r));
         _cachedOverviews = map;
         setOverviews(map);
         const polys = await loadPolygons(map);
@@ -108,7 +131,7 @@ export default function MapScreen() {
     // sub 데이터 없으면 sgg 전체 top 폴백.
     const sub = subKey ? ov?.bucheon_sub_top?.[subKey] : undefined;
     const topStdgCd = sub?.top_stdg_cd ?? ov?.top_stdg_cd ?? null;
-    const topStdgNm = sub?.top_stdg_nm ?? ov?.top_stdg_nm ?? null;
+    const topStdgNm = sub?.top_stdg_nm ?? ov?.top_stdg_nm ?? sggNm;
     const medianPp = sub?.median_price_per_py ?? ov?.median_price_per_py ?? null;
     const next = {
       sggCd,
@@ -156,6 +179,22 @@ export default function MapScreen() {
           })
           .catch(() => {})
       );
+    } else {
+      setTopStdgSummary({
+        sgg_cd: sggCd,
+        stdg_cd: sggCd,
+        stdg_nm: topStdgNm,
+        stats_ym: ov?.stats_ym ?? '',
+        trade_count: ov?.trade_count ?? 0,
+        avg_price: null,
+        median_price: null,
+        median_price_per_py: ov?.median_price_per_py ?? null,
+        jeonse_count: null,
+        wolse_count: null,
+        avg_deposit: null,
+        population: null,
+        solo_rate: null,
+      } as RegionSummary);
     }
     Promise.all(tasks).finally(() => setLoading(false));
   }

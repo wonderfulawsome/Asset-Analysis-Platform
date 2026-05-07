@@ -47,6 +47,7 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
 
   const tradeCount = topStdgSummary?.trade_count ?? null;
   const signalLabel = signal?.signal ?? null;
+  const statusLabel = displaySignal(signalLabel);
   const signalColor = signalLabel === "매수" ? "#10b981"
                     : signalLabel === "주의" ? "#ef4444"
                     : "#9ca3af";
@@ -122,8 +123,8 @@ export default function FeatureCard({ selected, signal, topStdgSummary, loading,
                 loading={loading && changeStr == null}
               />
               <Metric
-                label="신호"
-                value={signalLabel}
+                label="상태"
+                value={statusLabel}
                 valueColor={signalColor}
                 loading={loading && signalLabel == null}
               />
@@ -234,7 +235,14 @@ function buildSummary(
   }
 
   if (sentences.length === 0) {
-    return "데이터 수집 중입니다. 잠시 후 다시 확인해 주세요.";
+    return `${selected.sggNm}의 집계 데이터가 아직 준비되지 않았습니다. 지도 영역과 지역명만 먼저 표시합니다.`;
   }
   return sentences.join(". ") + ".";
+}
+
+function displaySignal(signal?: BuySignal["signal"] | null): string | null {
+  if (signal === "매수") return "활성";
+  if (signal === "주의") return "둔화";
+  if (signal === "관망") return "혼조";
+  return null;
 }
