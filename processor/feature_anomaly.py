@@ -80,7 +80,18 @@ def _load_noise_features(region: str = 'us') -> pd.DataFrame:
         parsed.append(rec)
     df = pd.DataFrame(parsed)
     df['date'] = pd.to_datetime(df['date'])
-    return df.set_index('date').sort_index()
+    df = df.set_index('date').sort_index()
+
+    # 데이터 sanity 필터 — noise_regime 가 종종 hy_spread=0 같은 sentinel 값을 적재
+    # (fetch_noise_regime_light 의 캐시 로직 결함). HY 스프레드는 historical 최저 ~1.5%
+    # 라 0 이하는 데이터 오류. 그런 행은 panel 에서 제외.
+    if 'hy_spread' in df.columns:
+        invalid = df['hy_spread'] <= 0.1
+        if invalid.any():
+            print(f'[Anomaly] noise_regime sentinel rows 제외: {invalid.sum()}건 '
+                  f'(hy_spread <= 0.1)')
+            df = df.loc[~invalid]
+    return df
 
 
 def _load_extras_yfinance(start: str, end: Optional[str] = None) -> pd.DataFrame:

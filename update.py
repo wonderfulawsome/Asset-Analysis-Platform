@@ -8365,3 +8365,37 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 #             top contributor) 으로 교체 + 헤드라인 프롬프트 descriptive 톤 정렬
 #   Stage 8 — crash_surge 의존성 정리 (collector/processor/router/scheduler/scripts/repo/JS)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [115] 2026-05-07 (UTC) — anomaly: hy_spread sentinel input validation
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 로컬 서버에서 이상 탐지 endpoint 가 2026-05-07 D²=44, pct10y=98% 라는 비현실적 값
+# 반환. top_contributors 의 hy_spread 가 +37.4 로 압도. 원인 추적 결과 noise_regime
+# 의 fetch_noise_regime_light 가 model_bundle 캐시값을 그대로 쓰는데, 그 캐시의
+# hy_val_cached 가 0.0 (또는 -0.0) 으로 들어있어 매일 그 값을 적재 중. 실제 ICE BofA
+# HY OAS 는 historical 최저 ~1.5%, 0 은 데이터 오류. 산발적으로 정상값 (2.83 등) 과
+# 섞여 있어 panel 에 들어오면 D² 폭발.
+#
+# [수정 파일]
+#   1. processor/feature_anomaly.py::_load_noise_features
+#      - df 로드 직후 hy_spread <= 0.1 인 행을 panel 에서 제외
+#      - 유효 데이터 부족하면 자연스럽게 panel.index.max() 가 직전 정상 일자로 후퇴
+#   2. DB 정리 — anomaly_daily 에서 hy_spread 가 sentinel 인 15개 row 직접 삭제
+#      (4월 초·중순 noise_regime 캐시 결함 시기)
+#
+# [왜 이 방식]
+# - noise_regime 수집기 결함은 separate fix (model bundle 의 hy_val 캐시를 매일 갱신
+#   하도록 fetch_noise_regime_full 흐름에 통합 필요). 그 작업 전까지 anomaly 의 입력만
+#   방어해서 사용자에게 잘못된 결과 노출 차단.
+# - 하한 0.1 은 보수적 — historical 최저 1.5% 보다 훨씬 낮아 정상 데이터 절대 안 걸림.
+#
+# [검증]
+# - 백필 재실행: 3776 → 3762 rows (14 sentinel 제거)
+# - /api/anomaly/current → 2026-05-06 D²=10.54 pct10y=71.21 hy_spread=2.77 ✓
+# - 상위 D² 15일 스폿체크: 모두 코로나 2020-03 / GFC 2020-04 정상 데이터 (sentinel 없음)
+#
+# [후속 과제]
+# - noise_regime 의 fetch_noise_regime_light hy_val 캐시 갱신 흐름 점검 (별도 issue).
+#   수정되면 sanity 필터는 그대로 두되 (방어 layer 유지) 거기 걸리는 행이 0 이어야 함.
+
