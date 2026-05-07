@@ -8760,3 +8760,63 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # 일별 스케줄러 (Step 10b) 는 panel.index.max() 만 다루므로, 알고리즘 변경 시점 직전의
 # latest 행이 자연 갱신될 때까지는 stale.
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [117] 2026-05-08 (UTC) — 부동산 RLS 해제 + endpoint 별 키 alias 지원
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 사용자가 dinsightlab.com 부동산 화면에서 모든 시군구가 "집계 데이터가 아직
+# 준비되지 않았습니다" 로 빈 표시. 진단 결과:
+#   1. /api/realestate/summary 가 [] 반환
+#   2. anon 키로 select 시 real_estate_trade_raw, region_summary 등 모두 count=0
+#   3. 그런데 실제로는 production scheduler 가 매일 적재 중 (RLS 가 anon SELECT
+#      까지 차단해서 0건처럼 보였을 뿐) — 실제 region_summary count=11,899
+#
+# 추가 발견:
+#   사용자의 부동산 분석 웹 프로젝트 .env 에 MOLIT_TRADE_API_KEY,
+#   MOLIT_RENT_API_KEY, MOIS_POPULATION_API_KEY, MOIS_HOUSEHOLD_API_KEY 가
+#   있는데 collector 가 인식하는 이름 목록과 mismatch 라 신규 환경에서 동일 키로
+#   복원할 수 없는 상태. 코드 단에서 alias 추가로 호환성 확보.
+#
+# [DB 마이그레이션 — Supabase Dashboard 에서 선행 실행]
+#   ALTER TABLE real_estate_trade_raw    DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE real_estate_rent_raw     DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE mois_population          DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE mois_household_by_size   DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE stdg_admm_mapping        DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE geo_stdg                 DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE region_summary           DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE buy_signal_result        DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE region_migration         DISABLE ROW LEVEL SECURITY;
+#   ALTER TABLE macro_rate_kr            DISABLE ROW LEVEL SECURITY;
+#
+# [신규 파일]
+#   1. migrations/2026_05_08_disable_rls_real_estate.sql - 마이그레이션 기록
+#   2. scripts/backfill_real_estate.py - Step 9 단발 실행 스크립트
+#      사용: --sgg 11200 (단일) / --seoul-only (서울 25) / --all (전국)
+#
+# [수정 파일]
+#   1. collector/real_estate_trade.py::_public_data_key
+#      - signature 변경: (endpoint='trade'|'rent') 인자 추가
+#      - endpoint 별 전용 키 (MOLIT_TRADE_API_KEY / MOLIT_RENT_API_KEY) 우선,
+#        없으면 generic (DATA_GO_KR_KEY 등) 으로 fallback
+#      - 모듈 전역 API_KEY = _public_data_key() 제거 → fetch_trades / fetch_rents
+#        가 호출 시점에 endpoint-aware 키 lookup
+#   2. collector/real_estate_population.py - 같은 방식 (population / household)
+#
+# [.env 갱신 — gitignored, 로컬만]
+#   MOLIT_TRADE_API_KEY, MOLIT_RENT_API_KEY,
+#   MOIS_POPULATION_API_KEY, MOIS_HOUSEHOLD_API_KEY 4개 추가 (부동산 분석 웹 .env 에서 복사).
+#   값은 4개 모두 동일 (사용자가 1개 키로 4개 endpoint 등록한 것).
+#
+# [검증]
+# - fetch_trades('11200', '202602') → 120건 (live API 정상)
+# - /api/realestate/summary?sgg_cd=11200&ym=202603 → 7개 법정동 데이터 정상 반환
+# - region_summary 전체 count=11,899 / range 202404 ~ 202604
+# - real_estate_trade_raw count=307,269 (production scheduler 가 그동안 정상 적재)
+#
+# [Railway 측 권장]
+# Railway 환경변수에 위 4개 키를 alias 로 추가 권장. 현재 어떤 이름으로 들어있는지
+# 모름 (작동은 하고 있으니 generic 이름 중 하나가 매칭되는 듯). 만약 production
+# scheduler 가 Step 9 에서 앞으로 실패하기 시작하면 키 만료 / alias mismatch 우선 점검.
+

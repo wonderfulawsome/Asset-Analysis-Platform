@@ -12,22 +12,30 @@ import xmltodict
 MOLIT_TRADE_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev"
 MOLIT_RENT_URL = "https://apis.data.go.kr/1613000/RTMSDataSvcAptRent/getRTMSDataSvcAptRent"
 
-def _public_data_key() -> str | None:
-    for name in (
+def _public_data_key(endpoint: str = "trade") -> str | None:
+    """공공데이터포털 키 — endpoint 별 전용 키 우선, 없으면 generic 키.
+
+    data.go.kr 은 endpoint 별로 별도 등록하면 별도 키를 발급하므로 endpoint 별
+    환경변수 (MOLIT_TRADE_API_KEY / MOLIT_RENT_API_KEY) 를 먼저 본다. 둘 다 없으면
+    범용 키 (DATA_GO_KR_KEY 등) 로 fallback.
+    """
+    endpoint_specific = {
+        "trade": ["MOLIT_TRADE_API_KEY"],
+        "rent":  ["MOLIT_RENT_API_KEY"],
+    }.get(endpoint, [])
+    candidates = endpoint_specific + [
         "DATA_GO_KR_KEY",
         "DATA_GO_KR_API_KEY",
         "DATA_GO_KR_SERVICE_KEY",
         "PUBLIC_DATA_API_KEY",
         "MOLIT_API_KEY",
         "SERVICE_KEY",
-    ):
+    ]
+    for name in candidates:
         value = os.getenv(name)
         if value:
             return value.strip()
     return None
-
-
-API_KEY = _public_data_key()
 
 # MOLIT(국토부) XML 응답 규약: response/header, resultCode "000"
 _MOLIT_SPEC = {"root": "response", "head_key": "header", "ok_codes": {"000"}}
@@ -36,7 +44,7 @@ _MOLIT_SPEC = {"root": "response", "head_key": "header", "ok_codes": {"000"}}
 def fetch_trades(sgg_cd: str, deal_ym: str) -> list[dict]:
     """시군구 코드(5자리) + YYYYMM → 해당 월 매매 실거래 전량 반환."""
     return _fetch_all(MOLIT_TRADE_URL, {
-        "serviceKey": API_KEY,
+        "serviceKey": _public_data_key("trade"),
         "LAWD_CD": sgg_cd,
         "DEAL_YMD": deal_ym,
     })
@@ -45,7 +53,7 @@ def fetch_trades(sgg_cd: str, deal_ym: str) -> list[dict]:
 def fetch_rents(sgg_cd: str, deal_ym: str) -> list[dict]:
     """시군구 코드(5자리) + YYYYMM → 해당 월 전월세 실거래 전량 반환."""
     return _fetch_all(MOLIT_RENT_URL, {
-        "serviceKey": API_KEY,
+        "serviceKey": _public_data_key("rent"),
         "LAWD_CD": sgg_cd,
         "DEAL_YMD": deal_ym,
     })

@@ -12,22 +12,29 @@ import xmltodict
 MOIS_POP_URL = "https://apis.data.go.kr/1741000/stdgPpltnHhStus/selectStdgPpltnHhStus"
 MOIS_HH_URL = "https://apis.data.go.kr/1741000/admmHsmbHh/selectAdmmHsmbHh"
 
-def _public_data_key() -> str | None:
-    for name in (
+def _public_data_key(endpoint: str = "population") -> str | None:
+    """행안부(MOIS) endpoint 별 전용 키 우선, 없으면 generic 키 fallback.
+
+    population (인구·세대) / household (세대원수별) 가 별도 키로 발급되는 경우
+    대응. 둘 다 없으면 범용 키로 fallback.
+    """
+    endpoint_specific = {
+        "population": ["MOIS_POPULATION_API_KEY"],
+        "household":  ["MOIS_HOUSEHOLD_API_KEY"],
+    }.get(endpoint, [])
+    candidates = endpoint_specific + [
         "DATA_GO_KR_KEY",
         "DATA_GO_KR_API_KEY",
         "DATA_GO_KR_SERVICE_KEY",
         "PUBLIC_DATA_API_KEY",
         "MOIS_API_KEY",
         "SERVICE_KEY",
-    ):
+    ]
+    for name in candidates:
         value = os.getenv(name)
         if value:
             return value.strip()
     return None
-
-
-API_KEY = _public_data_key()
 
 # MOIS(행안부) XML 응답 규약: Response/head, resultCode "0"
 _MOIS_SPEC = {"root": "Response", "head_key": "head", "ok_codes": {"0"}}
@@ -36,7 +43,7 @@ _MOIS_SPEC = {"root": "Response", "head_key": "head", "ok_codes": {"0"}}
 def fetch_population(stdg_cd: str, ym: str) -> list[dict]:
     """법정동 코드(10자리) + YYYYMM → 인구·세대 데이터 (lv=3)."""
     return _fetch_all_mois(MOIS_POP_URL, {
-        "serviceKey": API_KEY,
+        "serviceKey": _public_data_key("population"),
         "stdgCd": stdg_cd,
         "lv": "3",
         "regSeCd": "1",
@@ -48,7 +55,7 @@ def fetch_population(stdg_cd: str, ym: str) -> list[dict]:
 def fetch_household_by_size(admm_cd: str, ym: str) -> list[dict]:
     """행정동 코드(10자리) + YYYYMM → 세대원수별 세대수 데이터 (lv=3)."""
     return _fetch_all_mois(MOIS_HH_URL, {
-        "serviceKey": API_KEY,
+        "serviceKey": _public_data_key("household"),
         "admmCd": admm_cd,
         "lv": "3",
         "regSeCd": "1",
@@ -64,7 +71,7 @@ def fetch_mapping_pairs(stdg_cd: str, ym: str) -> list[dict]:
     실제 매핑 쌍 수 개만 남는다. 별도 매핑 API 없이 역추출하는 트릭.
     """
     items = _fetch_all_mois(MOIS_POP_URL, {
-        "serviceKey": API_KEY,
+        "serviceKey": _public_data_key("population"),
         "stdgCd": stdg_cd,
         "lv": "4",
         "regSeCd": "1",
@@ -99,7 +106,7 @@ def fetch_all_sgg_codes(ym: str) -> list[str]:
     """
     # lv=1: 전국 루트 → 시도 목록
     ctpv_items = _fetch_all_mois(MOIS_POP_URL, {
-        "serviceKey": API_KEY,
+        "serviceKey": _public_data_key("population"),
         "stdgCd": "1000000000",
         "lv": "1",
         "regSeCd": "1",
@@ -113,7 +120,7 @@ def fetch_all_sgg_codes(ym: str) -> list[str]:
             continue
         # lv=2: 시도 → 시군구 목록
         sgg_items = _fetch_all_mois(MOIS_POP_URL, {
-            "serviceKey": API_KEY,
+            "serviceKey": _public_data_key("population"),
             "stdgCd": ctpv_cd,
             "lv": "2",
             "regSeCd": "1",
