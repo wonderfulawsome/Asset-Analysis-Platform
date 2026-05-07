@@ -8882,3 +8882,85 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # 모름 (작동은 하고 있으니 generic 이름 중 하나가 매칭되는 듯). 만약 production
 # scheduler 가 Step 9 에서 앞으로 실패하기 시작하면 키 만료 / alias mismatch 우선 점검.
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [122] 2026-05-08 (UTC) — k-NN 시장 regime (200d SMA) 사전 필터 추가
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# k-NN 매칭 시 today 가 강세장(SPX 종가 > 200d SMA) 이면 과거 강세장 일자만,
+# 하락장이면 과거 하락장 일자만 후보로 두도록 사전 필터 추가.
+#
+# [왜 — 사용자 요청]
+# 사용자: "지금이 강세장이면 저 당시 비슷한 시장 리스트도 강세장이었던 시기로
+# 나오게 하고싶은데". [120] 의 부호 일치 필터(8 피처 deviation 방향 매칭) 는
+# feature 공간에서의 정성 매칭이라 'macro 분위기' 와 일치할 때가 많지만 직접
+# 가격 regime 을 강제하지는 않음. 200d SMA 위/아래 라벨로 명시적 regime gating.
+#
+# [왜 200d SMA — 사용자 선택]
+# AskUserQuestion 4 옵션 중 사용자가 "200일 이동평균 위/아래 (추천)" 선택.
+#   - 단순·고전적 (시장 regime 통념)
+#   - 60% 이상 시점이 bull → 후보 풀 충분
+#   - 적용도 "knn_pool 사전 필터" 선택 (D² 분포·sign-agreement 로직 보존, 가장 깔끔)
+# 6m return 부호 / drawdown / 3-state HMM 도 검토했으나 단순성 + 충분한 후보 풀 보장
+# 측면에서 200d SMA 채택.
+#
+# [구현 — processor/feature_anomaly.py]
+#   1. 상수 신규
+#      REGIME_MA_WINDOW = 200
+#      REGIME_TICKERS = {'us': '^GSPC', 'kr': '^KS11'}
+#   2. _load_market_regime(start, end, region) 신규
+#      yfinance 로 region 별 인덱스 종가 로드 → 200영업일 SMA 와 비교.
+#      (close > sma) → 1.0, (close < sma) → 0.0, sma 미정의 (초기 구간) → NaN.
+#      look-ahead 안전 — 각 시점 라벨은 그 시점까지 종가만 사용.
+#   3. _filter_pool_by_regime(knn_pool, today_regime, regime_series, min_keep=KNN_K) 신규
+#      pool_regimes 를 reindex(method='ffill', limit=2) 로 매칭 (영업일 alignment).
+#      same regime 행만 남김. 단, 필터 후 < min_keep 이면 원본 반환 (fallback) —
+#      bear regime 후보 부족으로 K 채우기 실패하느니 mixed regime 이라도 K 채우는 쪽이
+#      사용자 효용 큼. today_regime 이 NaN (200d 미정의 초기 구간) 인 경우도 원본 그대로.
+#   4. compute_anomaly_timeseries: panel 로드 후 regime_series 1회 로드 (panel 시작
+#      400일 전부터 — 200영업일 SMA warmup), 루프 안에서 dt 별 today_regime 추출 후
+#      _filter_pool_by_regime 호출 → 기존 _knn_diversified.
+#   5. compute_today_anomaly: knn_pool 시작점 기준으로 regime_series 로드 후 동일 처리.
+#
+# [데이터 흐름 — Before/After]
+# Before:
+#   panel(10피처) → hist(10y rolling) → knn_pool(hist - 365d gap)
+#                                    → _knn_diversified (sign-agreement 6/8 + 거리 + 다양화)
+# After:
+#   panel(10피처) → hist(10y rolling) → knn_pool(hist - 365d gap)
+#                                    → _filter_pool_by_regime (200d SMA same regime)
+#                                    → _knn_diversified (sign-agreement 6/8 + 거리 + 다양화)
+#
+# [trade-off]
+#   (a) 강세장 today 일 때 진짜 폭락 시점 (2008-09, 2020-03) 매칭은 거의 불가능 —
+#       의도된 비용. "비슷한 분위기" 사용자 요구와 일관.
+#   (b) regime flip 직후 (예: bear → bull 전환 직후 며칠) 매칭 풀이 좁아질 수 있음.
+#       _filter_pool_by_regime 의 min_keep < KNN_K 시 fallback 으로 완화.
+#   (c) yfinance 의존 추가 — `_load_extras_yfinance` 가 이미 ^TNX/^IRX/^VIX 로드
+#       중이라 인프라적으로는 이미 같은 의존성 (새 외부 의존 없음).
+#
+# [수정 파일]
+#   processor/feature_anomaly.py
+#     - 상수 +2 (REGIME_MA_WINDOW, REGIME_TICKERS)
+#     - 함수 +2 (_load_market_regime, _filter_pool_by_regime)
+#     - compute_anomaly_timeseries: regime_series pre-load + per-iter pool filter
+#     - compute_today_anomaly: regime_series load + pool filter
+#
+# [검증]
+#   - py_compile OK.
+#   - 알고리즘 변경이라 [120] 의 stale row 운영 노트 그대로 적용:
+#     compute_today_anomaly 다음 실행 또는 scripts/backfill_anomaly.py 후 latest row
+#     자연 갱신. 수동 강제 갱신 시 anomaly_daily 의 가장 최근 date 행 1건 delete →
+#     스케줄러가 새 로직으로 재계산.
+#
+# [재실행 가이드]
+#   1) `python -c "from processor.feature_anomaly import compute_today_anomaly;
+#      from database.repositories import upsert_anomaly_row;
+#      r=compute_today_anomaly('us'); upsert_anomaly_row({**r,'region':'us'})"`
+#      (정확 호출 형태는 scheduler/job.py 의 anomaly step 참조)
+#   2) 또는 scripts/backfill_anomaly.py 로 전 historical 재계산 (가장 안전, 수십 분 소요).
+#
+# [JS 캐시 버스트]
+# anomaly.js 변경 0 — 백엔드 응답 (knn_dates) 의 콘텐츠만 바뀌므로 JS 버전 bump 불필요.
+

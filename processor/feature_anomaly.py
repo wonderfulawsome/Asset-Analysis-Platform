@@ -41,6 +41,8 @@ KNN_SIGN_AGREE_RELAXED = 5                                   # strict 후보 < k
 KNN_SIGN_NEUTRAL_TOL = 0.3                                   # |deviation| < N σ 면 부호 무관 일치 처리
 TOP_CONTRIBUTORS_K = 3                                       # 상위 기여 피처 개수
 MAHAL_RIDGE = 1e-6                                           # Σ 정규화 (ill-conditioning 방지)
+REGIME_MA_WINDOW = 200                                       # 시장 강세/하락 regime 판정 — 종가 vs 200영업일 SMA
+REGIME_TICKERS = {'us': '^GSPC', 'kr': '^KS11'}              # region 별 시장 인덱스 (regime 판정용)
 
 
 # ── 데이터 로딩 ────────────────────────────────────────────────────────────────
@@ -119,6 +121,49 @@ def _load_extras_yfinance(start: str, end: Optional[str] = None) -> pd.DataFrame
     out['yield_curve'] = out['tnx'] - out['irx']                 # 10Y - 3M, % 단위
     out.index = pd.to_datetime(out.index).tz_localize(None) if out.index.tz else pd.to_datetime(out.index)
     return out[['yield_curve', 'vix_abs']].dropna(how='all')
+
+
+def _load_market_regime(start: str, end: Optional[str] = None, region: str = 'us') -> pd.Series:
+    """시장 강세장(1) / 하락장(0) 일별 라벨 — 종가 vs 200영업일 SMA.
+
+    SMA 미정의 초기 구간은 NaN. region 별 인덱스(US: ^GSPC, KR: ^KS11) 를 yfinance 로 로드.
+    look-ahead 안전: t 시점 라벨은 t 까지의 종가만 사용.
+    """
+    import yfinance as yf
+    end = end or (date.today() + timedelta(days=1)).isoformat()
+    ticker = REGIME_TICKERS.get(region, '^GSPC')
+    df = yf.download(ticker, start=start, end=end, progress=False, auto_adjust=False)
+    if df.empty:
+        return pd.Series(dtype=float)
+    close = df['Close']
+    if isinstance(close, pd.DataFrame):
+        close = close.iloc[:, 0]
+    sma = close.rolling(REGIME_MA_WINDOW).mean()
+    regime = (close > sma).astype(float)
+    regime[sma.isna()] = np.nan
+    if regime.index.tz is not None:
+        regime.index = regime.index.tz_localize(None)
+    regime.index = pd.to_datetime(regime.index)
+    return regime
+
+
+def _filter_pool_by_regime(knn_pool: pd.DataFrame, today_regime: float,
+                           regime_series: pd.Series, min_keep: int = None) -> pd.DataFrame:
+    """today regime 과 같은 날짜만 남긴 knn_pool.
+
+    today_regime 이 NaN 또는 regime_series 가 비면 원본 그대로 (200d SMA 미정의 등 fallback).
+    필터 후 행 수 < min_keep 이면 원본 반환 — 같은 regime 후보가 너무 적어 매칭 자체가
+    실패하는 것보다 mixed regime 이라도 K 개 채우는 쪽이 사용자 효용 큼.
+    """
+    min_keep = min_keep if min_keep is not None else KNN_K
+    if knn_pool.empty or pd.isna(today_regime) or regime_series.empty:
+        return knn_pool
+    pool_regimes = regime_series.reindex(knn_pool.index, method='ffill', limit=2)
+    same = (pool_regimes == today_regime).fillna(False).values
+    filtered = knn_pool.loc[same]
+    if len(filtered) < min_keep:
+        return knn_pool
+    return filtered
 
 
 def build_feature_panel(region: str = 'us') -> pd.DataFrame:
@@ -279,6 +324,11 @@ def compute_anomaly_timeseries(
     print(f'[Anomaly] panel rows={len(panel)} '
           f'range={panel.index.min().date()} ~ {panel.index.max().date()}')
 
+    # 시장 regime 시계열 (강세장=1 / 하락장=0). 200d SMA warmup 위해 panel 시작보다
+    # 충분히 앞서서 (400일 — 200영업일 + α) 가격 시계열을 받음.
+    regime_start = (panel.index.min() - pd.Timedelta(days=400)).strftime('%Y-%m-%d')
+    regime_series = _load_market_regime(regime_start, region=region)
+
     for i, dt in enumerate(panel.index):
         if i % 250 == 0 and i > 0:
             print(f'  progress {i}/{len(panel)} ({dt.date()})')
@@ -320,9 +370,13 @@ def compute_anomaly_timeseries(
         else:
             pct_90d = None
 
-        # k-NN: 방향 일치 + 시간 다양화 (자세한 로직은 _knn_diversified 참조).
+        # k-NN: 시장 regime 사전 필터 → 방향 일치 → 거리 + 시간 다양화.
         gap_cutoff = dt - pd.Timedelta(days=KNN_GAP_DAYS)
         knn_pool = hist.loc[hist.index < gap_cutoff]
+        if not regime_series.empty:
+            today_regime_ser = regime_series.reindex([dt], method='ffill', limit=2)
+            today_regime = today_regime_ser.iloc[0] if len(today_regime_ser) else np.nan
+            knn_pool = _filter_pool_by_regime(knn_pool, today_regime, regime_series)
         knn = _knn_diversified(knn_pool, x, sig_inv, mu=mu, cov=cov) if len(knn_pool) > 0 else []
 
         feature_vector = {n: round(float(v), 4) for n, v in zip(ALL_FEATURES, x)}
@@ -384,6 +438,14 @@ def compute_today_anomaly(region: str = 'us') -> Optional[dict]:
 
     gap_cutoff = dt - pd.Timedelta(days=KNN_GAP_DAYS)
     knn_pool = hist.loc[hist.index < gap_cutoff]
+    # 시장 regime (강세=1/하락=0) 사전 필터: today 와 같은 regime 인 과거일만 후보로 둠.
+    if not knn_pool.empty:
+        regime_start = (knn_pool.index.min() - pd.Timedelta(days=400)).strftime('%Y-%m-%d')
+        regime_series = _load_market_regime(regime_start, region=region)
+        if not regime_series.empty:
+            today_regime_ser = regime_series.reindex([dt], method='ffill', limit=2)
+            today_regime = today_regime_ser.iloc[0] if len(today_regime_ser) else np.nan
+            knn_pool = _filter_pool_by_regime(knn_pool, today_regime, regime_series)
     knn = _knn_diversified(knn_pool, x, sig_inv, mu=mu, cov=cov) if len(knn_pool) > 0 else []
 
     return {
