@@ -12,7 +12,15 @@ const I18N = {
     // ── 탭 ──
     'tab.market': '시장',                         // 시장 탭
     'tab.fundamental': '펀더멘털',               // 펀더멘털 탭
-    'tab.signal': '신호',                         // 신호 탭
+    'tab.signal': '이상 탐지',                    // 이상 탐지 탭 (구 신호 탭)
+    // ── 이상 탐지 (Anomaly Detection) ──
+    'an.cardLabel': '시장 이상 탐지',
+    'an.chartLabel': '10년 이상도 추이',
+    'an.contribsLabel': '무엇이 이상한가',
+    'an.knnLabel': '과거 같은 패턴',
+    'an.disclaimer': '과거 분포와의 거리만 측정합니다. 미래 예측이 아니며, 매수·매도 권유가 아닙니다.',
+    'tile.anomaly': '이상 탐지',
+    'tile.anomalySub': '과거 대비 이상도',
     'tab.macro': '거시경제',                      // 거시경제 탭
     'tab.chart': 'AI차트',                        // 차트 탭
     'ai.cardLabel': '오늘의 시장',               // AI 요약 카드 라벨
@@ -492,7 +500,15 @@ const I18N = {
     // ── Tabs ──
     'tab.market': 'Market',
     'tab.fundamental': 'Fundamentals',
-    'tab.signal': 'Signal',
+    'tab.signal': 'Anomaly',
+    // ── Anomaly Detection ──
+    'an.cardLabel': 'Market Anomaly Detection',
+    'an.chartLabel': '10-Year Anomaly History',
+    'an.contribsLabel': 'What Is Unusual',
+    'an.knnLabel': 'Similar Past Periods',
+    'an.disclaimer': 'Measures distance from historical distribution only. Not a forecast or buy/sell recommendation.',
+    'tile.anomaly': 'Anomaly',
+    'tile.anomalySub': 'vs Historical Distance',
     'tab.macro': 'Macro',
     'ai.cardLabel': "Today's Market",
     'ai.explainLabel': 'AI Commentary',

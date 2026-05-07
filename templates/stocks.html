@@ -149,7 +149,7 @@
     <button class="tab active" data-idx="0" data-i18n="tab.chart">AI차트</button>
     <button class="tab" data-idx="1" data-i18n="tab.market">시장</button>
     <button class="tab" data-idx="2" data-i18n="tab.fundamental">펀더멘털</button>
-    <button class="tab" data-idx="3" data-i18n="tab.signal">신호</button>
+    <button class="tab" data-idx="3" data-i18n="tab.signal">이상 탐지</button>
     <button class="tab" data-idx="4" data-i18n="tab.macro">거시경제</button>
   </div>
 
@@ -194,9 +194,9 @@
         <span class="ht-sub">Noise vs Signal</span>
       </button>
       <button class="home-tile" data-tile="signal">
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12 Q5.5 4, 9 12 T16 12 T22 12"/></svg></span>
-        <span class="ht-title">신호</span>
-        <span class="ht-sub">하락·상승 가능성</span>
+        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" opacity="0.5"/><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3"/></svg></span>
+        <span class="ht-title" data-i18n="tile.anomaly">이상 탐지</span>
+        <span class="ht-sub" data-i18n="tile.anomalySub">과거 대비 이상도</span>
       </button>
       <button class="home-tile" data-tile="macro">
         <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12 h18 M12 3 a13 13 0 0 1 0 18 M12 3 a13 13 0 0 0 0 18"/></svg></span>
@@ -354,25 +354,41 @@
 
     </main>
 
-    <!-- ═══ 전조 탭 ═══ -->
+    <!-- ═══ 이상 탐지 탭 (구 신호 탭) ═══ -->
     <main class="content" id="tab-signal" style="display:none;">
 
-      <!-- Crash/Surge 현재 상태 -->
+      <!-- 1. 메인 점수 + 분위수 -->
       <div class="card fade-target">
         <div class="card-head">
-          <span class="card-label" data-i18n="cs.cardLabel">하락/상승 가능성</span>
-          <span id="cs-badge" class="badge"></span>
+          <span class="card-label" data-i18n="an.cardLabel">시장 이상 탐지</span>
+          <span id="an-badge" class="badge"></span>
         </div>
-        <div id="cs-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+        <div id="an-summary"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
-      <!-- Crash/Surge 90일(3개월) 추이 그래프 -->
+      <!-- 2. 10년 D² 시계열 차트 -->
       <div class="fade-target">
-        <div class="section-label" data-i18n="section.csChart">방향성 예측 추이 (3개월)</div>
-        <div id="cs-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+        <div class="section-label" data-i18n="an.chartLabel">10년 이상도 추이</div>
+        <div id="an-chart" class="card" style="padding:14px 16px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
       </div>
 
-      <!-- AI 해설 -->
+      <!-- 3. 무엇이 이상한가 (top contributors) -->
+      <div class="card fade-target">
+        <div class="card-head">
+          <span class="card-label" data-i18n="an.contribsLabel">무엇이 이상한가</span>
+        </div>
+        <div id="an-contribs"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </div>
+
+      <!-- 4. 과거 같은 패턴 (k-NN) -->
+      <div class="card fade-target">
+        <div class="card-head">
+          <span class="card-label" data-i18n="an.knnLabel">과거 같은 패턴</span>
+        </div>
+        <div id="an-knn"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </div>
+
+      <!-- 5. AI 해설 -->
       <div id="ai-explain-signal" class="card fade-target ai-explain-card">
         <div class="card-head">
           <span class="card-label" data-i18n="ai.explainLabel">AI 해설</span>
@@ -383,8 +399,8 @@
         </div>
       </div>
 
-      <!-- 면책 문구 -->
-      <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
+      <!-- 면책 — descriptive 컨셉 강조 -->
+      <div class="disclaimer" data-i18n="an.disclaimer">과거 분포와의 거리만 측정합니다. 미래 예측이 아니며, 매수·매도 권유가 아닙니다.</div>
 
     </main>
 
@@ -519,7 +535,7 @@
   </div>
 
   <script src="/static/js/region.js?v=6"></script>
-  <script src="/static/js/i18n.js?v=6"></script>
+  <script src="/static/js/i18n.js?v=7"></script>
   <script>
     // ── 다크모드 토글 (헤더 + setup 화면 동기화) ──
     var _sunSvg = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>';
@@ -556,8 +572,9 @@
     document.getElementById('setup-lang').addEventListener('click', switchLang);
   </script>
   <script src="/static/js/chart.js?v=25"></script>
-  <script src="/static/js/main.js?v=132"></script>
+  <script src="/static/js/main.js?v=133"></script>
   <script src="/static/js/sector.js?v=7"></script>
-  <script src="/static/js/home.js?v=43"></script>
+  <script src="/static/js/home.js?v=44"></script>
+  <script src="/static/js/anomaly.js?v=1"></script>
 </body>
 </html>

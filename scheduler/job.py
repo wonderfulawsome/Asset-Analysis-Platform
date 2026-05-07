@@ -812,6 +812,23 @@ def run_pipeline(light: bool = False) -> None:
         print(f'[Step 10] 홈 헤드라인 실패, 건너뜀: {e}')
         traceback.print_exc()
 
+    # Step 10b: 이상 탐지 (Anomaly Detection) — 오늘 1행 계산 + upsert
+    # 백필은 scripts/backfill_anomaly 1회 실행하면 되고, 이후 매일 이 step 으로 1행씩 추가.
+    try:
+        print('\n[Step 10b] 이상 탐지 오늘 1행 계산 (US)...')
+        from processor.feature_anomaly import compute_today_anomaly
+        from database.repositories import upsert_anomaly_daily
+        out = compute_today_anomaly(region='us')
+        if out:
+            upsert_anomaly_daily(out, region='us')
+            print(f"[Step 10b] anomaly_daily us {out['date']} OK "
+                  f"(D²={out['d2']}, pct10y={out['percentile_10y']})")
+        else:
+            print('[Step 10b] anomaly_daily us SKIP (panel/history 부족)')
+    except Exception as e:
+        print(f'[Step 10b] 이상 탐지 실패, 건너뜀: {e}')
+        traceback.print_exc()
+
     # Step 11: 무거운 화면 응답 사전 계산 — endpoint 는 app_cache 즉시 응답.
     try:
         print('\n[Step 11] 화면 응답 캐시 미리 생성 (US)...')

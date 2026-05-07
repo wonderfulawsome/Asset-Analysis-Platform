@@ -163,25 +163,23 @@
       }
     } catch (e) { console.error('[home] AI 카드 로드 실패', e); }
 
-    // 메타라인: 심리 / 간극 (surge-crash) / 국면 — 3 endpoint 병렬
+    // 메타라인: 심리 / 이상도 (anomaly percentile) / 국면 — 3 endpoint 병렬
     try {
-      const [fg, cycle, today] = await Promise.all([
+      const [fg, cycle, anomaly] = await Promise.all([
         fetch('/api/macro/fear-greed').then(r => r.json()).catch(() => null),
         fetch('/api/sector-cycle/current').then(r => r.json()).catch(() => null),
-        fetch('/api/market-summary/today').then(r => r.json()).catch(() => null),
+        fetch('/api/anomaly/current?region=us').then(r => r.json()).catch(() => null),
       ]);
       const meta = document.getElementById('home-ai-meta');
       const parts = [];
       if (fg && fg.score != null) {
         parts.push(`<span class="meta-item"><span class="meta-key">심리</span><span class="meta-val">${fg.rating || ''} ${Math.round(fg.score)}</span></span>`);
       }
-      // surge - crash gap → 상승 신호 (초록) / 하락 신호 (빨강)
-      if (today && today.crash_surge && today.crash_surge.gap != null) {
-        const g = today.crash_surge.gap;
-        const cls = g > 0 ? 'up' : (g < 0 ? 'down' : '');
-        const label = g > 0 ? '상승 신호' : (g < 0 ? '하락 신호' : '신호');
-        const sign = g > 0 ? '+' : '';
-        parts.push(`<span class="meta-item"><span class="meta-key">${label}</span><span class="meta-val ${cls}">${sign}${g.toFixed(1)}</span></span>`);
+      // 이상도 — 10년 분포 내 percentile (descriptive only, 자문 리스크 없는 표현)
+      if (anomaly && !anomaly.empty && anomaly.percentile_10y != null) {
+        const p = anomaly.percentile_10y;
+        const cls = p >= 80 ? 'down' : (p <= 20 ? 'up' : '');   // 시각 단서만, 위험/안전 라벨 X
+        parts.push(`<span class="meta-item"><span class="meta-key">이상도</span><span class="meta-val ${cls}">상위 ${(100 - p).toFixed(0)}%</span></span>`);
       }
       if (cycle && cycle.phase_name) {
         parts.push(`<span class="meta-item"><span class="meta-key">국면</span><span class="meta-val">${cycle.phase_name}</span></span>`);

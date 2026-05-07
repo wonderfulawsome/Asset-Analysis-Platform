@@ -126,6 +126,33 @@ CREATE TRIGGER noise_regime_updated_at
     BEFORE UPDATE ON noise_regime
     FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+-- 7-1. 시장 이상 탐지 (Anomaly Detection) 일별 결과 (2026-05-07 추가)
+-- 신호 탭 (crash_surge) 을 교체. Mahalanobis D² 기반 descriptive 이상도 측정.
+CREATE TABLE IF NOT EXISTS anomaly_daily (
+    id                  BIGSERIAL PRIMARY KEY,
+    region              TEXT NOT NULL,
+    date                DATE NOT NULL,
+    d2                  DOUBLE PRECISION,                -- Mahalanobis 거리 제곱
+    percentile_10y      DOUBLE PRECISION,                -- 10년 분포 내 백분위
+    percentile_90d      DOUBLE PRECISION,                -- 90일 분포 내 백분위
+    feature_vector      JSONB,                           -- {피처명: 값}
+    top_contributors    JSONB,                           -- D² 분해 상위 K개
+    knn_dates           JSONB,                           -- pairwise 거리 가장 가까운 K개 시점
+    n_history           INTEGER,                         -- μ, Σ 추정 표본 수
+    created_at          TIMESTAMPTZ DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ DEFAULT NOW(),
+    CONSTRAINT anomaly_daily_region_date_unique UNIQUE (region, date)
+);
+
+CREATE INDEX IF NOT EXISTS anomaly_daily_region_date_idx
+    ON anomaly_daily (region, date DESC);
+
+ALTER TABLE anomaly_daily DISABLE ROW LEVEL SECURITY;
+
+CREATE TRIGGER anomaly_daily_updated_at
+    BEFORE UPDATE ON anomaly_daily
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
 -- 8. XGBoost 폭락/급등 전조 결과 테이블
 CREATE TABLE IF NOT EXISTS crash_surge_result (
     id           BIGSERIAL PRIMARY KEY,

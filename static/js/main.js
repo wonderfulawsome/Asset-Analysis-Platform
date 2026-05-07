@@ -1081,13 +1081,12 @@ function switchTab(idx, addHistory) {
     setTimeout(() => { if (typeof loadNoiseChart === 'function') loadNoiseChart(); }, 100);
     loadAiExplain('fundamental');
   }
-  // 신호 탭 진입 시 차트 로드 + AI 해설
+  // 이상 탐지 탭 진입 시 anomaly 데이터 로드 + AI 해설
   if (idx === 3) {
     if (!window._signalLoaded) {
       window._signalLoaded = true;
-      loadCrashSurge();
+      if (typeof loadAnomaly === 'function') loadAnomaly();
     }
-    setTimeout(() => loadCrashSurgeChart(), 100);
     loadAiExplain('signal');
   }
   // 거시경제 탭 최초 진입 시 데이터 로드 + AI 해설
@@ -2068,9 +2067,10 @@ async function refreshCurrentTab() {
       loadRegime(), loadNoiseChart(), loadAiExplain('fundamental')
     ]);
   } else if (idx === 3) {
-    // 신호 탭
+    // 이상 탐지 탭
     await Promise.allSettled([
-      loadCrashSurge(), loadCrashSurgeChart(), loadAiExplain('signal')
+      typeof loadAnomaly === 'function' ? loadAnomaly() : Promise.resolve(),
+      loadAiExplain('signal'),
     ]);
   } else if (idx === 4) {
     // 거시경제 탭

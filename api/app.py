@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from api.routers import regime, macro, index_feed, sector_cycle, crash_surge, market_summary, chart, real_estate
+from api.routers import regime, macro, index_feed, sector_cycle, crash_surge, market_summary, chart, real_estate, anomaly
 try:
     from api.routers import tracking
 except Exception:
@@ -152,6 +152,7 @@ app.include_router(macro.router,      prefix='/api/macro',  tags=['거시 지표
 app.include_router(index_feed.router,    prefix='/api/index',        tags=['인덱스 피드'])
 app.include_router(sector_cycle.router,  prefix='/api/sector-cycle', tags=['섹터 경기국면'])
 app.include_router(crash_surge.router,  prefix='/api/crash-surge',  tags=['폭락/급등 전조'])
+app.include_router(anomaly.router,      prefix='/api/anomaly',      tags=['이상 탐지'])
 app.include_router(market_summary.router, prefix='/api/market-summary', tags=['마켓 오버뷰'])
 app.include_router(chart.router, prefix='/api/chart', tags=['차트'])
 app.include_router(real_estate.router, prefix='/api/realestate', tags=['부동산'])

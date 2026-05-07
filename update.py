@@ -8248,3 +8248,120 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - 대안 (anon insert 허용 정책 추가) 은 RLS 켜진 상태 유지하지만 결국 anon 이 아무 row 나
 #   쓸 수 있게 되므로 보안적 이득 없이 복잡도만 증가.
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [113] 2026-05-07 (UTC) — 이상 탐지 (Anomaly Detection) Stage 1: DB 마이그레이션
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 신호 탭 (crash_surge_data 기반) 을 "이상 탐지" 로 교체. 자문 리스크 제거가 핵심 목적
+# — "예측" 이 아닌 "현재 시장이 historical 분포에서 얼마나 떨어져 있나" descriptive 측정.
+#
+# [확정 스펙]
+#   - 피처 10개: noise_regime 8개 (fundamental_gap, erp_zscore, residual_corr,
+#     dispersion, amihud, vix_term, hy_spread, realized_vol) + yield_curve + VIX 절대값
+#   - 이상도 점수: Mahalanobis D² (today vs μ)
+#   - μ, Σ 추정: rolling [t-10y, t-1] (look-ahead 방지)
+#   - percentile: 10년 + 90일 둘 다 표시
+#   - k-NN 유사 과거: pairwise Mahalanobis (강도+형태), 최근 90일 제외
+#   - historical 데이터 범위: 10년
+#   - D² 시계열 차트: 표시
+#   - home-headline 입력: crash/surge → anomaly 정보로 교체
+#   - 기존 신호 탭: 통째 교체 + crash_surge 의존성 정리 (Stage 8)
+#
+# [DB 마이그레이션 — Supabase Dashboard 에서 선행 실행 필요]
+#   migrations/2026_05_07_add_anomaly_daily.sql 의 SQL 전체 실행
+#
+# [신규 파일]
+#   1. migrations/2026_05_07_add_anomaly_daily.sql
+#      - anomaly_daily 테이블 + UNIQUE(region,date) + index + RLS off + trigger
+#
+# [수정 파일]
+#   1. supabase_tables.sql - 7-1 항목으로 anomaly_daily 정규 스키마 추가
+#
+# [전체 작업 순서 (8단계)]
+#   1. DB 마이그레이션               ← 본 엔트리
+#   2. Collector 보강 (yield_curve, VIX 절대 — 기존 market_data 재활용)
+#   3. processor/feature_anomaly.py — 10년 rolling μ/Σ → D², percentile, k-NN
+#   4. scripts/backfill_anomaly.py — 10년치 D² 시계열 한 번에 적재
+#   5. api/routers/anomaly.py — /current, /history endpoint
+#   6. 프론트 — 신호 탭 UI → 이상 탐지 (점수+차트+contributor+k-NN+disclaimer)
+#   7. home-headline 통합 — crash/surge 입력 → anomaly 입력 교체
+#   8. crash_surge 정리 — collector/processor/router/scheduler/scripts/JS/template/repo
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [114] 2026-05-07 (UTC) — 이상 탐지 Stage 2~6: backend + frontend + scheduler
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# Stage 1 (DB) 위에 backend(계산·repo·API), 백필, frontend, scheduler hook 까지
+# 전부 구현. 신호 탭 (crash_surge) 자리에 "시장 이상 탐지" UI 가 동작.
+#
+# [Stage 2 — Collector]
+# noise_regime.feature_values JSONB 에 이미 8 피처 일별 적재됨 (2010-04 ~ 현재).
+# 추가 2 피처 (yield_curve = ^TNX − ^IRX, vix_abs = ^VIX) 는 yfinance 즉석 fetch
+# (backfill 1회 + scheduler 일별 1회) — 별도 collector 모듈 불필요.
+#
+# [Stage 3 — 신규 파일: processor/feature_anomaly.py]
+#   - NOISE_FEATURES + EXTRA_FEATURES = 10 피처
+#   - _load_noise_features() — noise_regime.feature_values 페이지네이션 로드
+#   - _load_extras_yfinance() — ^TNX/^IRX/^VIX → yield_curve, vix_abs
+#   - build_feature_panel() — 10 피처 일별 panel
+#   - compute_anomaly_timeseries() — rolling 10y μ, Σ → D², percentile_10y/90d,
+#     top_contributors (D² 분해), knn_dates (pairwise Mahalanobis, 90일 gap)
+#   - compute_today_anomaly() — 마지막 1일만 (스케줄러용)
+#   - _safe_inv() — Σ + ridge*I 로 ill-conditioning 방지
+#
+# [Stage 4 — 신규 파일: scripts/backfill_anomaly.py]
+#   사용: python -m scripts.backfill_anomaly --region us [--dry-run]
+#   결과: 3,776 rows (2011-04-28 ~ 2026-05-06) 64.8s
+#   sanity check: 상위 D² = 코로나 2020-03-12/16/17/18/19 (407, 322, 286 등) ✓
+#
+# [Stage 4 — 수정 파일: database/repositories.py]
+#   - upsert_anomaly_daily / upsert_anomaly_daily_bulk
+#   - fetch_anomaly_current / fetch_anomaly_history
+#   - _serialize_anomaly_record (JSONB 컬럼 dict→str + NaN→None) /
+#     _parse_anomaly_record (JSONB 문자열 복원)
+#
+# [Stage 5 — 신규 파일: api/routers/anomaly.py]
+#   - GET /api/anomaly/current?region=us — 오늘 1행
+#   - GET /api/anomaly/history?days=2520&region=us — 시계열 (차트용)
+#   - api/app.py 에 라우터 등록
+#
+# [Stage 6 — 프론트]
+#   - 신규 파일: static/js/anomaly.js
+#     - loadAnomaly() — /current + /history 병렬 fetch → 4 카드 렌더
+#     - renderSummary() — percentile + 게이지 + D²/n_history 보조
+#     - renderChart() — 10년 sqrt-스케일 D² SVG 시계열
+#     - renderContribs() — top contributor 가로 막대
+#     - renderKnn() — 유사 과거 시점 리스트 (descriptive only)
+#   - 수정: templates/stocks.html
+#     - tab-signal 컨텐츠 통째 교체 (cs-card/cs-chart → an-summary/an-chart/an-contribs/an-knn)
+#     - tab.signal 라벨 "신호" → "이상 탐지"
+#     - home tile signal 아이콘/라벨 갱신
+#     - <script src="/static/js/anomaly.js?v=1"> 추가
+#     - i18n.js?v=6 → ?v=7, main.js?v=132 → ?v=133, home.js?v=43 → ?v=44 (CDN 캐시버스팅)
+#   - 수정: static/js/main.js
+#     - idx===3 핸들러 → loadAnomaly() 호출
+#     - refresh 경로(allSettled) 도 동일
+#   - 수정: static/js/home.js
+#     - 홈 헤드라인 메타라인의 "상승/하락 신호 +N.N" → "이상도 상위 X%"
+#     - /api/market-summary/today.crash_surge 의존성 제거 → /api/anomaly/current
+#   - 수정: static/js/i18n.js
+#     - tab.signal "신호" → "이상 탐지" / "Signal" → "Anomaly"
+#     - an.cardLabel/chartLabel/contribsLabel/knnLabel/disclaimer (한·영)
+#     - tile.anomaly/anomalySub
+#
+# [Stage 6.5 — scheduler hook]
+#   - 수정: scheduler/job.py — Step 10b 추가
+#     매일 compute_today_anomaly + upsert_anomaly_daily 1행 (백필 이후 steady-state).
+#
+# [DB 적재 결과]
+#   anomaly_daily us — 3,776 rows. 검증:
+#     SELECT COUNT(*) FROM anomaly_daily WHERE region='us';  -- 3776
+#     ORDER BY d2 DESC LIMIT 5;                              -- 2020-03-12/16/17/18/19
+#
+# [남은 작업]
+#   Stage 7 — _build_home_indicator_text 의 [신호 탭] 섹션 → [이상 탐지 탭] (D², percentile,
+#             top contributor) 으로 교체 + 헤드라인 프롬프트 descriptive 톤 정렬
+#   Stage 8 — crash_surge 의존성 정리 (collector/processor/router/scheduler/scripts/repo/JS)
+

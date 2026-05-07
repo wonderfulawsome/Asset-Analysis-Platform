@@ -1390,3 +1390,110 @@ def fetch_app_cache(cache_key: str) -> dict | list | None:
         print(f"[DB] app_cache fetch 실패 ({cache_key}): {e}")
         return None
     return r.data[0]["payload"] if r.data else None
+
+
+# ── anomaly_daily (시장 이상 탐지) ──────────────────────────────────────────────
+
+_ANOMALY_JSON_FIELDS = ('feature_vector', 'top_contributors', 'knn_dates')
+
+
+def _serialize_anomaly_record(rec: dict) -> dict:
+    """JSONB 컬럼은 dict/list → JSON 문자열로 변환 후 upsert (PostgREST 호환).
+
+    pandas NaN 은 None 으로 변환 (PostgREST 가 NaN JSON 거부).
+    """
+    import math
+    out = {}
+    for k, v in rec.items():
+        if isinstance(v, float) and math.isnan(v):
+            out[k] = None
+        else:
+            out[k] = v
+    for k in _ANOMALY_JSON_FIELDS:
+        v = out.get(k)
+        if isinstance(v, (dict, list)):
+            out[k] = json.dumps(v, ensure_ascii=False)
+    return out
+
+
+def _parse_anomaly_record(rec: dict) -> dict:
+    """fetch 시 JSONB 문자열 → dict/list 복원."""
+    out = dict(rec)
+    for k in _ANOMALY_JSON_FIELDS:
+        v = out.get(k)
+        if isinstance(v, str):
+            try:
+                out[k] = json.loads(v)
+            except Exception:
+                pass
+    return out
+
+
+def upsert_anomaly_daily(record: dict, region: str = 'us') -> None:
+    """이상 탐지 결과 1행 upsert (region+date UNIQUE)."""
+    if not record:
+        return
+    rec = _serialize_anomaly_record({**record, 'region': region})
+    client = get_client()
+    client.table('anomaly_daily').upsert(rec, on_conflict='region,date').execute()
+
+
+def upsert_anomaly_daily_bulk(records: list[dict], region: str = 'us') -> None:
+    """다행 일괄 upsert (백필용, 200건씩 chunk)."""
+    if not records:
+        return
+    serialized = [_serialize_anomaly_record({**r, 'region': region}) for r in records]
+    client = get_client()
+    for i in range(0, len(serialized), 200):
+        chunk = serialized[i:i + 200]
+        client.table('anomaly_daily').upsert(chunk, on_conflict='region,date').execute()
+    print(f'[DB] anomaly_daily {len(serialized)}건 ({region}) upsert 완료')
+
+
+def fetch_anomaly_current(region: str = 'us') -> Optional[dict]:
+    """가장 최근 일자의 anomaly 1행."""
+    client = get_client()
+    try:
+        r = (
+            client.table('anomaly_daily')
+            .select('*')
+            .eq('region', region)
+            .order('date', desc=True)
+            .limit(1)
+            .execute()
+        )
+    except Exception as e:
+        print(f'[DB] anomaly_daily current 조회 실패: {e}')
+        return None
+    if not r.data:
+        return None
+    return _parse_anomaly_record(r.data[0])
+
+
+def fetch_anomaly_history(days: int = 2520, region: str = 'us') -> list[dict]:
+    """최근 N일치 anomaly 시계열 (오름차순). default 2520 = 약 10년 거래일."""
+    from datetime import date as _date, timedelta as _td
+    client = get_client()
+    cutoff = (_date.today() - _td(days=int(days * 1.5))).isoformat()    # 캘린더일 여유
+    try:
+        rows = []
+        page_size = 1000
+        offset = 0
+        while True:
+            r = (
+                client.table('anomaly_daily')
+                .select('*')
+                .eq('region', region)
+                .gte('date', cutoff)
+                .order('date', desc=False)
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            rows.extend(r.data or [])
+            if not r.data or len(r.data) < page_size:
+                break
+            offset += page_size
+    except Exception as e:
+        print(f'[DB] anomaly_daily history 조회 실패: {e}')
+        return []
+    return [_parse_anomaly_record(r) for r in rows][-days:]
