@@ -2,8 +2,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 
-// 모킹 1 의 BUY/HOLD/WATCH 카운터 — 시장 요약 API 의 signal_distribution 활용.
-// BUY=매수 (term-green), HOLD=관망 (term-dim), WATCH=주의 (term-up: 빨강 — 위험 경보).
+// 모킹 1 의 상태 카운터 — 시장 요약 API 의 signal_distribution 활용.
 interface MarketSummary {
   signal_distribution?: {
     매수?: number;
@@ -24,9 +23,9 @@ export default function SignalCounters() {
   const watch = d?.["주의"] ?? 0;
   return (
     <div className="flex items-stretch gap-1 text-[10px] font-mono tracking-widest">
-      <Counter label="매수" value={buy}   color="text-term-green" />
-      <Counter label="관망" value={hold}  color="text-term-dim"   />
-      <Counter label="주의" value={watch} color="text-term-up"    />
+      <Counter label="활성" value={buy}   color="text-term-green" />
+      <Counter label="혼조" value={hold}  color="text-term-dim"   />
+      <Counter label="둔화" value={watch} color="text-term-up"    />
     </div>
   );
 }

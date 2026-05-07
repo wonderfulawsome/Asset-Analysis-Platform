@@ -5,20 +5,19 @@ interface Props {
   signal: BuySignal | null;
 }
 
-// 시그널별 라벨 + 색 (KR 관례: 매수=파랑, 주의=빨강 — 폴리곤과 다름. 신호 자체는 색이 다른 의미)
-// 모킹 4 의 BUY 박스가 빨강이 아니라 별도. 매수=긍정으로 term-green 사용.
+// Internal labels come from the API; display copy stays descriptive-only.
 const STYLE: Record<BuySignal["signal"], { color: string; en: string; copy: string }> = {
-  매수: { color: "text-term-green", en: "매수", copy: "거래·가격·인구·금리·이동 종합" },
-  관망: { color: "text-term-dim",   en: "관망", copy: "지표 혼조 · 추세 확인 필요" },
-  주의: { color: "text-term-up",    en: "주의", copy: "거래·가격·인구·금리·이동 종합 약세" },
+  매수: { color: "text-term-green", en: "활성", copy: "거래·가격·인구·금리·이동 관측 강함" },
+  관망: { color: "text-term-dim",   en: "혼조", copy: "지표 방향 혼재" },
+  주의: { color: "text-term-up",    en: "둔화", copy: "거래·가격·인구·금리·이동 관측 약함" },
 };
 
 export default function SignalCard({ signal }: Props) {
   if (!signal || !signal.signal) {
     return (
-      <TerminalSection title="종합 신호" right="데이터 없음" dense>
+      <TerminalSection title="시장 관측 지표" right="데이터 없음" dense>
         <div className="text-[11px] text-term-dim text-center">
-          시그널 산출에 필요한 시계열 데이터가 부족합니다.
+          상태 지표 산출에 필요한 시계열 데이터가 부족합니다.
         </div>
       </TerminalSection>
     );
@@ -26,8 +25,8 @@ export default function SignalCard({ signal }: Props) {
   const s = STYLE[signal.signal];
   const score = signal.score;
   return (
-    <TerminalSection title="종합 신호" right={`점수 ${score >= 0 ? "+" : ""}${score.toFixed(1)}`}>
-      {/* 큰 BUY/HOLD/WATCH 박스 + 카피 */}
+    <TerminalSection title="시장 관측 지표" right={`점수 ${score >= 0 ? "+" : ""}${score.toFixed(1)}`}>
+      {/* Big status label + copy */}
       <div className="flex items-baseline gap-3 mb-3">
         <div className={`text-3xl font-bold font-mono ${s.color}`}>{s.en}</div>
         <div className="text-[11px] text-term-dim flex-1">{s.copy}</div>

@@ -1,16 +1,16 @@
 import type { BuySignal } from "../types/api";
 import TerminalSection from "./TerminalSection";
 
-// 모킹 4 의 큰 SCORE / BUY 박스 + VOL/PRC/POP/RATE/Net Migr breakdown.
+// 모킹 4 의 큰 SCORE / 상태 박스 + VOL/PRC/POP/RATE/Net Migr breakdown.
 // SignalCard 의 더 콤팩트 버전이라 별개 컴포넌트로 둠 (RegionDetailScreen 헤더 위치).
 interface Props {
   signal: BuySignal | null;
 }
 
 const META: Record<BuySignal["signal"], { en: string; color: string; copy: string }> = {
-  매수: { en: "매수", color: "text-term-green", copy: "거래 · 가격 · 인구 · 금리 · 이동 종합" },
-  관망: { en: "관망", color: "text-term-dim",   copy: "지표 혼조 · 추세 확인 필요" },
-  주의: { en: "주의", color: "text-term-up",    copy: "거래 · 가격 · 인구 · 금리 · 이동 종합 약세" },
+  매수: { en: "활성", color: "text-term-green", copy: "거래 · 가격 · 인구 · 금리 · 이동 관측 강함" },
+  관망: { en: "혼조", color: "text-term-dim",   copy: "지표 방향 혼재" },
+  주의: { en: "둔화", color: "text-term-up",    copy: "거래 · 가격 · 인구 · 금리 · 이동 관측 약함" },
 };
 
 export default function ScoreBox({ signal }: Props) {
@@ -19,10 +19,10 @@ export default function ScoreBox({ signal }: Props) {
   const fb = signal.feature_breakdown ?? {};
   return (
     <TerminalSection
-      title="종합 신호"
+      title="시장 관측 지표"
       right={`점수 ${signal.score >= 0 ? "+" : ""}${signal.score.toFixed(1)}`}
     >
-      {/* 큰 BUY/HOLD/WATCH 라벨 + 카피 */}
+      {/* 큰 상태 라벨 + 카피 */}
       <div className="flex items-baseline gap-3 mb-3">
         <div className={`text-3xl font-bold font-mono leading-none ${m.color}`}>{m.en}</div>
         <div className="text-[10px] text-term-dim uppercase tracking-widest">{m.copy}</div>

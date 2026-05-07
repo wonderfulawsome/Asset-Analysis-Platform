@@ -5,7 +5,7 @@ interface Props {
   changePct?: number | null;
 }
 
-// AI 해설 카드 — Step D 미구현이라 룰베이스 placeholder.
+// 데이터 해설 카드 — Step D 미구현이라 룰베이스 placeholder.
 // signal.narrative 가 채워지면 그 값 우선 사용.
 export default function AiInsightCard({ signal, changePct }: Props) {
   // signal 이 없는 경우는 카드 자체를 숨기지 않고 안내만
@@ -18,7 +18,7 @@ export default function AiInsightCard({ signal, changePct }: Props) {
                     ring-1 ring-blue-500/20 p-4">
       <div className="flex items-center gap-2 mb-2">
         <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-500/30 text-blue-100">
-          AI 분석
+          데이터 해설
         </span>
         {changePct != null && (
           <span className="text-[11px] text-term-dim">
@@ -27,18 +27,18 @@ export default function AiInsightCard({ signal, changePct }: Props) {
         )}
       </div>
       <p className="text-sm leading-relaxed text-term-text">
-        {narrative ?? "시그널 산출에 필요한 데이터가 누적되면 AI 해설이 표시됩니다."}
+        {narrative ?? "상태 지표 산출에 필요한 데이터가 누적되면 해설이 표시됩니다."}
       </p>
       {(strengths.length > 0 || risks.length > 0) && (
         <div className="grid grid-cols-2 gap-2 mt-3">
           <div className="rounded-lg bg-blue-500/10 p-2.5">
-            <div className="text-[10px] text-blue-300 font-semibold mb-1">강점</div>
+            <div className="text-[10px] text-blue-300 font-semibold mb-1">높게 나타난 축</div>
             <div className="text-[11px] text-term-text leading-tight">
               {strengths.length ? strengths.join(", ") : "—"}
             </div>
           </div>
           <div className="rounded-lg bg-red-500/10 p-2.5">
-            <div className="text-[10px] text-red-300 font-semibold mb-1">리스크</div>
+            <div className="text-[10px] text-red-300 font-semibold mb-1">낮게 나타난 축</div>
             <div className="text-[11px] text-term-text leading-tight">
               {risks.length ? risks.join(", ") : "—"}
             </div>
@@ -63,9 +63,9 @@ function generatePlaceholder(s: BuySignal): string {
   }
   const summary = parts.join(", ");
   const verdict =
-    s.signal === "매수" ? "매수 우호 구간"
-    : s.signal === "주의" ? "수요 약세, 보수적 접근"
-    : "추세 확인 필요";
+    s.signal === "매수" ? "수요 관측 강함"
+    : s.signal === "주의" ? "수요 관측 약함"
+    : "지표 방향 혼재";
   return summary ? `${summary} → ${verdict}` : verdict;
 }
 

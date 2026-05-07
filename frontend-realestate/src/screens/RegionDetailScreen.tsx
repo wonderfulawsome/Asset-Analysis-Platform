@@ -57,7 +57,7 @@ export default function RegionDetailScreen() {
         <div className="p-10 text-center text-term-dim text-[11px]">· 데이터 불러오는 중…</div>
       )}
 
-      {/* 매수 시그널 카드 — 모킹 4 의 큰 SCORE / BUY 박스 + breakdown */}
+      {/* 상태 지표 카드 — 모킹 4 의 큰 SCORE / 상태 박스 + breakdown */}
       {signal && <div className="p-2"><ScoreBox signal={signal} /></div>}
 
       {/* 메인 detail 카드 — 모킹 2 의 큰 박스 (narrative + TXNS / MoM Δ / SIG) */}
@@ -84,8 +84,8 @@ export default function RegionDetailScreen() {
                 }
               />
               <TerminalMetric
-                label="신호"
-                value={signal?.signal ?? "—"}
+                label="상태"
+                value={displaySignal(signal?.signal)}
                 valueClass={
                   signal?.signal === "매수" ? "text-term-green"
                   : signal?.signal === "주의" ? "text-term-up"
@@ -174,7 +174,7 @@ export default function RegionDetailScreen() {
   );
 }
 
-// 시군구 detail narrative — "매매가 +8.1% 전월 대비 반등. 거래량 12개월 평균 이상. 신호: 매수."
+// 시군구 detail narrative — "매매가 +8.1% 전월 대비 반등. 거래량 12개월 평균 이상. 상태: 활성."
 function buildNarrative(top: RegionSummary | null, latest: TimeseriesPoint | undefined,
                         signal: BuySignal | null): string {
   if (!top) return "데이터 수집 중";
@@ -194,11 +194,18 @@ function buildNarrative(top: RegionSummary | null, latest: TimeseriesPoint | und
     parts.push(r >= 1.15 ? "거래량 12개월 평균 이상" : r <= 0.85 ? "거래량 12개월 평균 이하" : "거래량 12개월 평균 수준");
   }
   if (signal?.signal) {
-    parts.push(`신호: ${signal.signal}`);
+    parts.push(`상태: ${displaySignal(signal.signal)}`);
   } else if (latest?.trade_count) {
     parts.push(`최근 ${latest.trade_count}건 체결`);
   }
   return parts.join(". ") + (parts.length ? "." : "");
+}
+
+function displaySignal(signal?: BuySignal["signal"] | null): string {
+  if (signal === "매수") return "활성";
+  if (signal === "주의") return "둔화";
+  if (signal === "관망") return "혼조";
+  return "—";
 }
 
 function fmtMan(n: number | null | undefined): string {

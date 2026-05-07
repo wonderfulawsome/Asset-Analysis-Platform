@@ -3,7 +3,7 @@ import { apiFetch } from "../api/client";
 import { ENDPOINTS } from "../api/endpoints";
 import TerminalSection from "./TerminalSection";
 
-// MARKET BRIEF — 모킹 1 의 상단 박스. 시군구 BUY/HOLD/주의 분포 + 기준금리 + LLM 요약.
+// MARKET BRIEF — 모킹 1 의 상단 박스. 시군구 상태 분포 + 기준금리 + LLM 요약.
 // expanded=true 시 전체 텍스트, false 시 첫 줄만.
 
 interface MarketSummaryResponse {
@@ -44,11 +44,11 @@ export default function MarketSummaryCard() {
   return (
     <TerminalSection title="시장 요약" right={right} dense>
       <div onClick={() => setExpanded((v) => !v)} className="cursor-pointer">
-        {/* 시그널 분포 + 기준금리 chips — 같은 줄 */}
+        {/* 상태 분포 + 기준금리 chips — 같은 줄 */}
         <div className="flex gap-1 items-center text-[10px] font-mono tracking-wider mb-1.5">
-          <Chip label="매수" count={data.signal_distribution.매수} color="text-term-green" />
-          <Chip label="관망" count={data.signal_distribution.관망} color="text-term-dim"   />
-          <Chip label="주의" count={data.signal_distribution.주의} color="text-term-up"    />
+          <Chip label="활성" count={data.signal_distribution.매수} color="text-term-green" />
+          <Chip label="혼조" count={data.signal_distribution.관망} color="text-term-dim"   />
+          <Chip label="둔화" count={data.signal_distribution.주의} color="text-term-up"    />
           {data.base_rate_latest != null && (
             <span className="ml-auto text-term-dim">
               기준금리 <span className="text-term-text font-bold">{data.base_rate_latest.toFixed(2)}%</span>

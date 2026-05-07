@@ -225,11 +225,11 @@ function buildSummary(
     sentences.push(`거래량은 ${baseLabel} 대비 ${fb.trade_chg_pct >= 0 ? "+" : ""}${fb.trade_chg_pct.toFixed(1)}% ${dir}`);
   }
 
-  // ③ 시그널
+  // ③ 상태 지표
   if (sigLabel) {
-    const meaning = sigLabel === "매수" ? "매수 우위 신호"
-                  : sigLabel === "주의" ? "매수 심리 약함"
-                  : "관망 구간";
+    const meaning = sigLabel === "매수" ? "수요 관측 강함"
+                  : sigLabel === "주의" ? "수요 관측 약함"
+                  : "지표 방향 혼재";
     sentences.push(meaning);
   }
 

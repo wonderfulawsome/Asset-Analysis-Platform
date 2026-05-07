@@ -250,9 +250,9 @@ function buildSubhead(s: StdgDetail["summary"], signal: StdgDetail["signal"]) {
   if (!s) return "";
   const py = s.median_price_per_py != null ? `${Math.round(s.median_price_per_py).toLocaleString()}만` : "-";
   const chg = s.change_pct_3m != null ? `${s.change_pct_3m >= 0 ? "+" : ""}${s.change_pct_3m.toFixed(1)}%` : "-";
-  const sigLabel = signal?.signal === "매수" ? "매수 우호 구간 진입"
-                 : signal?.signal === "주의" ? "매수 심리 약한 구간"
-                 : "관망 구간 유지";
+  const sigLabel = signal?.signal === "매수" ? "수요 관측 강함"
+                 : signal?.signal === "주의" ? "수요 관측 약함"
+                 : "지표 방향 혼재";
   return `평단가 ${py} 원, 3M ${chg} — ${sigLabel}.`;
 }
 
@@ -277,9 +277,9 @@ function buildBody(s: StdgDetail["summary"], signal: StdgDetail["signal"]) {
     body += `전세가율은 ${(s.jeonse_rate * 100).toFixed(1)}%로 서울 평균과 비교된다. `;
   }
   if (signal?.signal) {
-    const remark = signal.signal === "매수" ? "신호 점수는 매수 우위로 기록됐다."
-                 : signal.signal === "주의" ? "신호 점수는 매수 심리 약화 구간으로 분류됐다."
-                 : "신호 점수는 관망 구간으로 분류됐다.";
+    const remark = signal.signal === "매수" ? "상태 점수는 수요 관측 강함으로 기록됐다."
+                 : signal.signal === "주의" ? "상태 점수는 수요 관측 약함으로 분류됐다."
+                 : "상태 점수는 지표 방향 혼재로 분류됐다.";
     body += remark;
   }
   return body;
@@ -293,9 +293,9 @@ function buildEditorNote(s: StdgDetail["summary"], signal: StdgDetail["signal"])
   const trade = fb.trade_chg_pct != null ? `${fb.trade_chg_pct >= 0 ? "+" : ""}${fb.trade_chg_pct.toFixed(1)}%` : "-";
   const price = fb.price_mom_pct != null ? `${fb.price_mom_pct >= 0 ? "+" : ""}${fb.price_mom_pct.toFixed(1)}%` : "-";
   const pop = fb.pop_chg_pct != null ? `${fb.pop_chg_pct >= 0 ? "+" : ""}${fb.pop_chg_pct.toFixed(0)}` : "-";
-  const sigLabel = signal.signal === "매수" ? "매수 우호 구간"
-                 : signal.signal === "주의" ? "매수 주의 구간"
-                 : "관망 구간";
+  const sigLabel = signal.signal === "매수" ? "수요 관측 강함"
+                 : signal.signal === "주의" ? "수요 관측 약함"
+                 : "지표 방향 혼재";
   return `거래량 ${trade}, 가격 ${price} MoM, 인구 ${pop}명 → ${sigLabel}.`;
 }
 

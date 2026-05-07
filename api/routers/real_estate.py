@@ -263,20 +263,20 @@ def get_config():
     }
 
 
-# GET /signal — 매수 타이밍 시그널 (최신 1건). ym 지정 시 해당월.
+# GET /signal — 지역 상태 지표 (최신 1건). ym 지정 시 해당월.
 @router.get('/signal')
 def get_signal(
     sgg_cd: str = Query(..., description='시군구 코드 5자리'),
     ym: str = Query(default='', description='YYYYMM, 미지정 시 최신'),
 ):
-    """시군구의 매수/관망/주의 시그널 + 점수 breakdown."""
+    """시군구의 상태 지표 + 점수 breakdown."""
     return fetch_buy_signal(sgg_cd, ym or None) or {}
 
 
-# GET /signal/history — 시그널 시계열 (월별 변화 추적용)
+# GET /signal/history — 상태 지표 시계열 (월별 변화 추적용)
 @router.get('/signal/history')
 def get_signal_history(sgg_cd: str = Query(..., description='시군구 코드 5자리')):
-    """시군구의 시그널 시계열 (과거 → 최근)."""
+    """시군구의 상태 지표 시계열 (과거 → 최근)."""
     return fetch_buy_signal_history(sgg_cd)
 
 
@@ -721,7 +721,7 @@ def get_stdg_detail(
 # ─────────────────────────────────────────────────────────────────────
 # GET /market-summary — 오늘의 부동산 시장 LLM 요약 (24h 캐시)
 # ─────────────────────────────────────────────────────────────────────
-# 25구 buy_signal + region_summary + macro_rate 종합 → Groq LLM → 한 단락 요약.
+# 25구 상태 지표 + region_summary + macro_rate 종합 → Groq LLM → 한 단락 요약.
 # 캐시 24h (compute 최소화 메모리 룰: LLM 호출 30/월).
 import time as _time
 _market_summary_cache = {'data': None, 'ts': 0}
@@ -732,7 +732,7 @@ def _build_market_summary_data():
     """LLM 입력용 부동산 시장 종합 데이터 dict + 표시용 분포."""
     target_ym = _default_ym()
 
-    # 시그널 분포
+    # 상태 분포 (internal values are preserved for DB compatibility)
     signal_dist = {'매수': 0, '관망': 0, '주의': 0}
     sgg_signals = []
     for sgg_cd in [
@@ -787,23 +787,25 @@ def _build_market_summary_data():
 
 
 _MARKET_SUMMARY_PROMPT = """/no_think
-너는 한국어 부동산 시장 분석가다. 주어진 서울 25구 부동산 시장 데이터를 일반 투자자가 이해하도록 한 단락(3~4문장)으로 요약하라.
+너는 한국어 부동산 시장 데이터 해설가다. 주어진 서울 25구 부동산 시장 관측 데이터를 일반 사용자가 이해하도록 한 단락(3~4문장)으로 요약하라.
 
 배경 지식:
-- "매수/관망/주의" 는 25구별 매수 시그널 분포
+- "활성/혼조/둔화" 는 25구별 거래·가격·인구·금리·이동 상태 분포
 - "가격 상승/하락 top" 은 3개월 평단가 변화율 기준
 - 기준금리는 한국은행 기준금리
 
 설명할 내용:
-1. 25구 시그널 분포 (매수 N개, 관망 M개, 주의 K개) 의 의미
+1. 25구 상태 분포 (활성 N개, 혼조 M개, 둔화 K개) 의 의미
 2. 가격이 가장 많이 상승/하락한 구 1~2개와 변화율
 3. 금리 환경 (기준금리 + 12개월 변화)
-4. 이 모든 신호가 의미하는 오늘의 매수 환경 한 마디
+4. 현재 관측된 거래·가격 환경 한 마디
 
 규칙:
 - 3~4문장, 총 250자 이내
 - 부드러운 어투
 - 마크다운/불릿 금지
+- 매수, 매도, 추천, 투자, 수익, 유망, 기회, 타이밍, 위험, 리스크, 가능성, 확률 표현 금지
+- 현재·과거 관측값만 설명하고 행동 제안 금지
 - 줄바꿈 가능"""
 
 
@@ -932,7 +934,21 @@ def get_market_summary():
     try:
         from api.routers.market_summary import _groq_call
         import json as _json
-        user_text = _json.dumps(data, ensure_ascii=False, indent=2)
+        sd = data['signal_distribution']
+        llm_data = {
+            **data,
+            'status_distribution': {
+                '활성': sd.get('매수', 0),
+                '혼조': sd.get('관망', 0),
+                '둔화': sd.get('주의', 0),
+            },
+        }
+        llm_data.pop('signal_distribution', None)
+        for row in llm_data.get('sgg_signals', []):
+            sig = row.get('signal')
+            row['status'] = '활성' if sig == '매수' else ('둔화' if sig == '주의' else '혼조')
+            row.pop('signal', None)
+        user_text = _json.dumps(llm_data, ensure_ascii=False, indent=2)
         summary_text = _groq_call(_MARKET_SUMMARY_PROMPT, user_text, max_tokens=350)
     except Exception as e:
         print(f'[real_estate.market_summary] LLM 실패: {e}')
@@ -942,8 +958,8 @@ def get_market_summary():
         # Fallback — 룰베이스 한 줄
         sd = data['signal_distribution']
         summary_text = (
-            f"오늘의 서울 부동산 시그널 분포: 매수 {sd['매수']}구, "
-            f"관망 {sd['관망']}구, 주의 {sd['주의']}구. "
+            f"오늘의 서울 부동산 상태 분포: 활성 {sd['매수']}구, "
+            f"혼조 {sd['관망']}구, 둔화 {sd['주의']}구. "
             f"기준금리 {data.get('base_rate_latest', '-')}% (12개월 변화 "
             f"{data.get('base_rate_drop_12m', '-')}%p)."
         )
