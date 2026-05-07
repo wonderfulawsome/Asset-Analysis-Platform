@@ -44,14 +44,14 @@
   }
 
   // percentile_10y 기반 5단계 라벨 (descriptive only — 위험/안전 미사용)
+  // "평소 이탈도" 프레이밍 — 강도만 표현, 방향성·매수매도 단어 없음.
   function percentileLabel(pct) {
     if (pct == null) return { text: '–', color: '#9ca3af', desc: '' };
-    if (pct >= 99) return { text: '최상위 1%', color: '#dc2626', desc: '10년 분포 극단' };
-    if (pct >= 95) return { text: '최상위 5%', color: '#ef4444', desc: '드문 영역' };
-    if (pct >= 80) return { text: '상위권', color: '#f97316', desc: '평소보다 멀리' };
-    if (pct >= 50) return { text: '중간', color: '#9ca3af', desc: '평소 범위 위쪽' };
-    if (pct >= 20) return { text: '평온', color: '#3b82f6', desc: '평소 범위 아래쪽' };
-    return { text: '매우 평온', color: '#1d4ed8', desc: '드물게 평온' };
+    if (pct >= 95) return { text: '평소와 매우 다름', color: '#dc2626', desc: '10년 중 상위 5%' };
+    if (pct >= 80) return { text: '평소와 다름', color: '#ef4444', desc: '10년 중 상위 20%' };
+    if (pct >= 50) return { text: '평소보다 높은 편', color: '#f97316', desc: '중간 위쪽' };
+    if (pct >= 20) return { text: '평소에 가까움', color: '#3b82f6', desc: '중간 아래쪽' };
+    return { text: '평소에 매우 가까움', color: '#1d4ed8', desc: '10년 중 하위 20%' };
   }
 
   async function loadAnomaly() {
@@ -93,7 +93,7 @@
 
     el.innerHTML = `
       <div style="text-align:center;padding:8px 0 16px">
-        <div style="font-size:11px;color:var(--sub);letter-spacing:0.06em">10년 분포 내 위치 (percentile)</div>
+        <div style="font-size:11px;color:var(--sub);letter-spacing:0.06em">과거 10년 기준 위치</div>
         <div style="font-size:36px;font-weight:800;color:${lbl.color};margin-top:6px">${pct10}<span style="font-size:18px;color:var(--sub);font-weight:600">%</span></div>
         <div style="font-size:13px;color:${lbl.color};font-weight:600;margin-top:2px">${lbl.text}</div>
         <div style="font-size:11px;color:var(--sub);margin-top:2px">${lbl.desc}</div>
@@ -103,27 +103,27 @@
         <div style="position:absolute;top:-4px;left:${pos}%;transform:translateX(-50%);width:4px;height:16px;border-radius:2px;background:#fff;box-shadow:0 0 0 2px rgba(0,0,0,0.4)"></div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--sub);padding:0 8px">
-        <span>매우 평온 (0%)</span><span>중앙 (50%)</span><span>드문 영역 (100%)</span>
+        <span>평소에 가까움</span><span>보통</span><span>평소와 다름</span>
       </div>
 
       <div style="display:flex;gap:20px;justify-content:center;margin-top:18px;font-size:12px;color:var(--sub)">
         <div style="text-align:center">
-          <div style="font-size:10px">이상도 D²</div>
+          <div style="font-size:10px">평소와의 거리</div>
           <div style="font-size:18px;font-weight:700;color:var(--text)">${d.d2 != null ? d.d2.toFixed(2) : '–'}</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:10px">최근 90일 분위수</div>
+          <div style="font-size:10px">최근 90일 기준 위치</div>
           <div style="font-size:18px;font-weight:700;color:var(--text)">${pct90}<span style="font-size:11px;color:var(--sub)">%</span></div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:10px">표본 (μ,Σ 추정)</div>
+          <div style="font-size:10px">비교 일수</div>
           <div style="font-size:18px;font-weight:700;color:var(--text)">${d.n_history || '–'}</div>
         </div>
       </div>
 
-      <div style="text-align:center;font-size:10px;color:var(--sub);margin-top:14px;line-height:1.5">
-        D² = (오늘 10차원 좌표 − 과거 10년 평균)' Σ⁻¹ (오늘 좌표 − 평균)<br/>
-        = "오늘이 historical 분포에서 얼마나 떨어져 있나" 의 단일 측정값
+      <div style="text-align:center;font-size:11px;color:var(--sub);margin-top:14px;line-height:1.6">
+        여러 시장 지표를 한 번에 비교해, 현재 시장이 과거 10년의 평소 모습과 얼마나 다른지 계산합니다.<br/>
+        과거 데이터 기준의 거리 측정이며, 미래 방향을 예측하지 않습니다.
       </div>
     `;
   }
@@ -192,7 +192,7 @@
 
     el.innerHTML = `
       <div style="display:flex;justify-content:center;gap:12px;margin-bottom:6px;font-size:11px;color:var(--sub)">
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;vertical-align:middle"></span> D² (sqrt 스케일, 시계열)</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;vertical-align:middle"></span> 평소와의 거리 (시계열)</span>
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${lblColor};vertical-align:middle"></span> 오늘 (${(current.d2 || 0).toFixed(1)})</span>
       </div>
       <div class="line-chart-wrap">
@@ -240,7 +240,7 @@
     }).join('');
     el.innerHTML = `
       <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">
-        오늘 D² = 각 피처 기여의 합. 양수(빨강)는 평소보다 높음, 음수(파랑)는 낮음. 절대값 큰 순.
+        오늘의 평소 이탈도 = 각 지표 기여의 합. 빨강은 평소보다 높음, 파랑은 평소보다 낮음. 절대값 큰 순.
       </div>
       ${rows}
     `;
@@ -257,14 +257,14 @@
       <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 12px;background:var(--card-bg-alt,rgba(255,255,255,0.02));border-radius:8px;margin-bottom:6px">
         <div>
           <div style="font-size:14px;font-weight:600;color:var(--text)">${k.date}</div>
-          <div style="font-size:11px;color:var(--sub);margin-top:2px">10차원 거리 ${k.distance != null ? k.distance.toFixed(2) : '–'}</div>
+          <div style="font-size:11px;color:var(--sub);margin-top:2px">평소 패턴 거리 ${k.distance != null ? k.distance.toFixed(2) : '–'}</div>
         </div>
         <div style="font-size:11px;color:var(--sub)">#${i+1} 가까움</div>
       </div>
     `).join('');
     el.innerHTML = `
       <div style="font-size:11px;color:var(--sub);margin-bottom:10px;line-height:1.5">
-        오늘의 10차원 좌표가 과거 어느 날과 비슷했는지. 강도 + 방향 모두 매칭 (Mahalanobis pairwise). 최근 90일은 자명한 매칭이라 제외.
+        오늘의 시장 지표 조합이 과거 어느 날과 가장 비슷했는지. 강도와 방향 모두 매칭. 최근 90일은 자명한 매칭이라 제외.
       </div>
       ${rows}
     `;
