@@ -8595,3 +8595,77 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - findEvent("2017-05-15") → null → 회색 이탤릭 "기록된 시장 이벤트 없음" 표시.
 # - Launch preview 패널 stocks.html 갱신 확인 (카드 3개 + AI 해설 + 면책).
 
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [119] 2026-05-08 (UTC) — k-NN regime 클러스터 fix + 이벤트 사전 확장
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 사용자 스크린샷: k-NN 매칭 3건이 모두 2026-01-27/28/29 (3일 연속, 100일 안짝).
+# 라벨도 셋 다 "기록된 시장 이벤트 없음" — 사용자가 의미를 못 읽음.
+#
+# [원인]
+# (A) processor/feature_anomaly.py KNN_GAP_DAYS=90 — "최근 90일 trivial 제외" 의도였으나,
+#     시장 regime 은 보통 6개월+ 같은 패턴 유지 → 90일 cutoff 직후의 연속일이
+#     모두 클러스터로 top-K 차지.
+# (B) np.argsort(d_pair)[:KNN_K] — 시간 다양화 없이 가장 가까운 K개를 그대로 픽.
+#     2026-01-27 다음 28, 29 가 자명하게 가까움 → 같은 클러스터 3개 픽.
+# (C) MARKET_EVENTS_US 가 위기 사건 위주, 평시·인플레·금리 기간 미커버.
+#
+# [수정 파일]
+#   1. processor/feature_anomaly.py
+#      - KNN_GAP_DAYS  90 → 365 (1년 — "역사적 유사 시점" 의미 보장)
+#      - KNN_DIVERSITY_DAYS = 30 신규 (픽 1개당 ±30일 윈도 마스크)
+#      - _knn_diversified(knn_pool, x, sig_inv, k, diversity_days) helper 신규.
+#        argsort 순회 → 픽 → ±30일 윈도 mask off → 다음 픽. 같은 regime 클러스터
+#        2건 이상 못 들어감.
+#      - compute_anomaly_timeseries (backfill) 와 compute_today_anomaly 두 곳 모두
+#        기존 inline argsort[:K] 코드를 _knn_diversified 호출로 교체. 중복 로직 제거.
+#
+#   2. static/js/anomaly.js — MARKET_EVENTS_US 확장 (인라인 사전 7건 추가)
+#      A) 2025년 트럼프 2기 컨텍스트:
+#         - 2025-01-20~24 트럼프 2기 취임
+#         - 2025-02-01~03-15 對中·캐나다·멕시코 관세 부과
+#         - 2025-04-02~08 상호관세 발표 (Liberation Day)  [기존 04-30까지 → 04-08로 좁힘]
+#         - 2025-04-09~15 90일 유예·증시 반등
+#         - 2025-06-13~24 이스라엘-이란 12일 전쟁
+#         - 2025-08-01~15 美 상호관세 발효일
+#      B) 2021-2022 평시·인플레·정책 컨텍스트 (오늘 k-NN 매칭 라벨링용):
+#         - 2021-02-22~04-30 美 국채금리 급등·재오픈 트레이드 (가치주 rotation)
+#         - 2021-05-01~06-15 美 CPI 4~5%·인플레 우려 본격화
+#         - 2022-01-26~02-23 연준 매파 회견·우크라이나 긴장 고조
+#         (기존 2022-01-03~01-31 은 1/25 까지로 좁혀 1/26 부터의 신규 이벤트와 분리)
+#
+#   3. templates/stocks.html — anomaly.js?v=3 → v=4 캐시 버스트.
+#
+# [즉시 재계산]
+# 코드 수정 후 python -c "from processor.feature_anomaly import compute_today_anomaly;
+# from database.repositories import upsert_anomaly_daily; out = compute_today_anomaly('us');
+# upsert_anomaly_daily(out, 'us'); print(out['knn_dates'])" 1회 실행 → DB 의 today
+# row 즉시 갱신 (다음 스케줄 사이클 기다리지 않음).
+# 결과: knn_dates = [2022-02-08 d=2.86, 2021-03-02 d=3.14, 2021-05-07 d=3.26].
+# 셋 다 새 이벤트 사전과 매칭 — 각각 "연준 매파 회견·우크라이나 긴장 고조" /
+# "美 국채금리 급등·재오픈 트레이드" / "美 CPI 4~5%·인플레 우려 본격화" 라벨 부착.
+#
+# [왜 365일 gap]
+# - 90일: 같은 quarter 의 자명한 매칭 → 의미 없음.
+# - 180일: 같은 reporting cycle 안. 여전히 같은 regime 일 확률 높음.
+# - 365일: 최소 1년 전 — "그때 시장이 비슷했네" 라는 distant analog 가 의미 살아남.
+# - 720일: 너무 멀어서 minor regime 매칭이 묻힘.
+# 365 가 sweet spot.
+#
+# [왜 ±30일 다양화]
+# 365일 gap 만으로는 "1년+α 전 같은 주의 연속일" 이 여전히 클러스터로 들어감 가능.
+# 픽 1건당 ±30일 윈도 마스크면 최소 60일 떨어진 픽들로 강제 → 서로 다른 사건/맥락
+# 3개 보장.
+#
+# [historical 행은 stale knn 유지]
+# 백필 행들의 knn_dates 컬럼은 옛 (gap=90) 로직으로 채워져 있음. 화면은 fetch_anomaly_
+# current (today 1행) 만 쓰므로 노출 X. 백필 재실행 비용 (CPU N분) 대비 노출 효익 없어
+# 의도적으로 두고 다음 풀 백필 시점에 자연 갱신.
+#
+# [검증]
+# - py_compile feature_anomaly.py OK.
+# - compute_today_anomaly('us') 직접 호출 → knn_dates 3건 모두 1년+ 전, 서로 다른 분기.
+# - 새 라벨 매칭: findEvent("2022-02-08") = "연준 매파 회견·우크라이나 긴장 고조".
+

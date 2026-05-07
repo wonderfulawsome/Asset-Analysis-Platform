@@ -34,7 +34,8 @@ ROLLING_YEARS = 10                                           # μ, Σ 추정 윈
 MIN_HISTORY_DAYS = 252                                       # 최소 1년치는 있어야 D² 계산
 PERCENTILE_90D_WINDOW = 90                                   # 단기 분위수 윈도우
 KNN_K = 3                                                    # 유사 과거 시점 개수
-KNN_GAP_DAYS = 90                                            # 최근 N일은 k-NN 검색에서 제외 (trivial match 방지)
+KNN_GAP_DAYS = 365                                           # 최근 N일은 k-NN 검색에서 제외 ("역사적 유사 시점" 의미 보장 — 90일은 같은 regime 클러스터로 빠짐)
+KNN_DIVERSITY_DAYS = 30                                      # 픽 1개당 ±N일 윈도 마스크 (연속 3일 같은 클러스터 방지)
 TOP_CONTRIBUTORS_K = 3                                       # 상위 기여 피처 개수
 MAHAL_RIDGE = 1e-6                                           # Σ 정규화 (ill-conditioning 방지)
 
@@ -154,6 +155,34 @@ def _decompose_d2(x: np.ndarray, mu: np.ndarray, sig_inv: np.ndarray, names: lis
     return [{'name': n, 'contribution': float(c)} for n, c in zip(names, contribs)]
 
 
+def _knn_diversified(knn_pool, x: np.ndarray, sig_inv: np.ndarray, k: int = None, diversity_days: int = None) -> list[dict]:
+    """시간 다양화된 k-NN — 가까운 순서대로 픽하되, 픽한 날 ±diversity_days 윈도는 마스크.
+
+    같은 regime 의 연속일 클러스터(예: "2026-01-27/28/29") 가 모두 top-K 차지하는 걸 방지.
+    """
+    k = k or KNN_K
+    diversity_days = diversity_days or KNN_DIVERSITY_DAYS
+    diff_p = knn_pool.values - x
+    d_pair = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', diff_p, sig_inv, diff_p), 0))
+    order = np.argsort(d_pair)
+    selected: list[dict] = []
+    remaining = np.ones(len(knn_pool), dtype=bool)
+    for idx in order:
+        if not remaining[idx]:
+            continue
+        selected.append({
+            'date': str(knn_pool.index[idx].date()),
+            'distance': round(float(d_pair[idx]), 3),
+        })
+        if len(selected) >= k:
+            break
+        # ±diversity_days 윈도 마스크
+        pick_dt = knn_pool.index[idx]
+        days_diff = np.abs((knn_pool.index - pick_dt).days)
+        remaining = remaining & (days_diff > diversity_days)
+    return selected
+
+
 # ── 메인 처리 ──────────────────────────────────────────────────────────────────
 
 def compute_anomaly_timeseries(
@@ -228,19 +257,11 @@ def compute_anomaly_timeseries(
             pct_90d = None
 
         # k-NN: hist 내에서 (오늘 ↔ 그날) pairwise Mahalanobis 거리 최소 K개
-        # gap: 최근 KNN_GAP_DAYS 일은 제외 (trivial match)
+        # gap: 최근 KNN_GAP_DAYS 일 제외 (1년 — 같은 regime 클러스터 회피).
+        # 다양화: 픽 1개당 ±KNN_DIVERSITY_DAYS 일 윈도 마스크 (연속일 클러스터 방지).
         gap_cutoff = dt - pd.Timedelta(days=KNN_GAP_DAYS)
         knn_pool = hist.loc[hist.index < gap_cutoff]
-        if len(knn_pool) > 0:
-            diff_p = knn_pool.values - x
-            d_pair = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', diff_p, sig_inv, diff_p), 0))
-            order = np.argsort(d_pair)[:KNN_K]
-            knn = [
-                {'date': str(knn_pool.index[j].date()), 'distance': round(float(d_pair[j]), 3)}
-                for j in order
-            ]
-        else:
-            knn = []
+        knn = _knn_diversified(knn_pool, x, sig_inv) if len(knn_pool) > 0 else []
 
         feature_vector = {n: round(float(v), 4) for n, v in zip(ALL_FEATURES, x)}
         rows.append({
@@ -301,16 +322,7 @@ def compute_today_anomaly(region: str = 'us') -> Optional[dict]:
 
     gap_cutoff = dt - pd.Timedelta(days=KNN_GAP_DAYS)
     knn_pool = hist.loc[hist.index < gap_cutoff]
-    if len(knn_pool) > 0:
-        diff_p = knn_pool.values - x
-        d_pair = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', diff_p, sig_inv, diff_p), 0))
-        order = np.argsort(d_pair)[:KNN_K]
-        knn = [
-            {'date': str(knn_pool.index[j].date()), 'distance': round(float(d_pair[j]), 3)}
-            for j in order
-        ]
-    else:
-        knn = []
+    knn = _knn_diversified(knn_pool, x, sig_inv) if len(knn_pool) > 0 else []
 
     return {
         'date': str(dt.date()),
