@@ -8743,4 +8743,20 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - compute_today_anomaly('us') → knn 3건 모두 2024 Q4 ~ 2025 Q1 범위, 사용자
 #   "강세장" 인식과 같은 macro regime.
 # - 3건 중 2건 즉시 라벨 매칭 (2025-02-06 / 2024-11-15). 12월 이벤트 추가로 3/3 매칭.
+#
+# [post-fix 운영 노트 — 2026-05-08]
+# 사용자 화면에 옛 매칭 (2022-02-08/2021-03-02/2021-05-07) 잔존. 원인: 직전 step
+# (gap=365, 방향 매칭 X) 에서 panel.index.max()=2026-05-07 자로 upsert 한 row 가
+# stale 한 채 latest. 새 step (방향 매칭) 에선 panel.index.max()=2026-05-06 만
+# 갱신 → 2026-05-07 stale row 가 latest 로 잡혀 fetch_anomaly_current 가 옛 데이터
+# 반환.
+# 처치: client.table('anomaly_daily').delete().eq('region','us').eq('date','2026-05-07')
+# 1회 실행 → latest 가 2026-05-06 (새 로직) 로 정정.
+#
+# [재발 방지 가이드]
+# 알고리즘 변경 후 반드시 다음 중 하나:
+#   a) full backfill (scripts/backfill_anomaly.py) — 모든 행 새 로직으로 재계산
+#   b) 새 panel max 가 기존 max 와 같으면 upsert 가 자동 덮음, 다른 경우 직접 delete
+# 일별 스케줄러 (Step 10b) 는 panel.index.max() 만 다루므로, 알고리즘 변경 시점 직전의
+# latest 행이 자연 갱신될 때까지는 stale.
 
