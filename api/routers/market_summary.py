@@ -614,10 +614,26 @@ def get_ai_summary(lang: str = Query('ko'), region: str = Query('us')):
                     'expires': now + _AI_TTL,
                 }
             return {**payload, 'cached': True, 'source': 'app_cache'}
-        return {'summary': err['no_data'], 'error': True, 'cached': False, 'source': 'cache_miss'}
+        out = _generate_ai_summary(lang, region)
+        if out and out.get('summary'):
+            payload = {**out, 'cached': False, 'source': 'generated'}
+            try:
+                upsert_app_cache(_ai_summary_cache_key(lang, region), {**out, 'cached': True, 'source': 'app_cache'})
+            except Exception as e:
+                print(f'[AI Summary] cache write failed: {e}')
+            with _ai_lock:
+                _ai_cache[key] = {
+                    'summary': out['summary'],
+                    'generated_at': out.get('generated_at'),
+                    'expires': now + _AI_TTL,
+                }
+            return payload
+        fallback = _fallback_ai_summary(lang, region)
+        return {'summary': fallback, 'generated_at': _kst_now_str(), 'cached': False, 'source': 'fallback'}
     except Exception as e:
         print(f'[AI Summary] error: {e}')
-        return {'summary': err['fail'], 'error': True}
+        fallback = _fallback_ai_summary(lang, region)
+        return {'summary': fallback or err['fail'], 'generated_at': _kst_now_str(), 'cached': False, 'source': 'fallback'}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -877,6 +893,109 @@ def precompute_ai_explain(tab: str, lang: str, region: str) -> bool:
     return True
 
 
+def _fmt_signed(v, digits: int = 1, suffix: str = '') -> str:
+    if v is None:
+        return '-'
+    try:
+        x = float(v)
+    except Exception:
+        return '-'
+    return f"{'+' if x >= 0 else ''}{x:.{digits}f}{suffix}"
+
+
+def _fallback_ai_summary(lang: str, region: str) -> str:
+    """Rule-based summary used when AI cache/LLM generation is unavailable."""
+    try:
+        today = get_market_summary_today(region=region)
+        fg = today.get('fear_greed') or {}
+        cs = today.get('crash_surge') or {}
+        sector = fetch_sector_cycle_latest(region=region) or {}
+        if lang == 'en':
+            parts = []
+            if fg.get('score') is not None:
+                parts.append(f"sentiment {fg.get('rating', '')} {round(float(fg['score']))}")
+            if cs.get('gap') is not None:
+                parts.append(f"signal gap {_fmt_signed(cs.get('gap'))}")
+            if sector.get('phase_name'):
+                parts.append(f"cycle {sector.get('phase_name')}")
+            return "Market snapshot: " + ", ".join(parts) + "."
+        parts = []
+        if fg.get('score') is not None:
+            parts.append(f"심리 {fg.get('rating', '')} {round(float(fg['score']))}")
+        if cs.get('gap') is not None:
+            parts.append(f"신호 간극 {_fmt_signed(cs.get('gap'))}")
+        if sector.get('phase_name'):
+            parts.append(f"경기국면 {sector.get('phase_name')}")
+        return "현재 시장은 " + ", ".join(parts) + " 기준으로 점검 중입니다."
+    except Exception:
+        return 'Commentary is temporarily using the latest numeric snapshot.' if lang == 'en' else '현재 지표 기준으로 시장 상황을 점검 중입니다.'
+
+
+def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
+    """Rule-based tab commentary used when precomputed/LLM commentary is unavailable."""
+    try:
+        if tab == 'fundamental':
+            regime = fetch_noise_regime_current(region=region) or {}
+            score = regime.get('noise_score')
+            fc = regime.get('feature_contributions') or []
+            if isinstance(fc, str):
+                try:
+                    fc = json.loads(fc)
+                except Exception:
+                    fc = []
+            top = sorted(fc, key=lambda x: abs(x.get('contribution', 0)), reverse=True)[:2]
+            names = ', '.join(x.get('name', '?') for x in top) or ('key factors' if lang == 'en' else '주요 지표')
+            if lang == 'en':
+                return f"Market rationality score is {_fmt_signed(score, 2)}. The largest drivers are {names}. Check whether price moves remain aligned with fundamentals."
+            return f"시장 이성 점수는 {_fmt_signed(score, 2)}입니다. 영향이 큰 지표는 {names}입니다. 가격 흐름이 펀더멘털과 계속 맞는지 함께 확인하세요."
+
+        if tab == 'signal':
+            cs = fetch_crash_surge_current(region=region) or {}
+            crash_s = cs.get('crash_score') or cs.get('crash_prob')
+            surge_s = cs.get('surge_score') or cs.get('surge_prob')
+            gap = None if crash_s is None or surge_s is None else float(surge_s) - float(crash_s)
+            if lang == 'en':
+                return f"Crash risk is {crash_s or '-'} and surge potential is {surge_s or '-'}. The surge-crash gap is {_fmt_signed(gap)}. Positive gaps favor upside signals; negative gaps favor downside risk."
+            return f"하락 위험도는 {crash_s or '-'}, 상승 기대도는 {surge_s or '-'}입니다. 상승-하락 간극은 {_fmt_signed(gap)}입니다. 양수면 상승 신호, 음수면 하락 위험 쪽에 무게가 실립니다."
+
+        if tab == 'sector':
+            sc = fetch_sector_cycle_latest(region=region) or {}
+            phase = sc.get('phase_name') or '-'
+            top3 = sc.get('top3_sectors') or []
+            sectors = ', '.join(str(x.get('sector') if isinstance(x, dict) else x) for x in top3[:2]) or '-'
+            if lang == 'en':
+                return f"The current cycle phase is {phase}. Favored sectors are {sectors}. Sector strength should be read together with the macro phase, not as a standalone signal."
+            return f"현재 경기 국면은 {phase}입니다. 유리한 섹터는 {sectors}입니다. 섹터 강도는 단독 신호보다 거시 국면과 함께 보는 편이 좋습니다."
+
+        if tab == 'sector-val':
+            from api.routers.sector_cycle import get_valuation
+            v = get_valuation(region=region)
+            vals = v.get('valuations') if isinstance(v, dict) else []
+            ranked = sorted(
+                [x for x in vals if x.get('per') is not None],
+                key=lambda x: abs(float(x.get('per') or 0)),
+                reverse=True,
+            )[:2]
+            desc = ', '.join(f"{x.get('ticker')} {_fmt_signed(float(x.get('per')) * 100, 1, '%')}" for x in ranked) or '-'
+            if lang == 'en':
+                return f"Sector valuation gap is available for comparison. The largest price-minus-EPS gaps are {desc}. Treat these as relative positions, not investment recommendations."
+            return f"섹터별 가격-EPS 갭을 비교할 수 있습니다. 절대값이 큰 항목은 {desc}입니다. 이는 상대 위치 참고용이며 투자 추천은 아닙니다."
+
+        if tab == 'sector-mom':
+            from processor.feature7_sector_momentum import compute_sector_momentum
+            m = compute_sector_momentum(region=region)
+            mom = m.get('momentum') if isinstance(m, dict) else []
+            top = sorted([x for x in mom if x.get('rank') is not None], key=lambda x: x['rank'])[:2]
+            desc = ', '.join(f"{x.get('ticker')} {_fmt_signed(x.get('return_1w'), 1, '%')}" for x in top) or '-'
+            if lang == 'en':
+                return f"One-week sector momentum leaders are {desc}. Read this as short-term rotation and compare it with the current cycle phase."
+            return f"1주일 섹터 모멘텀 상위는 {desc}입니다. 단기 로테이션 신호로 보고 현재 경기 국면과 함께 비교하세요."
+    except Exception as e:
+        print(f'[AI Explain {tab}/{lang}/{region}] fallback error: {e}')
+
+    return 'Commentary is temporarily using the latest numeric snapshot.' if lang == 'en' else '현재 지표 기준으로 해설을 준비했습니다.'
+
+
 @router.get('/ai-explain')                                   # GET /api/market-summary/ai-explain
 def get_ai_explain(tab: str = Query(..., description='fundamental, signal, sector, sector-val, sector-mom'),
                    lang: str = Query('ko'),
@@ -919,5 +1038,41 @@ def get_ai_explain(tab: str = Query(..., description='fundamental, signal, secto
             'generated_at': row.get('generated_at'),
         }
 
-    # 캐시 미스: 사용자 요청에서는 생성하지 않음. 스케줄러 precompute 가 채운 뒤 응답.
-    return {'explanation': err['no_data'], 'tab': tab, 'error': True, 'cached': False}
+    # Cache miss: generate on demand, then fall back to a rule-based explanation.
+    out = None
+    try:
+        out = _generate_ai_explain(tab, lang, region)
+    except Exception as e:
+        print(f'[AI Explain {tab}/{lang}/{region}] on-demand generation failed: {e}')
+
+    if out and out.get('explanation'):
+        try:
+            upsert_ai_explain(tab, lang, region, out['explanation'])
+        except Exception as e:
+            print(f'[AI Explain {tab}/{lang}/{region}] cache write failed: {e}')
+        with _explain_lock:
+            _explain_cache[cache_key] = {
+                'text': out['explanation'],
+                'expires': now + _EXPLAIN_TTL,
+            }
+        return {
+            'explanation': out['explanation'],
+            'tab': tab,
+            'cached': False,
+            'generated_at': out.get('generated_at'),
+            'source': 'generated',
+        }
+
+    fallback = _fallback_ai_explain(tab, lang, region)
+    with _explain_lock:
+        _explain_cache[cache_key] = {
+            'text': fallback,
+            'expires': now + _EXPLAIN_TTL,
+        }
+    return {
+        'explanation': fallback or err['no_data'],
+        'tab': tab,
+        'cached': False,
+        'generated_at': _kst_now_str(),
+        'source': 'fallback',
+    }
