@@ -8399,3 +8399,42 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - noise_regime 의 fetch_noise_regime_light hy_val 캐시 갱신 흐름 점검 (별도 issue).
 #   수정되면 sanity 필터는 그대로 두되 (방어 layer 유지) 거기 걸리는 행이 0 이어야 함.
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [116] 2026-05-07 (UTC) — DISABLE_GROQ kill switch (로컬 quota 중복 차단)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# uvicorn 시작 시 BackgroundScheduler 가 자동 등록 (_scheduler_enabled 기본 True).
+# 등록 작업: init_once (60초 후) + light_pipeline (10분) + full_pipeline (3시간) +
+# KR pipeline. 각 full_pipeline 마다 home-headline + ai-summary + 5탭 ai-explain
+# 합쳐 총 14회 Groq 호출 × ko/en. 로컬과 Railway 둘 다 같은 코드라 두 곳에서
+# 동시에 호출 → quota 사실상 1/2 (Groq 1000 RPD 인데 500 day 가 됨). 5/7 의 en
+# 헤드라인이 quota 초과로 실패한 것도 이 원인 가능성 높음.
+#
+# [수정 파일]
+#   1. api/routers/market_summary.py::_groq_call
+#      - 함수 진입 즉시 os.getenv('DISABLE_GROQ') in ('true','1','yes') 체크
+#      - 해당 시 print 1회 + return None (어느 호출 경로 — scheduler / endpoint /
+#        fallback — 로 들어와도 LLM 호출 0)
+#      - _GROQ_DISABLED_LOGGED 플래그로 로그 1회만 출력 (스케줄러 14회 모두 스팸 방지)
+#   2. .env (gitignored, 로컬만):
+#        DISABLE_GROQ=true     # _groq_call 모든 경로 차단
+#        RUN_SCHEDULER=false   # BackgroundScheduler 자체를 띄우지 않음
+#
+# [왜 두 플래그 모두]
+# - RUN_SCHEDULER=false 만 → 스케줄러는 안 도는데 endpoint fallback (예: /ai-summary
+#   cache miss 시 _generate_ai_summary 직접 호출) 이 살아있어 LLM 호출 가능.
+# - DISABLE_GROQ=true 만 → 스케줄러는 매 cycle 돌면서 Groq 호출하지만 None 반환
+#   받고 cache 못 채우는 무의미한 작업 반복 (CPU 낭비, supabase keepalive 도 같이 돔).
+# - 둘 다 켜야 — LLM 호출 0 + 불필요한 백그라운드 작업도 0.
+#
+# [Railway 측]
+# - Railway 환경변수에는 둘 다 넣으면 안 됨. 두 플래그 미설정 → 기본값 = 정상 동작
+#   (RUN_SCHEDULER 기본 True, DISABLE_GROQ 기본 미설정).
+# - 로컬 .env 의 두 줄은 gitignored 라 push 영향 없음.
+#
+# [검증]
+# - _groq_call("test","test") → None + "[AI] DISABLE_GROQ flag detected" 1회 로그
+# - api.app._scheduler_enabled == False (RUN_SCHEDULER=false 적용 확인)
+# - 두 번째 _groq_call → None 반환하되 로그 미출력 (중복 방지)
+

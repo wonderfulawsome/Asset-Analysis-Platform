@@ -93,8 +93,22 @@ def get_market_summary_today(region: str = Query('us')):
 # Groq LLM 공통
 # ═══════════════════════════════════════════════════════════════
 
+_GROQ_DISABLED_LOGGED = False                                 # 비활성 경고 1회만 출력
+
+
 def _groq_call(system_prompt: str, user_text: str, max_tokens: int = 300):
-    """Groq API 호출 공통 함수."""
+    """Groq API 호출 공통 함수.
+
+    DISABLE_GROQ=true (또는 1, yes) 면 즉시 None 반환 — scheduler / endpoint /
+    fallback 어느 경로로 들어와도 LLM 호출 0. 로컬 개발 시 Railway 와 quota 중복
+    소진 방지용. .env 에 DISABLE_GROQ=true 만 넣으면 끝.
+    """
+    if os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes'):
+        global _GROQ_DISABLED_LOGGED
+        if not _GROQ_DISABLED_LOGGED:
+            print('[AI] DISABLE_GROQ flag detected — Groq 호출 모두 차단 (로컬 개발용 모드)')
+            _GROQ_DISABLED_LOGGED = True
+        return None
     api_key = os.getenv('GROQ_API_KEY')                      # 환경변수에서 API 키 가져오기
     if not api_key:                                          # 키가 없으면
         all_keys = list(os.environ.keys())                   # 전체 환경변수 목록 (디버깅용)
