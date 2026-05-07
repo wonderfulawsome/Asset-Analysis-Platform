@@ -160,6 +160,14 @@ def _valuation_payload_incomplete(payload, region: str = 'us') -> bool:
         # 이전 fallback 버그로 모든 섹터가 KOSPI 시장 PER 하나로 동일하게 캐시된 payload 방어.
         if len(per_vals) > 1 and len({round(float(x), 2) for x in per_vals}) == 1:
             return True
+    # per_weighted history 미적재 버그(2026-05-07 이전) 방어 — 모든 섹터에서 현재값==평균값 이면 stale.
+    perw_pairs = [
+        (v.get("per_weighted"), v.get("per_weighted_mean"))
+        for v in vals
+        if v.get("per_weighted") is not None and v.get("per_weighted_mean") is not None
+    ]
+    if len(perw_pairs) >= 2 and all(round(a, 1) == round(b, 1) for a, b in perw_pairs):
+        return True
     return False
 
 

@@ -8076,3 +8076,41 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # [운영]
 # - 이미 DB 에 `sector_valuation 10건 (kr)` 이 적재되었으므로 서버가 켜진 상태에서
 #   `/api/sector-cycle/valuation?region=kr` 또는 화면 새로고침 시 cache 가 새 payload 로 교체됨.
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [108] 2026-05-07 (UTC) — US PER 가중평균 == 10Y 평균 동일값 버그 수정
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [문제]
+# 배포된 화면 "섹터 밸류에이션" 표 US 컬럼에서 12개 섹터 모두 "PER (가중평균)" 과
+# "PER 10Y 평균" 이 똑같은 값으로 표시됨 (예: XLK 43.4배 / 43.4배, XLF 18.0배 / 18.0배).
+#
+# [원인]
+# `database/repositories.py::fetch_sector_valuation_history` 의 SELECT 절이
+# `date, ticker, per, pbr` 만 조회하고 `per_weighted` 컬럼을 빠뜨림.
+# → `compute_valuation_payload` 에서 `by_ticker_perw` 가 항상 비어 있음.
+# → fallback 로직 `if perw is not None and not perw_samples: perw_samples = [perw]`
+#   이 동작해서 평균 표본이 현재값 1개로만 채워짐.
+# → `hist_mean([perw]) == perw` 이므로 "10Y 평균" 칸이 현재값과 동일하게 출력.
+# 2026-05-07 c4121ce 에서 `per_weighted` 컬럼을 새로 추가하면서 history SELECT 갱신을 누락한 회귀.
+#
+# [수정 파일]
+#   1. database/repositories.py - SELECT 에 `per_weighted` 추가
+#       client.table("sector_valuation")
+#         .select("date, ticker, per, pbr, per_weighted")
+#   2. api/routers/sector_cycle.py::_valuation_payload_incomplete - stale 캐시 검출 추가
+#       perw_pairs = [(v.get("per_weighted"), v.get("per_weighted_mean"))
+#                     for v in vals if v.get("per_weighted") is not None and v.get("per_weighted_mean") is not None]
+#       if len(perw_pairs) >= 2 and all(round(a, 1) == round(b, 1) for a, b in perw_pairs):
+#           return True
+#
+# [왜]
+# - 첫 번째 수정만으로는 다음 스케줄러 cycle 까지 기존 stale app_cache payload 가 계속 서빙됨.
+# - 두 번째 수정으로 캐시에 박힌 깨진 payload(현재값==평균값) 를 즉시 incomplete 로 판정해
+#   `/valuation` endpoint 가 fallback 분기에서 새로 compute + upsert 하도록 강제.
+#
+# [검증]
+# - python -m py_compile database/repositories.py api/routers/sector_cycle.py
+# - 사용자가 화면 새로고침 시 캐시 무효 → fresh compute → per_weighted_mean 이
+#   10년 history 평균으로 정상 계산.
+

@@ -1175,7 +1175,7 @@ def fetch_sector_valuation_history(days: int = 365 * 5, region: str = 'us') -> l
     try:
         response = (
             client.table("sector_valuation")
-            .select("date, ticker, per, pbr")
+            .select("date, ticker, per, pbr, per_weighted")
             .eq("region", region)
             .gte("date", cutoff)
             .order("date", desc=False)
