@@ -250,10 +250,11 @@
         sourceText = `갭 = 12개월 가격성장률 − 12개월 EPS 성장률 (모멘텀). PER = ETF 보유 종목 PER 을 비중 가중평균 (절대 수준).`;
         rowsHtml = data.valuations.map(v => {
           const fgCol = colorByZ(v.per_z);
+          const perwCol = colorByZ(v.per_weighted_z);
           return `
             <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
             <div class="sv-cell" style="background:${fgCol};">${fmtGap(v.per)}</div>
-            <div class="sv-cell" style="text-align:right;">${fmtPer(v.per_weighted)}</div>
+            <div class="sv-cell" style="text-align:right;background:${perwCol};">${fmtPer(v.per_weighted)}</div>
             <div class="sv-cell" style="text-align:right;color:#9ca3af;">${fmtPer(v.per_weighted_mean)}</div>`;
         }).join('');
       }

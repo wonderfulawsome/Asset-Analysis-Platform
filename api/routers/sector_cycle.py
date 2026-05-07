@@ -118,6 +118,7 @@ def compute_valuation_payload(region: str = 'us') -> dict:
             "per_weighted": perw,                       # ETF 보유종목 trailingPE 가중평균 (US/KR 공통)
             "per_z": z(per, per_samples),
             "pbr_z": z(pbr, pbr_samples),
+            "per_weighted_z": z(perw, perw_samples),    # PER 가중평균의 historical z-score (색상용)
             "per_mean": hist_mean(per_samples),         # 과거 평균 (10년 history mean)
             "pbr_mean": hist_mean(pbr_samples),
             "per_weighted_mean": hist_mean(perw_samples),
@@ -167,6 +168,10 @@ def _valuation_payload_incomplete(payload, region: str = 'us') -> bool:
         if v.get("per_weighted") is not None and v.get("per_weighted_mean") is not None
     ]
     if len(perw_pairs) >= 2 and all(round(a, 1) == round(b, 1) for a, b in perw_pairs):
+        return True
+    # per_weighted_z 신규 필드 부재(2026-05-07 이전 캐시) — 색상이 안 칠해지는 stale 캐시 무효화.
+    perw_with_mean = [v for v in vals if v.get("per_weighted") is not None and v.get("per_weighted_mean") is not None]
+    if perw_with_mean and all("per_weighted_z" not in v for v in perw_with_mean):
         return True
     return False
 

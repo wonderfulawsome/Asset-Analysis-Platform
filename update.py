@@ -8159,3 +8159,32 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - Supabase: SELECT cpi_yoy, ism_pmi FROM sector_macro_raw LIMIT 1 OK
 # - python -m py_compile collector/sector_macro.py
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [110] 2026-05-07 (UTC) — 섹터 밸류 표 PER (가중평균) 칸에도 z-score 색상
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# US 섹터 밸류에이션 표에서 "PER (가중평균)" 칸은 plain 텍스트로만 표시되고 있었음.
+# 사용자가 "갭 (가격−EPS)" 칸처럼 색상으로 비싸/싸를 직관적으로 보길 요청.
+#
+# [수정 파일]
+#   1. api/routers/sector_cycle.py
+#      - compute_valuation_payload 결과에 `per_weighted_z` 필드 추가
+#        (per_weighted 의 historical z-score, 기존 z() 함수 재사용)
+#      - _valuation_payload_incomplete 에 신규 필드 부재 검출 추가
+#        (per_weighted 가 있는데 per_weighted_z 가 없으면 stale 로 판정 → 즉시 재계산)
+#   2. static/js/home.js
+#      - PER (가중평균) 셀에 background:${colorByZ(v.per_weighted_z)} 적용
+#      - 갭 칸과 동일한 colorByZ 함수 재사용 (양수=빨강 비쌈, 음수=파랑 쌈)
+#
+# [왜]
+# - 갭 = 모멘텀 시그널 (12M 가격성장 - EPS성장), PER 가중평균 = 절대 수준 시그널.
+#   둘은 서로 보완: 갭 음수 + PER 빨강 = "최근 부진하지만 여전히 비쌈".
+#   둘 다 색상이 있어야 동시 비교가 직관적.
+# - 색상 기준은 z-score (절대 PER 배수가 아닌 historical 분포 대비) — 섹터마다
+#   적정 PER 수준이 달라 (헬스케어 30 vs 금융 15) 절대값 비교는 무의미.
+#
+# [검증]
+# - python -m py_compile api/routers/sector_cycle.py
+# - 캐시 무효화 로직으로 사용자 새로고침 즉시 새 payload 서빙
+
