@@ -21,6 +21,7 @@ FRED_SERIES = {
     'RRSFS':   'real_retail',     # 실질 소매판매
     'ANDENO':  'capex_orders',    # 비국방 자본재 신규주문 (설비투자 선행지표)
     'W875RX1': 'real_income',     # 실질 개인소득 (이전지출 제외)
+    'CPIAUCSL': 'cpi',            # 소비자물가지수 (CPI)
 }
 
 _fred_session = requests.Session()                       # FRED 전용 세션 (TCP 연결 재사용)
@@ -57,9 +58,17 @@ def fetch_sector_macro() -> pd.DataFrame:
     """
     print('[SectorMacro] FRED 데이터 수집 중...')
     raw = {}                                             # 수집 결과를 담을 딕셔너리
-    for sid, col in FRED_SERIES.items():                  # 8개 시리즈 순회
+    for sid, col in FRED_SERIES.items():                  # 9개 시리즈 순회
         raw[sid] = _fetch_fred(sid, col)                  # 각 시리즈를 다운로드하여 저장
         print(f'  ✓ {sid}')
+
+    # ── ISM 제조업 PMI (FRED NAPM, 미지원 시 skip) ──
+    df_ism = None
+    try:
+        df_ism = _fetch_fred('NAPM', 'ism_pmi', retries=2)
+        print('  ✓ NAPM (ISM PMI)')
+    except Exception as e:
+        print(f'  ✗ NAPM (ISM PMI) 미지원: {e}')
 
     # ── INDPRO → PMI 유사 지수 변환 ──
     indpro_mom = raw['INDPRO']['indpro'].pct_change(3) * 100  # 3개월 전 대비 변화율(%)
@@ -105,7 +114,32 @@ def fetch_sector_macro() -> pd.DataFrame:
     df_income['real_income_yoy'] = df_income['real_income'].pct_change(12) * 100
     df_income = df_income[['real_income_yoy']].dropna()
 
+    # ── CPIAUCSL (소비자물가): 전년 대비 변화율(YoY%) ──
+    df_cpi = raw['CPIAUCSL'].copy()
+    df_cpi['cpi_yoy'] = df_cpi['cpi'].pct_change(12) * 100
+    df_cpi = df_cpi[['cpi_yoy']].dropna()
+
     ### 각 지표의 전년대비 변화율 계산
+
+    # ── 최종 관측일 추출 (ffill 전, 데이터 신선도 표시용) ──
+    _obs_sources = {
+        'pmi': df_pmi, 'yield_spread': df_yield, 'anfci': df_anfci,
+        'icsa_yoy': df_icsa, 'permit_yoy': df_permit,
+        'real_retail_yoy': df_rrsfs, 'capex_yoy': df_capex,
+        'real_income_yoy': df_income, 'cpi_yoy': df_cpi,
+    }
+    last_obs_dates = {}
+    for col, src in _obs_sources.items():
+        valid = src.iloc[:, 0].dropna()
+        if len(valid) > 0:
+            last_obs_dates[col] = str(valid.index[-1].date())
+    last_obs_dates['pmi_chg3m'] = last_obs_dates.get('pmi', '')
+    last_obs_dates['capex_yoy_chg3m'] = last_obs_dates.get('capex_yoy', '')
+    if df_ism is not None:
+        _obs_sources['ism_pmi'] = df_ism
+        valid_ism = df_ism.iloc[:, 0].dropna()
+        if len(valid_ism) > 0:
+            last_obs_dates['ism_pmi'] = str(valid_ism.index[-1].date())
 
     # ── 8개 지표를 날짜 기준으로 병합 ──
     macro = (df_pmi
@@ -115,10 +149,14 @@ def fetch_sector_macro() -> pd.DataFrame:
              .join(df_permit, how='outer')
              .join(df_rrsfs,  how='outer')
              .join(df_capex,  how='outer')
-             .join(df_income, how='outer'))
+             .join(df_income, how='outer')
+             .join(df_cpi,    how='outer'))
+    # ISM PMI 결합 (선택적 — NULL 허용, HMM 피처에 포함하지 않음)
+    if df_ism is not None:
+        macro = macro.join(df_ism, how='left')
     macro = macro.resample('MS').last()                    # 월초 기준 리샘플링 → 마지막 값 사용
     macro = macro.ffill(limit=3)                          # 지연 지표를 최대 3개월까지 앞값으로 채움
-    macro = macro.dropna()                                # ffill 후에도 NaN인 행 제거 (초기 히스토리)
+    macro = macro.dropna(subset=[c for c in macro.columns if c != 'ism_pmi'])  # ism_pmi는 NULL 허용
 
     # ── 파생 피처: 3개월 변화량 ──
     macro['pmi_chg3m']       = macro['pmi'].diff(3)       # PMI의 3개월 전 대비 변화량
@@ -126,6 +164,7 @@ def fetch_sector_macro() -> pd.DataFrame:
     macro = macro.dropna()                                # 파생 피처 생성으로 인한 NaN 제거
 
     macro.index.name = 'date'                             # 인덱스 이름을 'date'로 설정
+    macro.attrs['last_obs_dates'] = last_obs_dates        # 데이터 신선도 정보 부착
     print(f'[SectorMacro] 수집 완료: {macro.shape[0]}행 ({macro.index[0].date()} ~ {macro.index[-1].date()})')
     return macro                                          # 최종 매크로 피처 DataFrame 반환
 
@@ -150,7 +189,11 @@ def to_sector_macro_records(df: pd.DataFrame) -> list[dict]:
             'real_income_yoy':  round(float(row['real_income_yoy']), 4),
             'pmi_chg3m':        round(float(row['pmi_chg3m']), 4),
             'capex_yoy_chg3m':  round(float(row['capex_yoy_chg3m']), 4),
+            'cpi_yoy':          round(float(row['cpi_yoy']), 4),
         })
+        # ISM PMI (선택적 — NAPM 미지원 시 NULL)
+        if 'ism_pmi' in row.index and pd.notna(row.get('ism_pmi')):
+            records[-1]['ism_pmi'] = round(float(row['ism_pmi']), 4)
     return records                                        # Supabase에 넣을 수 있는 dict 리스트 반환
 # -------------------------------------------------------------------
 # macro 를 딕셔너리로 변환하는 함수

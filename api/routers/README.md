@@ -36,3 +36,14 @@ sector_cycle.py:	fetch_sector_cycle_latest(), get_holdings_perf(), get_history()
 3. Supabase에서 데이터를 가져와 dict/list로 반환
 4. FastAPI가 자동으로 JSON 변환하여 응답
 5. 프론트엔드가 JSON을 받아 화면에 표시
+
+### chart.py
+# def get_prediction
+    - fetch_chart_predict 임포트
+
+    # def _fetch_valid: db에서 예측데이터를 조회하고, 손상여부를 검증하는 함수
+        - JSON 직렬화 오류를 방지를 방지하는 _sanitize_floats 함수를 사용
+        - result는 _fetch_valid를 조회
+        - result에 없으면 predict_running 에 add메소드로추가
+        - thread 라이브러리로 예측을 재생성 
+        - 백그라운드 재생성 될때까지 풀링 대기

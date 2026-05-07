@@ -34,7 +34,7 @@ def _fetch_df(ticker: str, from_ts: int, to_ts: int) -> pd.DataFrame:
     """Yahoo Finance v8 API로 종가/거래량 DataFrame을 반환합니다.
     100년치 요청 실패 시 50년 → 30년으로 기간을 줄여 재시도합니다."""
     fallback_days = [0, 365*50, 365*30]                    # 원본, 50년, 30년 순서로 시도
-    for i, alt_days in enumerate(fallback_days):
+    for i, alt_days in enumerate(fallback_days):   
         try:
             p1 = from_ts if alt_days == 0 else int(to_ts - alt_days * 86400)  # 대체 시작일 계산
             url = f'https://query1.finance.yahoo.com/v8/finance/chart/{ticker}'  # API 엔드포인트

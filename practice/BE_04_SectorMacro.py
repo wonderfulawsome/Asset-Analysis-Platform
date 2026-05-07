@@ -160,41 +160,41 @@ def fetch_sector_macro() -> pd.DataFrame:
     ),
     raw=False
 )
-df_pmi = pmi_series.rename('pmi').dropna().to_frame()
+    df_pmi = pmi_series.rename('pmi').dropna().to_frame()
 
-# ── 장단기 금리차 ──
-df_yield = raw['T10Y3M']                               # 10년-3개월 금리차 데이터
+    # ── 장단기 금리차 ──
+    df_yield = raw['T10Y3M']                               # 10년-3개월 금리차 데이터
 
-# ── ANFCI: 주별 → 월별 평균 ──
-df_anfci = raw['ANFCI'].resample('MS').mean()           # 월초 기준으로 주간 데이터를 월평균 변환
+    # ── ANFCI: 주별 → 월별 평균 ──
+    df_anfci = raw['ANFCI'].resample('MS').mean()           # 월초 기준으로 주간 데이터를 월평균 변환
 
-# ── ICSA: YoY 변화율 ──
-df_icsa = raw['ICSA'].resample('MS').mean()
-df_icsa['icsa_yoy'] = df_icsa['icsa'].pct_change(12) * 100  # 12개월 전 대비 변화율
-df_icsa = df_icsa[['icsa_yoy']].dropna()               # 결측치 행 제거
+    # ── ICSA: YoY 변화율 ──
+    df_icsa = raw['ICSA'].resample('MS').mean()
+    df_icsa['icsa_yoy'] = df_icsa['icsa'].pct_change(12) * 100  # 12개월 전 대비 변화율
+    df_icsa = df_icsa[['icsa_yoy']].dropna()               # 결측치 행 제거
 
-# ── PERMIT: YoY 변화율 ──
-df_permit = raw['PERMIT'].copy()                       # 원본 보호를 위해 복사
-df_permit['permit_yoy'] = df_permit['permit'].pct_change(12) * 100
-df_permit = df_permit[['permit_yoy']].dropna()
+    # ── PERMIT: YoY 변화율 ──
+    df_permit = raw['PERMIT'].copy()                       # 원본 보호를 위해 복사
+    df_permit['permit_yoy'] = df_permit['permit'].pct_change(12) * 100
+    df_permit = df_permit[['permit_yoy']].dropna()
 
-# ── RRSFS: YoY 변화율 ──
-df_rrsfs = raw['RRSFS'].copy()
-df_rrsfs['real_retail_yoy'] = df_rrsfs['real_retail'].pct_change(12) * 100  # 12개월 전 대비 변화율
-df_rrsfs = df_rrsfs[['real_retail_yoy']].dropna()
+    # ── RRSFS: YoY 변화율 ──
+    df_rrsfs = raw['RRSFS'].copy()
+    df_rrsfs['real_retail_yoy'] = df_rrsfs['real_retail'].pct_change(12) * 100  # 12개월 전 대비 변화율
+    df_rrsfs = df_rrsfs[['real_retail_yoy']].dropna()
 
-# ── ANDENO: YoY 변화율 ──
-df_capex = raw['ANDENO'].copy()                        # 비국방 자본재 주문 데이터
-df_capex['capex_yoy'] = df_capex['capex_orders'].pct_change(12) * 100
-df_capex = df_capex[['capex_yoy']].dropna()
+    # ── ANDENO: YoY 변화율 ──
+    df_capex = raw['ANDENO'].copy()                        # 비국방 자본재 주문 데이터
+    df_capex['capex_yoy'] = df_capex['capex_orders'].pct_change(12) * 100
+    df_capex = df_capex[['capex_yoy']].dropna()
 
-# ── W875RX1: YoY 변화율 ──
-df_income = raw['W875RX1'].copy()
-df_income['real_income_yoy'] = df_income['real_income'].pct_change(12) * 100  # 실질 개인소득 YoY
-df_income = df_income[['real_income_yoy']].dropna()
+    # ── W875RX1: YoY 변화율 ──
+    df_income = raw['W875RX1'].copy()
+    df_income['real_income_yoy'] = df_income['real_income'].pct_change(12) * 100  # 실질 개인소득 YoY
+    df_income = df_income[['real_income_yoy']].dropna()
 
 # 8개 지표를 날짜 기준으로 병합
-macro = (df_pmi
+    macro = (df_pmi
              .join(df_yield,  how='___')                # Q39: 모든 인덱스를 유지하는 조인 방식
              .join(df_anfci,  how='outer')
              .join(df_icsa,   how='outer')
@@ -203,12 +203,15 @@ macro = (df_pmi
              .join(df_capex,  how='outer')
              .join(df_income, how='outer'))
 
-macro=macro.resample('MS').last().dropna()
+    macro=macro.resample('MS').last().dropna()
 
-# 파생 피처
-macro['pmi_chg3m'] = macro['pmi'] = macro['pmi'].pct_change(3)
-macro['capex_yoy_chg3m']=macro['capex_yoy'].gdiff(3)
-macro=macro.dropna()
+    # 파생 피처
+    macro['pmi_chg3m'] = macro['pmi'] = macro['pmi'].pct_change(3)
+    macro['capex_yoy_chg3m']=macro['capex_yoy'].gdiff(3)
+    macro=macro.dropna()
+
+    macro.index.name='date'
+    return macro
 
 #######################################
 
@@ -218,8 +221,11 @@ def to_sector_macro_records(df: pd.DataFrame) -> list[dict]:
     for date, row in df.___():                          # Q43: DataFrame 행을 순회하는 메서드
         records.append({
             'date':             str(date.___()),          # Q44: datetime에서 날짜 부분만 추출하는 메서드
+            'date':             str(date.date())m
             'pmi':              round(float(row['___']), 4),  # Q45: PMI 지수 컬럼명
+            'pmi':  round(float(row['pmi']),4)
             'yield_spread':     round(float(row['yield_spread']), 4),
+            'yield_spread': round(float(row['yield_spred']),4)
             'anfci':            round(float(row['anfci']), 4),
             'icsa_yoy':         round(float(row['icsa_yoy']), 4),
             'permit_yoy':       round(float(row['___']), 4),  # Q46: 건축허가 YoY 변화율 컬럼명
@@ -229,9 +235,11 @@ def to_sector_macro_records(df: pd.DataFrame) -> list[dict]:
             'pmi_chg3m':        round(float(row['pmi_chg3m']), 4),
             'capex_yoy_chg3m':  round(float(row['___']), 4),  # Q48: 자본재 YoY 3개월 변화 컬럼명
         })
-    return ___                                           # Q49: 변환 완료된 레코드 리스트 변수
+    return records                                           # Q49: 변환 완료된 레코드 리스트 변수
 
 
+
+################################
 # ============================================================
 # 정답표
 # ============================================================

@@ -84,6 +84,8 @@ CREATE TABLE IF NOT EXISTS sector_macro_raw (
     real_income_yoy  DOUBLE PRECISION,
     pmi_chg3m        DOUBLE PRECISION,
     capex_yoy_chg3m  DOUBLE PRECISION,
+    cpi_yoy          DOUBLE PRECISION,                              -- 2026-05-07: CPIAUCSL YoY
+    ism_pmi          DOUBLE PRECISION,                              -- 2026-05-07: NAPM (참고용, NULL 허용)
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 

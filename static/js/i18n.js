@@ -279,7 +279,7 @@ const I18N = {
     'sector.phaseAvgReturn': '국면 평균 수익률',   // 평균 수익률
 
     // ── 매크로 라벨 ──
-    'macro.pmi': 'PMI',                           // PMI
+    'macro.pmi': '생산활동지수',                    // INDPRO 합성 PMI
     'macro.yield_spread': '금리차 (10Y-3M)',      // 금리차
     'macro.anfci': '금융환경 (ANFCI)',             // ANFCI
     'macro.icsa_yoy': '실업급여 YoY',             // 실업급여
@@ -287,11 +287,13 @@ const I18N = {
     'macro.real_retail_yoy': '실질소매판매 YoY',  // 소매판매
     'macro.capex_yoy': '자본재주문 YoY',          // 자본재
     'macro.real_income_yoy': '실질소득 YoY',      // 실질소득
-    'macro.pmi_chg3m': 'PMI 3개월변화',           // PMI 변화
+    'macro.pmi_chg3m': '생산활동 3개월변화',       // 생산활동지수 변화
     'macro.capex_yoy_chg3m': '자본재 3개월변화',  // 자본재 변화
+    'macro.ism_pmi': 'ISM 제조업 PMI',            // ISM PMI
+    'macro.cpi_yoy': '소비자물가 (YoY)',           // CPI 인플레이션
 
     // ── 매크로 설명 ──
-    'macroDesc.pmi': '제조업 경기를 나타내는 구매관리자지수 (50 이상 확장)',
+    'macroDesc.pmi': 'FRED 산업생산지수(INDPRO)를 PMI 스케일(50 기준)로 변환한 합성 지표 (50 이상 확장)',
     'macroDesc.yield_spread': '장단기 금리차 (10년-3개월, 역전 시 침체 신호)',
     'macroDesc.anfci': '시카고 연준 금융환경지수 (음수=완화, 양수=긴축)',
     'macroDesc.icsa_yoy': '신규 실업급여 청구건수 전년비 변화율',
@@ -299,8 +301,14 @@ const I18N = {
     'macroDesc.real_retail_yoy': '실질 소매판매 전년비 변화율 (소비 지표)',
     'macroDesc.capex_yoy': '비국방 자본재 주문 전년비 변화율 (기업투자)',
     'macroDesc.real_income_yoy': '실질 개인소득 전년비 변화율',
-    'macroDesc.pmi_chg3m': 'PMI 3개월 변화량 (모멘텀)',
+    'macroDesc.pmi_chg3m': '생산활동지수 3개월 변화량 (모멘텀)',
     'macroDesc.capex_yoy_chg3m': '자본재 주문 YoY 3개월 변화량',
+    'macroDesc.ism_pmi': 'ISM 제조업 구매관리자지수 (FRED NAPM, 50 이상 확장)',
+    'macroDesc.cpi_yoy': '소비자물가지수(CPI) 전년 대비 상승률 (연준 목표 2%)',
+
+    // ── 데이터 신선도 ──
+    'macro.lastObs': '최종 관측',
+    'macro.staleWarning': '2개월 이상 경과',
 
     // ── KR 섹터 (KODEX/TIGER 10종) — Heatmap/Top3 에서 메인 라벨로 사용. 짧게.
     'sector.139260': 'IT',
@@ -751,7 +759,7 @@ const I18N = {
     'sector.phaseAvgReturn': 'Phase Avg Return',
 
     // ── Macro Labels ──
-    'macro.pmi': 'PMI',
+    'macro.pmi': 'Production Index',
     'macro.yield_spread': 'Yield Spread (10Y-3M)',
     'macro.anfci': 'Financial Conditions (ANFCI)',
     'macro.icsa_yoy': 'Jobless Claims YoY',
@@ -759,11 +767,13 @@ const I18N = {
     'macro.real_retail_yoy': 'Real Retail Sales YoY',
     'macro.capex_yoy': 'CapEx Orders YoY',
     'macro.real_income_yoy': 'Real Income YoY',
-    'macro.pmi_chg3m': 'PMI 3M Change',
+    'macro.pmi_chg3m': 'Production 3M Change',
     'macro.capex_yoy_chg3m': 'CapEx 3M Change',
+    'macro.ism_pmi': 'ISM Mfg PMI',
+    'macro.cpi_yoy': 'CPI Inflation (YoY)',
 
     // ── Macro Descriptions ──
-    'macroDesc.pmi': 'Purchasing Managers Index (above 50 = expansion)',
+    'macroDesc.pmi': 'Synthetic index from FRED Industrial Production (INDPRO), scaled to PMI format (above 50 = expansion)',
     'macroDesc.yield_spread': 'Long-short yield spread (10Y-3M, inversion = recession signal)',
     'macroDesc.anfci': 'Chicago Fed Financial Conditions Index (negative=loose, positive=tight)',
     'macroDesc.icsa_yoy': 'Initial jobless claims year-over-year change',
@@ -771,8 +781,14 @@ const I18N = {
     'macroDesc.real_retail_yoy': 'Real retail sales YoY change (consumption indicator)',
     'macroDesc.capex_yoy': 'Nondefense capital goods orders YoY change (business investment)',
     'macroDesc.real_income_yoy': 'Real personal income YoY change',
-    'macroDesc.pmi_chg3m': 'PMI 3-month change (momentum)',
+    'macroDesc.pmi_chg3m': 'Production Index 3-month change (momentum)',
     'macroDesc.capex_yoy_chg3m': 'Capital goods orders YoY 3-month change',
+    'macroDesc.ism_pmi': 'ISM Manufacturing PMI (FRED NAPM, above 50 = expansion)',
+    'macroDesc.cpi_yoy': 'Consumer Price Index YoY change (Fed target: 2%)',
+
+    // ── Data Freshness ──
+    'macro.lastObs': 'Last observed',
+    'macro.staleWarning': '2+ months stale',
 
     // ── KR Sectors (KODEX/TIGER 10) ──
     'sector.139260': 'IT (TIGER 200 IT)',

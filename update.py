@@ -8114,3 +8114,48 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 # - 사용자가 화면 새로고침 시 캐시 무효 → fresh compute → per_weighted_mean 이
 #   10년 history 평균으로 정상 계산.
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# [109] 2026-05-07 (UTC) — US 섹터 매크로에 CPI / ISM PMI 추가 + 부수 정리
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 83 commit pull 전 사용자 stash 에 보관돼 있던 로컬 작업을 업스트림과 호환되게
+# 정리해서 반영. 핵심은 CPIAUCSL (CPI YoY) + NAPM (ISM PMI) 두 시리즈를 FRED 에서
+# 추가 수집해 sector_macro_raw 테이블에 sparse 컬럼으로 적재.
+#
+# [DB 마이그레이션 — 사용자가 Supabase Dashboard SQL Editor 에서 선행 실행]
+#   ALTER TABLE sector_macro_raw ADD COLUMN IF NOT EXISTS cpi_yoy DOUBLE PRECISION;
+#   ALTER TABLE sector_macro_raw ADD COLUMN IF NOT EXISTS ism_pmi DOUBLE PRECISION;
+# 검증: anon 클라이언트 SELECT cpi_yoy, ism_pmi 성공 (두 컬럼 존재 확인).
+#
+# [신규 파일]
+#   1. migrations/2026_05_07_add_us_cpi_ism_columns.sql - 마이그레이션 기록
+#
+# [수정 파일]
+#   1. supabase_tables.sql - sector_macro_raw 정규 스키마에 cpi_yoy, ism_pmi 컬럼 추가
+#   2. collector/sector_macro.py
+#      - FRED_SERIES 에 CPIAUCSL → cpi 추가
+#      - NAPM (ISM PMI) 옵셔널 fetch (FRED 미지원/네트워크 실패 시 skip)
+#      - df_cpi 의 cpi_yoy = pct_change(12) 계산
+#      - last_obs_dates 에 cpi_yoy, ism_pmi 신선도 기록
+#      - macro merge 에 df_cpi join + ism 옵셔널 left join
+#      - dropna(subset=...) 로 ism_pmi NULL 허용 (다른 필수 컬럼만 dropna)
+#   3. static/js/i18n.js
+#      - macro.cpi_yoy "소비자물가 (YoY)" 라벨 추가
+#      - macro.ism_pmi "ISM 제조업 PMI" 라벨 추가
+#      - macro.pmi 라벨 "PMI" → "생산활동지수" 로 변경 (INDPRO 합성 ≠ 실제 ISM 구분)
+#      - macroDesc.pmi 설명도 "FRED 산업생산지수(INDPRO)를 PMI 스케일로 변환한 합성 지표" 로 정정
+#   4. practice/BE_04_SectorMacro.py - 함수 본문 indent 복구 (stash 직전 들여쓰기 깨져 있던 것)
+#   5. api/routers/README.md - chart.py 라우터 흐름 문서 보강
+#   6. collector/market_data.py - trailing whitespace (cosmetic)
+#   7. collector/README.md - 삭제 (collector_README.md 로 rename 됨)
+#
+# [왜]
+# - CPI: HMM 4상태 분류기에 인플레이션 시그널 추가 — 스태그플레이션(둔화+물가급등) 시나리오 분리.
+# - ISM PMI: 기존 INDPRO 합성 PMI 와 별도로 진짜 ISM 값을 참고용으로 노출 (HMM 피처 미포함, NULL 허용).
+# - 라벨 "PMI" → "생산활동지수": 실제 ISM PMI 와 오해받는 것을 방지.
+#
+# [검증]
+# - Supabase: SELECT cpi_yoy, ism_pmi FROM sector_macro_raw LIMIT 1 OK
+# - python -m py_compile collector/sector_macro.py
+
