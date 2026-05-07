@@ -99,6 +99,10 @@ def compute_valuation_payload(region: str = 'us') -> dict:
         per_samples = by_ticker_per.get(r["ticker"], [])
         pbr_samples = by_ticker_pbr.get(r["ticker"], [])
         perw_samples = by_ticker_perw.get(r["ticker"], [])
+        if region == 'us' and per is None and per_samples:
+            # US per is the sector fundamental_gap. Daily PER-weighted snapshots can
+            # arrive without the monthly gap, so keep showing the latest known gap.
+            per = per_samples[-1]
         if region == 'kr':
             if per is not None and not per_samples:
                 per_samples = [per]
@@ -146,6 +150,8 @@ def _valuation_payload_incomplete(payload, region: str = 'us') -> bool:
     """캐시 payload 가 화면 표를 채우기 부족한지 검사."""
     vals = payload.get("valuations") if isinstance(payload, dict) else None
     if not vals:
+        return True
+    if region == 'us' and all(v.get("per") is None for v in vals):
         return True
     if all(v.get("per") is None and v.get("per_mean") is None for v in vals):
         return True
