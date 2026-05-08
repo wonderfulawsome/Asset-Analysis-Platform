@@ -1000,7 +1000,9 @@ def _generate_ai_explain(tab: str, lang: str, region: str) -> dict | None:
         text = _build_explain_text(tab, lang, region=region)
         if not text.strip():
             return None
-        result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 150)
+        # max_tokens 500: _EXPLAIN_PROMPTS 가 3블록(데이터/변수설명/인사이트) 각 ≤320자를 요구하므로
+        # 한국어 3 chars/token 환산으로 ~320~400 토큰 필요. 150 으로는 인사이트 블록이 컷오프됨.
+        result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 500)
         if not result:
             return None
         formatted = _format_explain_blocks(result.strip())
