@@ -36,6 +36,9 @@
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(!t){t='dark';localStorage.setItem('theme','dark');}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
+    // /about (또는 향후 메뉴 진입 페이지) 에서 ← 뒤로 진입 시에만 splash 우회.
+    // 첫 사이트 진입 / 새 탭 / F5 reload 는 정상 splash. 판정 기준: document.referrer 경로.
+    (function(){try{var r=document.referrer||'';if(/\/about(?:\/|$|\?|#)/.test(r))document.documentElement.classList.add('splash-skip');}catch(e){}})();
   </script>
 </head>
 <body>

@@ -2706,3 +2706,6 @@ html[lang="en"] .card-tappable::after {
   color: var(--sub);
   font-variant-numeric: tabular-nums;
 }
+
+/* /about ← 뒤로 진입 시 stocks.html head 가드가 html 에 .splash-skip 부착 → splash 즉시 숨김 */
+html.splash-skip .splash { display: none !important; }

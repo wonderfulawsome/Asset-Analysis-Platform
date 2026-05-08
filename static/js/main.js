@@ -2252,10 +2252,10 @@ function trackVisit() {
   // 페이지 로드 시 방문 기록 전송
   trackVisit();
 
-  // 같은 세션 두 번째 진입이면 splash 우회 (html.splash-skip 도 이미 적용된 상태).
-  // 첫 진입 시점에 플래그 set — 이후 같은 세션의 모든 /stocks 진입은 skipSplash=true.
-  const skipSplash = !!sessionStorage.getItem('splashShown');
-  try { sessionStorage.setItem('splashShown', '1'); } catch (e) { /* private mode noop */ }
+  // /about 등 메뉴 페이지에서 ← 뒤로 진입 시에만 splash 우회.
+  // 인라인 head 가드(stocks.html) 가 referrer 검사 후 html.splash-skip 클래스 부착 — 그대로 검사.
+  // 첫 사이트 진입 / 새 탭 / F5 reload 는 referrer 가 /about 이 아니므로 정상 splash.
+  const skipSplash = document.documentElement.classList.contains('splash-skip');
 
   const splashStart = Date.now();
   let splashDismissed = false;
