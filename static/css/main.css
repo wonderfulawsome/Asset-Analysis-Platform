@@ -2735,8 +2735,11 @@ html[lang="en"] .card-tappable::after {
   gap: 4px;
   cursor: pointer;
   flex-shrink: 0;
+  position: relative;                          /* z-index 활성 */
+  z-index: 5;                                  /* 헤더 내 다른 오버레이보다 위 */
   transition: background 0.15s ease;
 }
+.menu-btn-bar { pointer-events: none; }        /* 자식 span 이 클릭 가로채지 못하게 */
 .menu-btn:hover { background: var(--sep); }
 .menu-btn-bar {
   display: block;
