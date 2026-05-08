@@ -108,6 +108,10 @@ def compute_valuation_payload(region: str = 'us') -> dict:
                 per_samples = [per]
             if pbr is not None and not pbr_samples:
                 pbr_samples = [pbr]
+        if perw is None and perw_samples:
+            # 오늘자 per_weighted 가 비어 있으면 history 의 가장 최근 non-null 값으로 폴백.
+            # 일별 collector 가 trailingPE 수집에 실패해도 빈 칸이 아니라 직전 사용 가능 값을 노출.
+            perw = perw_samples[-1]
         if perw is not None and not perw_samples:
             perw_samples = [perw]
         out.append({
@@ -172,6 +176,11 @@ def _valuation_payload_incomplete(payload, region: str = 'us') -> bool:
     # per_weighted_z 신규 필드 부재(2026-05-07 이전 캐시) — 색상이 안 칠해지는 stale 캐시 무효화.
     perw_with_mean = [v for v in vals if v.get("per_weighted") is not None and v.get("per_weighted_mean") is not None]
     if perw_with_mean and all("per_weighted_z" not in v for v in perw_with_mean):
+        return True
+    # per_weighted 가 모든 섹터에서 None — 일별 collector 실패 결과가 그대로 캐시된 케이스.
+    # history 마지막 non-null 폴백 도입(2026-05-08) 이후 재계산 유도.
+    if vals and all(v.get("per_weighted") is None for v in vals) \
+            and any(v.get("per_weighted_mean") is not None for v in vals):
         return True
     return False
 

@@ -858,6 +858,26 @@ _EXPLAIN_ERR = {                                             # 해설 에러 메
            'fail': 'Commentary service is being improved.'},
 }
 
+def _format_explain_blocks(text: str) -> str:
+    """LLM 출력의 [1]/[2]/[3] 블록 마커 앞에 빈 줄(\\n\\n)을 강제 삽입.
+
+    qwen 등 일부 모델이 시스템 프롬프트의 줄바꿈 지시를 무시하고 한 줄에
+    "[1] ... [2] ... [3] ..." 로 합쳐서 내보내는 케이스가 있어 후처리.
+    프론트 _formatExplainText 가 \\n → <br> 변환하므로 빈 줄이 화면 상의
+    문단 분리로 렌더된다. 첫 [1] 앞에는 빈 줄을 넣지 않는다.
+    """
+    if not text:
+        return text
+    import re as _re
+    parts = _re.split(r'\s*(\[[1-3]\])\s*', text)
+    chunks = []
+    for i in range(1, len(parts), 2):
+        marker = parts[i]
+        body = parts[i + 1].strip() if i + 1 < len(parts) else ''
+        chunks.append(f'{marker} {body}'.rstrip())
+    return '\n\n'.join(chunks) if chunks else text.strip()
+
+
 def _generate_ai_explain(tab: str, lang: str, region: str) -> dict | None:
     """LLM 호출 → 정리된 해설 텍스트. 실패 시 None.
 
@@ -870,7 +890,8 @@ def _generate_ai_explain(tab: str, lang: str, region: str) -> dict | None:
         result = _groq_call(_EXPLAIN_PROMPTS[lang][tab], text, 150)
         if not result:
             return None
-        return {'explanation': result.strip(), 'generated_at': _kst_now_str()}
+        formatted = _format_explain_blocks(result.strip())
+        return {'explanation': formatted, 'generated_at': _kst_now_str()}
     except Exception as e:
         print(f'[AI Explain {tab}/{lang}/{region}] generate error: {e}')
         return None
@@ -1355,7 +1376,7 @@ def get_ai_explain(tab: str = Query(..., description='fundamental, signal, secto
     with _explain_lock:
         cached = _explain_cache.get(cache_key)
         if cached and now < cached.get('expires', 0):
-            return {'explanation': cached['text'], 'tab': tab, 'cached': True}
+            return {'explanation': _format_explain_blocks(cached['text']), 'tab': tab, 'cached': True}
 
     # 2차: DB cache (스케줄러 미리 적재)
     try:
@@ -1364,13 +1385,14 @@ def get_ai_explain(tab: str = Query(..., description='fundamental, signal, secto
         print(f'[AI Explain {tab}/{lang}/{region}] DB read 실패 (계속 진행): {e}')
         row = None
     if row and row.get('explanation'):
+        formatted = _format_explain_blocks(row['explanation'])
         with _explain_lock:
             _explain_cache[cache_key] = {
-                'text': row['explanation'],
+                'text': formatted,
                 'expires': now + _EXPLAIN_TTL,
             }
         return {
-            'explanation': row['explanation'],
+            'explanation': formatted,
             'tab': tab,
             'cached': True,
             'generated_at': row.get('generated_at'),
