@@ -683,6 +683,123 @@ def fetch_user_stats(date: str, year_month: str) -> dict:
 ############ Supabase DB의 각 테이블에 데이터를 저장(upsert)하고 조회(fetch)하는 함수들을 모아놓은 파일
 
 
+# ── page_view ──────────────────────────────────────────
+# 사용자 페이지·탭 단위 조회 추적. user_visit 와는 별개 (user_visit 는 일자별 1행, 본 테이블은
+# 페이지 진입/탭 전환/이탈마다 1행 누적). 마이그레이션: 2026_05_09_add_page_view.sql
+
+def track_page_view(user_hash: str, visit_date: str, path: str,
+                    tab: Optional[str] = None, dwell_ms: Optional[int] = None) -> None:
+    """페이지·탭 조회 1건 INSERT (실패해도 앱 동작 무관)."""
+    if not user_hash or not path:
+        return
+    record = {"user_hash": user_hash, "visit_date": visit_date, "path": path}
+    if tab:
+        record["tab"] = tab
+    if isinstance(dwell_ms, (int, float)) and dwell_ms >= 0:
+        record["dwell_ms"] = int(dwell_ms)
+    try:
+        client = get_client()
+        client.table("page_view").insert(record).execute()
+    except Exception as e:
+        print(f"[DB] page_view insert 실패: {e}")
+
+
+def fetch_page_stats(date: str) -> dict:
+    """특정 날짜의 페이지·탭별 조회수·고유 사용자수·평균 dwell 집계.
+
+    Returns:
+        {
+          "date": str,
+          "by_path": [
+             {"label": "/stocks", "views": int, "unique_users": int, "avg_dwell_ms": int|None},
+             ...
+          ],
+          "by_tab": [
+             {"label": "/stocks · ai-chart", "path": "/stocks", "tab": "ai-chart",
+              "views": int, "unique_users": int, "avg_dwell_ms": int|None},
+             ...
+          ],
+          "total_views": int,
+          "total_unique_users": int,
+        }
+    """
+    client = get_client()
+    try:
+        resp = (
+            client.table("page_view")
+            .select("user_hash, path, tab, dwell_ms")
+            .eq("visit_date", date)
+            .execute()
+        )
+    except Exception as e:
+        print(f"[DB] page_view 조회 실패: {e}")
+        return {"date": date, "by_path": [], "by_tab": [],
+                "total_views": 0, "total_unique_users": 0}
+
+    rows = resp.data or []
+    # by_path 집계
+    path_agg: dict = {}
+    for r in rows:
+        p = r.get("path") or "?"
+        bucket = path_agg.setdefault(p, {"views": 0, "users": set(), "dwell_sum": 0, "dwell_n": 0})
+        bucket["views"] += 1
+        bucket["users"].add(r.get("user_hash"))
+        d = r.get("dwell_ms")
+        if isinstance(d, (int, float)) and d >= 0:
+            bucket["dwell_sum"] += d
+            bucket["dwell_n"] += 1
+    by_path = sorted(
+        [
+            {
+                "label": p,
+                "views": v["views"],
+                "unique_users": len(v["users"]),
+                "avg_dwell_ms": int(v["dwell_sum"] / v["dwell_n"]) if v["dwell_n"] else None,
+            }
+            for p, v in path_agg.items()
+        ],
+        key=lambda x: x["views"], reverse=True,
+    )
+
+    # by_tab 집계 (path + tab 조합. tab 없으면 path 만)
+    tab_agg: dict = {}
+    for r in rows:
+        p = r.get("path") or "?"
+        t = r.get("tab")
+        key = (p, t)
+        bucket = tab_agg.setdefault(key, {"views": 0, "users": set(), "dwell_sum": 0, "dwell_n": 0})
+        bucket["views"] += 1
+        bucket["users"].add(r.get("user_hash"))
+        d = r.get("dwell_ms")
+        if isinstance(d, (int, float)) and d >= 0:
+            bucket["dwell_sum"] += d
+            bucket["dwell_n"] += 1
+    by_tab = sorted(
+        [
+            {
+                "label": f"{p} · {t}" if t else p,
+                "path": p,
+                "tab": t,
+                "views": v["views"],
+                "unique_users": len(v["users"]),
+                "avg_dwell_ms": int(v["dwell_sum"] / v["dwell_n"]) if v["dwell_n"] else None,
+            }
+            for (p, t), v in tab_agg.items()
+        ],
+        key=lambda x: x["views"], reverse=True,
+    )
+
+    total_views = sum(v["views"] for v in path_agg.values())
+    total_unique = len(set(r.get("user_hash") for r in rows))
+    return {
+        "date": date,
+        "by_path": by_path,
+        "by_tab": by_tab,
+        "total_views": total_views,
+        "total_unique_users": total_unique,
+    }
+
+
 # ── real_estate_trade_raw ──────────────────────────────────────────
 
 def upsert_re_trades(records: list[dict]) -> None:

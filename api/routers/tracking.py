@@ -1,7 +1,11 @@
 from datetime import datetime, timezone, timedelta
+from typing import Optional
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from database.repositories import track_user_visit, fetch_user_stats
+from database.repositories import (
+    track_user_visit, fetch_user_stats,
+    track_page_view, fetch_page_stats,
+)
 from database.supabase_client import get_client
 
 router = APIRouter()
@@ -44,6 +48,44 @@ def get_stats(
     except Exception as e:
         print(f"[Tracking] stats 조회 실패: {e}")
         return {"error": "tracking unavailable", "dau": 0, "mau": 0, "new_users": 0, "returning_users": 0}
+
+
+class PageViewRequest(BaseModel):
+    user_hash: str
+    path: str
+    tab: Optional[str] = None
+    dwell_ms: Optional[int] = None
+
+
+@router.post("/page")
+def record_page_view(body: PageViewRequest):
+    """페이지·탭 조회 1건 기록 (sendBeacon 친화 — fire and forget).
+
+    - path: '/stocks' / '/about' / '/landing' / '/stats' 등
+    - tab: '/stocks' 안의 SPA 탭 식별자 (ai-chart/market/fundamental/signal/sector/sector-val/sector-mom/market-valuation). 다른 페이지는 null.
+    - dwell_ms: 머문 시간 ms. 페이지 이탈 / 탭 전환 시 보냄. 진입 직후엔 null.
+    """
+    try:
+        today = _kst_today().isoformat()
+        track_page_view(body.user_hash, today, body.path, body.tab, body.dwell_ms)
+        return {"ok": True}
+    except Exception as e:
+        print(f"[Tracking] page_view 기록 실패: {e}")
+        return {"error": "tracking unavailable", "ok": False}
+
+
+@router.get("/pages")
+def get_page_stats(
+    d: str = Query(default=None, description="조회 날짜 (YYYY-MM-DD). 기본값: 오늘 KST"),
+):
+    """특정 날짜의 페이지·탭별 조회수·고유 사용자수·평균 dwell 집계."""
+    try:
+        target_date = d or _kst_today().isoformat()
+        return fetch_page_stats(target_date)
+    except Exception as e:
+        print(f"[Tracking] page stats 조회 실패: {e}")
+        return {"error": "tracking unavailable", "by_path": [], "by_tab": [],
+                "total_views": 0, "total_unique_users": 0}
 
 
 @router.delete("/purge-dummy")
