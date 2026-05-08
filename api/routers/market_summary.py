@@ -698,10 +698,16 @@ def _build_explain_text(tab: str, lang: str = 'ko', region: str = 'us') -> str:
                     fc = json.loads(fc)
                 except Exception:
                     fc = []
-            if fc:
-                lines.append("Feature Contributions:" if is_en else "피처 기여도:")
-                for f in sorted(fc, key=lambda x: abs(x.get('contribution', 0)), reverse=True)[:5]:  # 기여도 절대값 상위 5개
-                    lines.append(f"  {f.get('name', '?')}: {f.get('contribution', '?')}")
+            top_fc = sorted(fc, key=lambda x: abs(x.get('contribution', 0)), reverse=True)[:5] if fc else []
+            if top_fc:
+                # LLM 입력에 *한국어 라벨 + 의미 + 왜 영향 주는지* 까지 미리 합성하여 LLM 이 영문
+                # snake_case 를 다시 번역할 필요가 없게 한다 (qwen 이 영문 변수명을 그대로 echo 하던 문제 해결).
+                lines.append("Feature contributions (label, meaning, why it matters):" if is_en else "피처 기여도 (라벨·의미·왜 영향 주는지):")
+                for f in top_fc:
+                    nm = f.get('name', '?')
+                    val = f.get('contribution', '?')
+                    lines.append(f"  - {_ko_feature_why(nm, lang)}; "
+                                 f"{'contribution' if is_en else '기여도'}: {val}")
             fv = regime.get('feature_values', {})            # 현재 피처 값 (JSONB)
             if isinstance(fv, str):                          # 문자열이면 JSON 파싱
                 try:
@@ -711,7 +717,7 @@ def _build_explain_text(tab: str, lang: str = 'ko', region: str = 'us') -> str:
             if fv:
                 lines.append("Current Values:" if is_en else "현재 지표값:")
                 for k, v in list(fv.items())[:6]:            # 상위 6개 피처 값
-                    lines.append(f"  {k}: {v}")
+                    lines.append(f"  {_ko_feature(k, lang)}: {v}")
 
     elif tab == 'signal':                                    # ── 이상 탐지 탭 (평소 이탈도) ──
         # 이전엔 crash/surge 점수를 사용했으나 UI 가 anomaly 차트로 교체됨 ([117]+).
@@ -747,11 +753,16 @@ def _build_explain_text(tab: str, lang: str = 'ko', region: str = 'us') -> str:
                 reverse=True,
             )[:3]
             if top_n:
-                lines.append("Top contributors (current deviation):" if is_en else "주된 기여 지표 (현재 이격):")
+                # LLM 입력에 한국어 라벨·의미·왜 영향 주는지 미리 합성 (raw snake_case 영문이 LLM 출력에
+                # 그대로 echo 되는 문제 차단).
+                lines.append("Top contributors (label, meaning, why it matters):" if is_en else "주된 기여 지표 (라벨·의미·왜 영향 주는지):")
                 for c in top_n:
                     if not isinstance(c, dict):
                         continue
-                    lines.append(f"  {c.get('name', '?')}: {c.get('contribution', '?')}")
+                    nm = c.get('name', '?')
+                    val = c.get('contribution', '?')
+                    lines.append(f"  - {_ko_feature_why(nm, lang)}; "
+                                 f"{'contribution' if is_en else '기여도'}: {val}")
 
             knn = an.get('knn_dates') or []                  # 평소 분포 내 가까운 과거 시점들
             if isinstance(knn, str):
