@@ -37,8 +37,15 @@
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(!t){t='dark';localStorage.setItem('theme','dark');}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
     // /about (또는 향후 메뉴 진입 페이지) 에서 ← 뒤로 진입 시에만 splash 우회.
-    // 첫 사이트 진입 / 새 탭 / F5 reload 는 정상 splash. 판정 기준: document.referrer 경로.
-    (function(){try{var r=document.referrer||'';if(/\/about(?:\/|$|\?|#)/.test(r))document.documentElement.classList.add('splash-skip');}catch(e){}})();
+    // 첫 사이트 진입 / 새 탭 / F5 reload 는 정상 splash. F5 는 일부 브라우저에서 document.referrer 가
+    // 직전 referrer(/about) 를 그대로 유지해 referrer 만 보면 잘못 우회됨 → Performance Navigation API
+    // 로 reload 타입을 먼저 가려내고, 그 외에만 referrer 검사.
+    (function(){try{
+      var nav=(performance.getEntriesByType&&performance.getEntriesByType('navigation')[0])||{};
+      if(nav.type==='reload')return; // F5/Ctrl+R → 무조건 splash 정상 노출
+      var r=document.referrer||'';
+      if(/\/about(?:\/|$|\?|#)/.test(r))document.documentElement.classList.add('splash-skip');
+    }catch(e){}})();
   </script>
 </head>
 <body>
