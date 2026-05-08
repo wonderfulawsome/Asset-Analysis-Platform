@@ -143,9 +143,9 @@
     const cH = H - pad.top - pad.bottom;
 
     const vals = series.map(s => s.d2 || 0).filter(v => v >= 0);
-    // y 스케일은 log-like — D² 가 long-tail (대부분 < 30, 가끔 100+)
-    // 단순 sqrt 변환으로 압축
-    const yTransform = v => Math.sqrt(Math.max(v, 0));
+    // y 스케일 — D² 가 long-tail (대부분 < 30, 코로나 등 극단치 100+)
+    // log1p (= log(1+x)) 압축: 0 입력 안전, 극단치 강하게 눌러 평시 변동 가시화
+    const yTransform = v => Math.log1p(Math.max(v, 0));
     const yMin = 0;
     const yMaxRaw = Math.max(...vals);
     const yMax = yTransform(yMaxRaw);
@@ -178,7 +178,7 @@
     let yLabels = '', gridLines = '';
     [0, 0.25, 0.5, 0.75, 1].forEach(frac => {
       const t = yMin + yRange * frac;
-      const orig = t * t;
+      const orig = Math.expm1(t);
       const yPos = pad.top + (1 - frac) * cH;
       yLabels += `<text class="chart-label" x="${pad.left - 4}" y="${yPos.toFixed(1)}" text-anchor="end" dominant-baseline="middle" style="font-size:10px;fill:var(--sub)">${orig.toFixed(0)}</text>`;
       gridLines += `<line class="chart-grid-line" x1="${pad.left}" y1="${yPos.toFixed(1)}" x2="${W - pad.right}" y2="${yPos.toFixed(1)}" stroke="var(--border)" stroke-width="0.5" stroke-dasharray="2,3" opacity="0.5"/>`;
