@@ -258,66 +258,40 @@ def _build_indicator_text(lang='ko', region: str = 'us'):
     return '\n'.join(lines)                                  # 줄바꿈으로 합쳐서 반환
 
 
-_SUMMARY_PROMPTS = {                                         # AI 종합 요약 시스템 프롬프트
+_SUMMARY_PROMPTS = {                                         # 시황 종합 요약 — 1줄 핵심 + 1줄 인사이트
     'ko': """/no_think
-너는 투자자에게 쉽게 설명해주는 한국어 금융 애널리스트다.
-주어진 지표를 종합해 시장 브리핑을 작성하라.
+너는 한국어 시장 객관 설명자다. 시황 탭 입력 지표(공포탐욕·간극·경기 국면 등) 를 종합해 *2줄* 출력.
 
-반드시 아래 4줄을 출력하라. 각 줄은 반드시 "제목 — 내용" 형식이다.
-"—" (em dash) 앞뒤에 반드시 공백을 넣어라. 제목과 내용을 절대 붙여 쓰지 마라.
+형식 (반드시 이 두 줄, 각 줄 앞에 이모지 1개):
+1. [이모지] 핵심 한 줄 — 핵심 3지표 (심리 N · 신호 간극 +/-X · 경기 [국면]) 한 문장 압축, 60자 이내.
+2. [이모지] 인사이트 한 줄 — 위 세 지표가 *서로 어떻게 맞물리는지* 메커니즘 1문장 (예: "탐욕↑인데 간극은 (-)→과열 신호와 매도 흐름이 동시"). 80자 이내.
 
-[이모지] 시장 심리 — (공포탐욕·VIX·RSI를 종합한 심리 해석 1문장)
-[이모지] 방향성 — (간극(상승-하락) 수치와 방향 중심으로 단기 전망 1문장. 양수=상승 우위, 음수=하락 우위, 절대값이 클수록 확신)
-[이모지] 펀더멘털 — (시장 이성 점수 기반 주가-펀더멘털 관계 1문장. 양수=이성, 음수=감정)
-[이모지] 종합판단 — (위 3가지를 종합한 결론. 투자자 행동 제안 1문장)
+자문 가드 (절대 위반 금지):
+- 매수/매도/추천/유리/불리/위험/안전/매수타이밍/상승전망/하락전망/예측/전망/기대/포트폴리오/목표가/수익률 보장 단어 금지.
+- 미래 방향 추정 ("~할 것이다", "~로 이어질 가능성") 금지.
+- "현재 데이터의 위치/상태/상관 사실" 만 진술. 일반론적 메커니즘 (교과서 인과) 만 인사이트로.
 
-예시:
-❄️ 시장 심리 — 공포 지수 19로 극단적 공포 구간이며, 투자 심리가 크게 위축된 상황입니다.
-📉 방향성 — 간극 -3.3으로 하락 쪽이 소폭 우세하나, 차이가 작아 방향성이 불분명합니다.
-🧭 펀더멘털 — 이성 점수 -2.1로 주가와 펀더멘털 사이 괴리가 존재합니다.
-🎯 종합판단 — 공포 속 반등 기대가 있어, 분할 매수 관점의 접근이 유효해 보입니다.
-
-이모지 선택:
-- 공포/하락: 🔻❄️🌧️⚠️🥶  탐욕/상승: 🔥🚀☀️💪🟢  중립: ⚖️🔄🌤️
-- 펀더멘털 괴리: 🧭📉🔍  반영: ✅💎📊  종합: 🎯💡⭐🔑
-- 4줄 모두 다른 이모지
-
-규칙:
-- 반드시 "제목 — 내용" 형식 (— 앞뒤 공백 필수)
-- 숫자를 넣되 해석 위주
-- 부드러운 어투 (~입니다, ~보입니다)
-- 각 줄 50자 이내
-- 마크다운(**볼드** 등) 절대 사용 금지""",
+기타 규칙:
+- 마크다운 X. 부드러운 어투 (~입니다, ~상태입니다).
+- 영문 약어/snake_case 변수명 그대로 쓰지 말고 한국어 자연어로 (예: hy_spread → 하이일드 스프레드).
+- 이모지 두 줄 다른 것 사용. 핵심: ⚖️🔄📊  인사이트: 🧭🔍💡.""",
 
     'en': """/no_think
-You are a financial analyst who explains market conditions to investors in plain English.
-Synthesize the given indicators into a market briefing.
+You are an objective market describer in plain English. Synthesize the input indicators (Fear & Greed, gap, cycle phase, etc.) into *2 lines*.
 
-Output exactly 4 lines. Each line must follow the format: "Title — Content".
-Use an em dash "—" with spaces on both sides. Never merge the title and content.
+Format (exactly two lines, each prefixed with one emoji):
+1. [emoji] Headline — 3 key metrics (sentiment N · signal gap +/-X · cycle [phase]) in one short sentence, ≤90 chars.
+2. [emoji] Insight — one-sentence mechanism describing how the three metrics *interlock* (e.g., "greed↑ while gap negative → overheating signal coexists with selling flow"), ≤110 chars.
 
-[emoji] Market Sentiment — (1 sentence interpreting Fear & Greed, VIX, RSI)
-[emoji] Direction — (1 sentence focusing on the Gap value and direction. Positive=upside favored, negative=downside favored, larger absolute value=stronger conviction)
-[emoji] Fundamentals — (1 sentence on price-fundamental relationship via Market Rationality Score; positive=rational, negative=emotional)
-[emoji] Overall — (1 sentence conclusion combining the above 3, with action suggestion)
+Advice-risk guard (must not violate):
+- NO words: buy/sell/recommend/favorable/risky/safe/timing/upside-outlook/downside-outlook/predict/forecast/expect/portfolio/target-price/return-guarantee.
+- NO future-direction inference ("will", "may lead to").
+- State only the *current position/state/correlation* facts; insight is a textbook mechanism only.
 
-Example:
-❄️ Market Sentiment — Fear index at 19, deep in extreme fear territory with severely depressed investor sentiment.
-📉 Direction — Gap at -3.3 tilts slightly toward downside, but the small spread suggests no clear direction.
-🧭 Fundamentals — Rationality score of -2.1 shows a gap between stock prices and fundamentals.
-🎯 Overall — With rebound potential amid fear, a dollar-cost averaging approach seems viable.
-
-Emoji choices:
-- Fear/decline: 🔻❄️🌧️⚠️🥶  Greed/rise: 🔥🚀☀️💪🟢  Neutral: ⚖️🔄🌤️
-- Fundamental divergence: 🧭📉🔍  Aligned: ✅💎📊  Overall: 🎯💡⭐🔑
-- Use a different emoji for each line
-
-Rules:
-- Strictly "Title — Content" format (spaces around — required)
-- Include numbers but focus on interpretation
-- Professional yet approachable tone
-- Each line under 80 characters
-- No markdown (**bold**, etc.) whatsoever""",
+Other rules:
+- No markdown. Professional yet accessible tone.
+- Translate snake_case feature names to natural language (e.g., hy_spread → high-yield spread).
+- Use different emojis on the two lines. Headline: ⚖️🔄📊  Insight: 🧭🔍💡.""",
 }
 
 
@@ -659,24 +633,35 @@ _explain_lock = threading.Lock()                             # 해설 캐시 동
 _EXPLAIN_TTL = 900                                           # 해설 캐시 유효 시간 (15분)
 
 _EXPLAIN_PROMPTS = {                                         # 탭별 AI 해설 시스템 프롬프트 (압축본)
-    # 핵심 원칙 1: 요인을 "단순 나열" 하지 않고 "왜 그 요인이 그 결과를 만드는지" 메커니즘을 한 줄로.
-    # 핵심 원칙 2: 자본시장법상 투자자문업 미등록 리스크 회피 — 매수/매도/추천/유리/불리/위험/안전/
-    # 매수타이밍/매도타이밍/상승전망/하락전망/예측/전망/기대/선반영/포트폴리오/목표가/수익률 보장
-    # 단어 금지. 미래 방향성 추정 금지 (e.g. "~할 것이다", "~로 이어질 가능성"). 과거/현재 사실 +
-    # 일반론적 메커니즘 (교과서 인과) 만 서술. 데이터의 "위치/상태/추이" 만 진술.
+    # 원칙 1: 요인을 "단순 나열" 금지 — "왜 그 요인이 그 결과에 작용하는지" 메커니즘 한 줄.
+    # 원칙 2: 자본시장법상 투자자문 미등록 리스크 회피 — 매수/매도/추천/유리/불리/위험/안전/
+    #         매수타이밍/매도타이밍/상승전망/하락전망/예측/전망/기대/선반영/포트폴리오/목표가/
+    #         수익률 보장 단어 금지. 미래 방향 추정 ("~할 것이다", "~로 이어질 가능성") 금지.
+    #         과거/현재 사실 + 일반론적 (교과서) 메커니즘만 서술. 데이터의 "위치/상태/추이" 만.
+    # 원칙 3: 영문 snake_case 변수명을 *반드시* 한국어 자연어로 번역. 번역 + 한 줄 의미 (이 지표가
+    #         무엇이며 왜 시장 신호로 쓰이는지). 예 매핑:
+    #         hy_spread → 하이일드 스프레드 (신용 위험 프리미엄)
+    #         vix_term → VIX 텀 구조 (단기/장기 변동성 비)
+    #         erp_zscore → 주식 위험 프리미엄 z-score (수익률 - 무위험)
+    #         fundamental_gap → 펀더멘털 갭 (실적 vs 가격 괴리)
+    #         residual_corr → 잔차 상관 (개별주 동조성)
+    #         dispersion → 종목 분산 (수익률 격차)
+    #         amihud → 유동성 비용 (체결 충격)
+    #         realized_vol → 실현 변동성 (실제 가격 진동)
+    #         지표 언급 시 형식: "한국어 라벨 (한 줄 의미) — 현재 방향" (예: "하이일드 스프레드(신용 위험)↑")
     'ko': {
-        'fundamental': "/no_think 한국 사용자 대상 객관 설명. 시장 이성 점수(양수=이성 우위/음수=감정 우위) 현재값 + 상위 피처 2~3개의 점수 기여 메커니즘 한 줄 (예: 'VIX↑→공포 확대 일반론적으로 이성 점수 하락 산입'). 매수/매도/추천/유리/불리/위험/예측/전망/기대 단어 금지, 미래 방향 추정 금지. 현재 상태와 일반론적 메커니즘만. 3문장 ≤160자, 마크다운 X.",
-        'signal':      "/no_think 한국 사용자 대상 객관 설명. 시장 이상도(평소와의 거리) 현재값과 과거 10년 분포 내 위치 + 주된 기여 피처 1~2개의 메커니즘 한 줄 (예: 'VIX↑=평소 분포 중심에서 이격'). 매수/매도/추천/유리/불리/위험/안전/예측/전망/기대/상승/하락 압력/우위 단어 금지. 미래 방향 추정 금지. '얼마나 평소와 다른지' 사실만. 3문장 ≤160자, 마크다운 X.",
-        'sector':      "/no_think 한국 사용자 대상 객관 설명. 현 경기 국면 분류 + 그 국면에 매크로 사이클상 일반적으로 함께 거론되는 섹터 1~2개를 *교과서 일반론* 으로만 (예: '확장 국면=일반적 수요 회복기, 거시 사이클상 경기소비재가 자주 같이 움직임'). 매수/매도/추천/유리/불리/예측/전망/수혜 단어 금지, '~를 사라/추천' 류 금지. 3문장 ≤160자, 마크다운 X.",
-        'sector-val':  "/no_think 한국 사용자 대상 중립 비교. 섹터별 PER/PBR이 과거 평균 대비 어느 위치에 있는지만 '평균 대비 +X%' 형태로 서술. 가치판단(고평가/저평가/비싸다/싸다/매수/매도/추천/유리/불리) 절대 금지. 평균 대비 차이가 큰 1~2개 섹터의 숫자만. 투자 자문/방향 예측 금지. 3문장 ≤180자, 마크다운 X.",
-        'sector-mom':  "/no_think 한국 사용자 대상 객관 설명. 1주일 모멘텀 상위/하위 섹터 사실 + 경기 국면과 일치/배반 여부의 일반론적 의미 한 줄. '선반영/기대/예측/회복 전망' 단어 금지, '유리/불리/추천/매수/매도' 금지. 과거 1주 성과와 거시 분류만. 3문장 ≤180자, 마크다운 X.",
+        'fundamental': "/no_think 한국 사용자 대상 객관 설명. 시장 이성 점수(양수=이성 우위/음수=감정 우위) 현재값 + 상위 기여 지표 2~3개의 점수 산입 메커니즘 한 줄. 영문 변수명을 *반드시* 한국어 자연어로 번역하고 짧은 의미 (왜 이 지표가 영향을 주는지) 한 줄 포함 (예: 'VIX 텀 구조(단기/장기 변동성 비)↑→공포 확대 일반론적으로 이성 점수 하락 산입'). 매수/매도/추천/유리/불리/위험/예측/전망/기대 단어 금지, 미래 방향 추정 금지. 3문장 ≤220자, 마크다운 X.",
+        'signal':      "/no_think 한국 사용자 대상 객관 설명. 시장 이상도(평소와의 거리) 현재값과 과거 10년 분포 내 위치 + 주된 기여 지표 1~2개의 메커니즘 한 줄. 영문 변수명을 *반드시* 한국어 자연어로 번역 + 의미 짧게 (예: 'VIX(공포 지수) 가 평소 분포 중심에서 이격'). 매수/매도/추천/유리/불리/위험/안전/예측/전망/기대/상승·하락 압력·우위 단어 금지. 미래 방향 추정 금지. 3문장 ≤220자, 마크다운 X.",
+        'sector':      "/no_think 한국 사용자 대상 객관 설명. 현 경기 국면 분류 + 그 국면에 매크로 사이클상 *교과서 일반론*으로 함께 거론되는 섹터 1~2 (예: '확장 국면=일반적 수요 회복기, 거시 사이클상 경기소비재가 자주 동조'). 영문 지표명은 한국어 + 짧은 의미로 번역. 매수/매도/추천/유리/불리/예측/전망/수혜 단어 금지. 3문장 ≤220자, 마크다운 X.",
+        'sector-val':  "/no_think 한국 사용자 대상 중립 비교. 섹터별 PER/PBR이 과거 평균 대비 어느 위치인지만 '평균 대비 +X%' 형태. 가치판단(고평가/저평가/비싸다/싸다/매수/매도/추천/유리/불리) 절대 금지. 평균 대비 차이가 큰 1~2개 섹터 숫자만. 영문 지표명은 한국어 라벨로. 투자 자문·방향 예측 금지. 3문장 ≤220자, 마크다운 X.",
+        'sector-mom':  "/no_think 한국 사용자 대상 객관 설명. 1주일 모멘텀 상위/하위 섹터 사실 + 경기 국면과 일치/배반 여부의 *교과서적 의미* 한 줄. 영문 지표는 한국어 + 짧은 의미. '선반영/기대/예측/회복 전망' 금지, '유리/불리/추천/매수/매도' 금지. 과거 1주 성과와 거시 분류만. 3문장 ≤220자, 마크다운 X.",
     },
     'en': {
-        'fundamental': "/no_think Plain-English objective description. Market Rationality (+rational / −emotional) current value + top 2-3 features' mechanism contributing to the score in one clause (e.g., 'VIX↑→fear typically lowers rationality score'). NO words: buy/sell/recommend/favorable/risky/safe/predict/forecast/expect/outlook. NO future-direction inference. Only present state + textbook mechanism. 3 sentences ≤200 chars. No markdown.",
-        'signal':      "/no_think Plain-English objective description. Anomaly distance (today's D²) and its position in 10-year distribution + top 1-2 contributing features' mechanism (e.g., 'VIX↑=deviation from typical distribution'). NO words: buy/sell/recommend/favorable/risky/safe/predict/forecast/expect/upside/downside/pressure. NO future-direction inference. Only how-different-from-usual facts. 3 sentences ≤200 chars. No markdown.",
-        'sector':      "/no_think Plain-English objective description. Current cycle phase + 1-2 sectors that are *textbook-typically* discussed alongside it in macro literature (e.g., 'expansion=general demand-recovery period; cyclicals are often co-discussed in macro cycle textbooks'). NO words: buy/sell/recommend/favorable/benefits/predict/forecast. 3 sentences ≤200 chars. No markdown.",
-        'sector-val':  "/no_think Plain-English neutral comparison. State only where each sector's PER/PBR sits vs historical average as 'X% vs avg'. NEVER use valuation judgments (overvalued/undervalued/expensive/cheap/buy/sell/recommend/favorable). Mention only 1-2 sectors with largest deviation. NO investment advice, NO direction prediction. 3 sentences ≤220 chars. No markdown.",
-        'sector-mom':  "/no_think Plain-English objective description. 1-week momentum top/bottom sector facts + textbook meaning of alignment/divergence with cycle phase in one clause. NO words: priced-in/expect/predict/recovery-outlook/favorable/recommend/buy/sell. Only past 1-week performance and macro classification. 3 sentences ≤220 chars. No markdown.",
+        'fundamental': "/no_think Plain-English objective description. Market Rationality (+rational / −emotional) current value + top 2-3 contributing indicators with mechanism (one clause). Translate snake_case variable names to natural English + short meaning (e.g., 'VIX term structure (short vs long vol ratio)↑→fear typically lowers rationality score'). NO buy/sell/recommend/favorable/risky/safe/predict/forecast/expect/outlook words. NO future-direction inference. 3 sentences ≤260 chars. No markdown.",
+        'signal':      "/no_think Plain-English objective description. Anomaly distance (today's D²) and its position in 10-year distribution + top 1-2 contributing indicators with one-clause mechanism. Translate variable names + short meaning (e.g., 'VIX (fear index) deviates from typical distribution'). NO buy/sell/recommend/favorable/risky/safe/predict/forecast/expect/upside/downside/pressure words. NO future inference. 3 sentences ≤260 chars. No markdown.",
+        'sector':      "/no_think Plain-English objective description. Current cycle phase + 1-2 sectors textbook-typically co-discussed in macro literature (e.g., 'expansion=general demand-recovery period; cyclicals often co-move'). Translate technical names + short meaning. NO buy/sell/recommend/favorable/benefits/predict/forecast words. 3 sentences ≤260 chars. No markdown.",
+        'sector-val':  "/no_think Plain-English neutral comparison. Only state where each sector's PER/PBR sits vs historical average as 'X% vs avg'. NEVER use valuation judgments (overvalued/undervalued/expensive/cheap/buy/sell/recommend/favorable). Mention only 1-2 sectors with largest deviation. Translate technical labels. NO investment advice, NO direction prediction. 3 sentences ≤260 chars. No markdown.",
+        'sector-mom':  "/no_think Plain-English objective description. 1-week momentum top/bottom sector facts + textbook meaning of alignment/divergence with cycle phase. Translate technical names + short meaning. NO priced-in/expect/predict/recovery-outlook/favorable/recommend/buy/sell. Only past 1-week performance and macro classification. 3 sentences ≤260 chars. No markdown.",
     },
 }
 
@@ -921,35 +906,120 @@ def _fmt_signed(v, digits: int = 1, suffix: str = '') -> str:
 
 
 def _fallback_ai_summary(lang: str, region: str) -> str:
-    """Rule-based summary used when AI cache/LLM generation is unavailable."""
+    """Rule-based 시황 요약 — LLM 미가용 시 폴백. 1줄 핵심 + 1줄 인사이트.
+
+    자문 가드: 매수/매도/추천/예측/전망/유리/불리 등 금지. "현재 위치" 사실만.
+    """
     try:
         today = get_market_summary_today(region=region)
         fg = today.get('fear_greed') or {}
         cs = today.get('crash_surge') or {}
         sector = fetch_sector_cycle_latest(region=region) or {}
+        fg_score = fg.get('score')
+        fg_label = fg.get('rating') or ''
+        gap = cs.get('gap')
+        phase = sector.get('phase_name')
+
         if lang == 'en':
             parts = []
-            if fg.get('score') is not None:
-                parts.append(f"sentiment {fg.get('rating', '')} {round(float(fg['score']))}")
-            if cs.get('gap') is not None:
-                parts.append(f"signal gap {_fmt_signed(cs.get('gap'))}")
-            if sector.get('phase_name'):
-                parts.append(f"cycle {sector.get('phase_name')}")
-            return "Market snapshot: " + ", ".join(parts) + "."
+            if fg_score is not None:
+                parts.append(f"sentiment {fg_label} {round(float(fg_score))}")
+            if gap is not None:
+                parts.append(f"signal gap {_fmt_signed(gap)}")
+            if phase:
+                parts.append(f"cycle {phase}")
+            line1 = "📊 " + ", ".join(parts) if parts else "📊 indicators loading"
+            # textbook insight clause — co-occurrence pattern, no direction prediction
+            insight_bits = []
+            if fg_label and gap is not None:
+                if 'greed' in fg_label.lower() and float(gap) < 0:
+                    insight_bits.append("greed-leaning sentiment alongside negative signal gap is a textbook divergence pattern")
+                elif 'fear' in fg_label.lower() and float(gap) > 0:
+                    insight_bits.append("fear-leaning sentiment alongside positive signal gap is a textbook divergence pattern")
+                else:
+                    insight_bits.append("sentiment label and signal gap are pointing the same way (alignment pattern)")
+            if not insight_bits:
+                insight_bits.append("indicators co-positioned at current snapshot, read as state — not a direction call")
+            line2 = "🔍 " + insight_bits[0] + "."
+            return line1 + ".\n" + line2
+
         parts = []
-        if fg.get('score') is not None:
-            parts.append(f"심리 {fg.get('rating', '')} {round(float(fg['score']))}")
-        if cs.get('gap') is not None:
-            parts.append(f"신호 간극 {_fmt_signed(cs.get('gap'))}")
-        if sector.get('phase_name'):
-            parts.append(f"경기국면 {sector.get('phase_name')}")
-        return "현재 시장은 " + ", ".join(parts) + " 기준으로 점검 중입니다."
+        if fg_score is not None:
+            parts.append(f"심리 {fg_label} {round(float(fg_score))}")
+        if gap is not None:
+            parts.append(f"신호 간극 {_fmt_signed(gap)}")
+        if phase:
+            parts.append(f"경기국면 {phase}")
+        line1 = "📊 " + ", ".join(parts) if parts else "📊 지표 수집 중"
+        insight_bits = []
+        if fg_label and gap is not None:
+            if '탐욕' in fg_label and float(gap) < 0:
+                insight_bits.append("탐욕 쪽 심리와 음(-) 신호 간극이 같은 시점에 관측되는 *교과서적 괴리 패턴*")
+            elif '공포' in fg_label and float(gap) > 0:
+                insight_bits.append("공포 쪽 심리와 양(+) 신호 간극이 같은 시점에 관측되는 *교과서적 괴리 패턴*")
+            else:
+                insight_bits.append("심리 라벨과 신호 간극 방향이 같은 *정렬 패턴* (방향 예측 X)")
+        if not insight_bits:
+            insight_bits.append("지표들이 현재 스냅샷에서 공존하는 상태 — 방향 추정이 아닌 상태 기록")
+        line2 = "🔍 " + insight_bits[0] + "입니다."
+        return line1 + " 입니다.\n" + line2
     except Exception:
-        return 'Commentary is temporarily using the latest numeric snapshot.' if lang == 'en' else '현재 지표 기준으로 시장 상황을 점검 중입니다.'
+        return ('📊 indicators loading.\n🔍 commentary is using the latest numeric snapshot.'
+                if lang == 'en'
+                else '📊 지표 수집 중입니다.\n🔍 현재 지표 기준 스냅샷으로 안내 중입니다.')
+
+
+# 기술 변수명 → 한국어 라벨 (의미 한 줄). LLM 미가용 fallback 에서 사용.
+_FEATURE_LABEL_KO = {
+    'hy_spread':       ('하이일드 스프레드', '신용 위험 프리미엄'),
+    'vix_term':        ('VIX 텀 구조', '단기/장기 변동성 비'),
+    'erp_zscore':      ('주식 위험 프리미엄 z-score', '수익률 - 무위험'),
+    'fundamental_gap': ('펀더멘털 갭', '실적 vs 가격 괴리'),
+    'residual_corr':   ('잔차 상관', '개별주 동조성'),
+    'dispersion':      ('종목 분산', '수익률 격차'),
+    'amihud':          ('유동성 비용', '체결 충격'),
+    'realized_vol':    ('실현 변동성', '실제 가격 진동'),
+    'vix':             ('VIX', '공포 지수'),
+    'rsi':             ('RSI', '상대강도'),
+    'fear_greed':      ('공포탐욕지수', '심리 지표'),
+    'credit_spread':   ('신용 스프레드', '회사채 위험'),
+    'yield_curve':     ('수익률 곡선', '장단기 금리차'),
+}
+_FEATURE_LABEL_EN = {
+    'hy_spread':       ('high-yield spread', 'credit risk premium'),
+    'vix_term':        ('VIX term structure', 'short/long vol ratio'),
+    'erp_zscore':      ('equity risk premium z-score', 'return minus risk-free'),
+    'fundamental_gap': ('fundamental gap', 'earnings vs price divergence'),
+    'residual_corr':   ('residual correlation', 'single-stock co-movement'),
+    'dispersion':      ('return dispersion', 'cross-stock spread'),
+    'amihud':          ('Amihud illiquidity', 'execution impact cost'),
+    'realized_vol':    ('realized volatility', 'actual price oscillation'),
+    'vix':             ('VIX', 'fear index'),
+    'rsi':             ('RSI', 'relative strength'),
+    'fear_greed':      ('Fear & Greed', 'sentiment index'),
+    'credit_spread':   ('credit spread', 'corporate bond risk'),
+    'yield_curve':     ('yield curve', 'long-short rate gap'),
+}
+
+
+def _ko_feature(name: str, lang: str = 'ko') -> str:
+    """기술 변수명 → '한국어 라벨(의미)' 또는 영문이면 'label(meaning)' 표기. 미매핑은 원본."""
+    if not name:
+        return '?'
+    key = str(name).lower().strip()
+    table = _FEATURE_LABEL_EN if lang == 'en' else _FEATURE_LABEL_KO
+    if key in table:
+        label, meaning = table[key]
+        return f'{label}({meaning})'
+    return str(name)
 
 
 def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
-    """Rule-based tab commentary used when precomputed/LLM commentary is unavailable."""
+    """Rule-based 탭 해설 — LLM 미가용 시 폴백.
+
+    자문 가드: 매수/매도/추천/유리/불리/예측/전망/기대 등 금지. 현재 사실 + 일반론적 메커니즘만.
+    영문 변수명은 _ko_feature 로 한국어 + 짧은 의미 형식 변환.
+    """
     try:
         if tab == 'fundamental':
             regime = fetch_noise_regime_current(region=region) or {}
@@ -961,19 +1031,50 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                 except Exception:
                     fc = []
             top = sorted(fc, key=lambda x: abs(x.get('contribution', 0)), reverse=True)[:2]
-            names = ', '.join(x.get('name', '?') for x in top) or ('key factors' if lang == 'en' else '주요 지표')
+            names = ', '.join(_ko_feature(x.get('name', '?'), lang) for x in top) or (
+                'key indicators' if lang == 'en' else '주요 지표'
+            )
             if lang == 'en':
-                return f"Market rationality score is {_fmt_signed(score, 2)}. The largest drivers are {names}. Check whether price moves remain aligned with fundamentals."
-            return f"시장 이성 점수는 {_fmt_signed(score, 2)}입니다. 영향이 큰 지표는 {names}입니다. 가격 흐름이 펀더멘털과 계속 맞는지 함께 확인하세요."
+                return (
+                    f"Market Rationality Score is {_fmt_signed(score, 2)} (positive=rational, negative=emotional). "
+                    f"Largest contributors: {names} — these indicators feed the score because they capture sentiment vs fundamentals divergence in textbook terms. "
+                    f"State only — no direction inference."
+                )
+            return (
+                f"시장 이성 점수는 {_fmt_signed(score, 2)} 입니다 (양수=이성 우위, 음수=감정 우위). "
+                f"가장 크게 기여한 지표는 {names} — 이 지표들은 교과서적으로 심리·펀더멘털 괴리를 포착해 점수에 산입됩니다. "
+                f"현재 위치 사실만 안내드립니다."
+            )
 
         if tab == 'signal':
             cs = fetch_crash_surge_current(region=region) or {}
             crash_s = cs.get('crash_score') or cs.get('crash_prob')
             surge_s = cs.get('surge_score') or cs.get('surge_prob')
             gap = None if crash_s is None or surge_s is None else float(surge_s) - float(crash_s)
+            shap = cs.get('shap_values') or {}
+            if isinstance(shap, str):
+                try:
+                    shap = json.loads(shap)
+                except Exception:
+                    shap = {}
+            shap_top_names = []
+            for label in ('crash', 'surge'):
+                for s in (shap.get(label, []) or [])[:1]:
+                    nm = s.get('name') if isinstance(s, dict) else None
+                    if nm:
+                        shap_top_names.append(_ko_feature(nm, lang))
+            top_str = ', '.join(shap_top_names) or ('key factors' if lang == 'en' else '주요 요인')
             if lang == 'en':
-                return f"Crash risk is {crash_s or '-'} and surge potential is {surge_s or '-'}. The surge-crash gap is {_fmt_signed(gap)}. Positive gaps favor upside signals; negative gaps favor downside risk."
-            return f"하락 위험도는 {crash_s or '-'}, 상승 기대도는 {surge_s or '-'}입니다. 상승-하락 간극은 {_fmt_signed(gap)}입니다. 양수면 상승 신호, 음수면 하락 위험 쪽에 무게가 실립니다."
+                return (
+                    f"Crash score {crash_s or '-'}, surge score {surge_s or '-'}, gap {_fmt_signed(gap)}. "
+                    f"Top contributing factors: {top_str} — these reflect funding/liquidity stress in textbook terms and feed the model output. "
+                    f"State only — no direction inference."
+                )
+            return (
+                f"하락 점수 {crash_s or '-'}, 상승 점수 {surge_s or '-'}, 간극 {_fmt_signed(gap)} 입니다. "
+                f"주요 기여 요인: {top_str} — 이는 교과서적으로 자금/유동성 스트레스를 반영하여 모델 출력에 산입됩니다. "
+                f"현재 위치 사실만 안내드립니다."
+            )
 
         if tab == 'sector':
             sc = fetch_sector_cycle_latest(region=region) or {}
@@ -981,8 +1082,14 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
             top3 = sc.get('top3_sectors') or []
             sectors = ', '.join(str(x.get('sector') if isinstance(x, dict) else x) for x in top3[:2]) or '-'
             if lang == 'en':
-                return f"The current cycle phase is {phase}. Favored sectors are {sectors}. Sector strength should be read together with the macro phase, not as a standalone signal."
-            return f"현재 경기 국면은 {phase}입니다. 유리한 섹터는 {sectors}입니다. 섹터 강도는 단독 신호보다 거시 국면과 함께 보는 편이 좋습니다."
+                return (
+                    f"Current cycle phase: {phase}. Sectors textbook-typically co-discussed in this phase: {sectors} — "
+                    f"this is a general macro-cycle co-occurrence, not a recommendation. State only."
+                )
+            return (
+                f"현재 경기 국면은 {phase} 입니다. 이 국면에서 *교과서적*으로 함께 거론되는 섹터: {sectors} — "
+                f"이는 거시 사이클상 일반적 동조 사실이며 추천이 아닙니다. 현재 위치 사실만 안내드립니다."
+            )
 
         if tab == 'sector-val':
             from api.routers.sector_cycle import get_valuation
@@ -993,20 +1100,38 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                 key=lambda x: abs(float(x.get('per') or 0)),
                 reverse=True,
             )[:2]
-            desc = ', '.join(f"{x.get('ticker')} {_fmt_signed(float(x.get('per')) * 100, 1, '%')}" for x in ranked) or '-'
+            desc = ', '.join(
+                f"{x.get('ticker')} {_fmt_signed(float(x.get('per')) * 100, 1, '%')}"
+                for x in ranked
+            ) or '-'
             if lang == 'en':
-                return f"Sector valuation gap is available for comparison. The largest price-minus-EPS gaps are {desc}. Treat these as relative positions, not investment recommendations."
-            return f"섹터별 가격-EPS 갭을 비교할 수 있습니다. 절대값이 큰 항목은 {desc}입니다. 이는 상대 위치 참고용이며 투자 추천은 아닙니다."
+                return (
+                    f"Sector PER position vs historical average — values express where each sits as 'X% vs avg'. "
+                    f"Largest deviations: {desc}. This is relative position only — not over/undervaluation, not a buy/sell signal."
+                )
+            return (
+                f"섹터별 PER 의 과거 평균 대비 위치 — 'X% vs 평균' 형식 사실 표시. "
+                f"평균 대비 차이가 큰 항목: {desc} 입니다. 상대 위치 사실 만이며 고/저평가 판단 또는 매수·매도 신호가 아닙니다."
+            )
 
         if tab == 'sector-mom':
             from processor.feature7_sector_momentum import compute_sector_momentum
             m = compute_sector_momentum(region=region)
             mom = m.get('momentum') if isinstance(m, dict) else []
             top = sorted([x for x in mom if x.get('rank') is not None], key=lambda x: x['rank'])[:2]
-            desc = ', '.join(f"{x.get('ticker')} {_fmt_signed(x.get('return_1w'), 1, '%')}" for x in top) or '-'
+            desc = ', '.join(
+                f"{x.get('ticker')} {_fmt_signed(x.get('return_1w'), 1, '%')}"
+                for x in top
+            ) or '-'
             if lang == 'en':
-                return f"One-week sector momentum leaders are {desc}. Read this as short-term rotation and compare it with the current cycle phase."
-            return f"1주일 섹터 모멘텀 상위는 {desc}입니다. 단기 로테이션 신호로 보고 현재 경기 국면과 함께 비교하세요."
+                return (
+                    f"1-week sector momentum leaders: {desc}. This is past 1-week return ranking — "
+                    f"textbook macro-cycle alignment can be read alongside, but no direction is inferred."
+                )
+            return (
+                f"1주일 섹터 모멘텀 상위: {desc} 입니다. 과거 1주 수익률 순위 사실이며, "
+                f"교과서적 거시 사이클 분류와 같이 보는 정도로만 — 방향 예측은 포함하지 않습니다."
+            )
     except Exception as e:
         print(f'[AI Explain {tab}/{lang}/{region}] fallback error: {e}')
 
