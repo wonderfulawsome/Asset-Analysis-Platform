@@ -492,26 +492,36 @@ def _build_home_indicator_text(lang: str = 'ko', region: str = 'us') -> str:
 
 _HEADLINE_PROMPTS = {
     # 2 문장 고정: 1) 요약 (심리·이상도·이성점수 데이터 묘사) 2) 인사이트 (조합의 객관적 의미).
-    # 자문 리스크 가드 — 매수·매도·타이밍·목표가·예측·위험·확률 단어 절대 금지, 관찰·묘사만.
+    # 자문 리스크 가드 — *가치판단·예측·자문 단어 모두 금지*, 관찰·묘사만.
     'ko': (
         "/no_think 한국어 금융 해설. 아래 지표 중 다음 3 가지만 사용해 정확히 2 문장 작성.\n"
         "사용 지표: 심리(공포탐욕 점수·등급), 이상도(평소와의 거리 D² 위치 = 10년 분포 내 상위 N%), 이성 점수(양수=이성, 음수=감정).\n"
         "문장 1 [요약] — 세 지표 값을 그대로 묘사하는 한 문장.\n"
         "  예: '오늘 심리는 공포(38), 평소와의 거리는 상위 28%, 이성 점수는 +1.6입니다.'\n"
-        "문장 2 [인사이트] — 세 지표 조합의 객관적 의미 한 문장 (미래 예측·매수·매도·권유·확률 X, 관찰·묘사만).\n"
+        "문장 2 [인사이트] — 세 지표 조합의 객관적 의미 한 문장 (관찰·묘사만, 판단·전망 X).\n"
         "  예: '심리 위축에도 펀더멘털 정합성이 유지되어 비대칭적 구간으로 관측됩니다.'\n"
-        "규칙: 정확히 2 문장, 두 문장 사이 줄바꿈 X (한 줄에 둘 다 마침표로 구분). ≤180자.\n"
-        "이모지·마크다운·대시(—)·콜론·물음표·느낌표 X. 두 문장 모두 마침표로 끝낼 것."
+        "절대 금지 단어 (출력에 *한 번이라도* 들어가면 안 됨):\n"
+        "  매수, 매도, 추천, 매수 타이밍, 매도 타이밍, 상승 전망, 하락 전망, 예측, 전망, 기대, 확률,\n"
+        "  *고평가, 저평가, 비싸다, 싸다, 합리적인 밸류, 적정 밸류, 비합리적, 적정 가격, 과대평가, 과소평가, 밸류, 평가, 판단*,\n"
+        "  유리, 불리, 위험, 안전, 포트폴리오, 목표가, 수익률 보장.\n"
+        "허용: 사실 묘사 (값과 위치), 일반론적 메커니즘 ('A 가 B 와 함께 관측됨'·'정합성 유지'·'비대칭 구간').\n"
+        "규칙: 정확히 2 문장, 두 문장 사이 줄바꿈 X (한 줄에 둘 다 마침표로 구분). ≤200자.\n"
+        "이모지·마크다운·대시(—)·콜론·물음표·느낌표 X. 한자 X. 두 문장 모두 마침표로 끝낼 것."
     ),
     'en': (
         "/no_think English financial commentary. Use only these 3 indicators below to write exactly 2 sentences.\n"
         "Indicators: Sentiment (Fear & Greed score & rating), Anomaly (D² position = top N% of 10-year distribution), Rationality (positive=rational, negative=emotional).\n"
         "Sentence 1 [Summary] — state all three values factually.\n"
         "  Example: 'Sentiment reads fearful (38), anomaly distance sits in the top 28%, rationality at +1.6.'\n"
-        "Sentence 2 [Insight] — one objective interpretation of the combination (no forecast/buy/sell/recommendation/probability, observation only).\n"
+        "Sentence 2 [Insight] — one objective interpretation of the combination (observation only, no judgment, no forecast).\n"
         "  Example: 'Sentiment is subdued while fundamental coherence persists, an asymmetric configuration is observed.'\n"
-        "Rules: exactly 2 sentences, no line break between them, ≤220 chars.\n"
-        "No emoji, markdown, em-dash, colon, question mark, exclamation. Both end with a period."
+        "Banned words (must not appear even once):\n"
+        "  buy, sell, recommend, timing, upside-outlook, downside-outlook, predict, forecast, expect, probability,\n"
+        "  overvalued, undervalued, expensive, cheap, fair-value, reasonable-valuation, overpriced, underpriced, valuation-judgment, fairly-valued,\n"
+        "  favorable, risky, safe, portfolio, target-price, return-guarantee.\n"
+        "Allowed: factual description (values and positions), textbook mechanism ('A coexists with B', 'coherence persists', 'asymmetric configuration').\n"
+        "Rules: exactly 2 sentences, no line break between them, ≤240 chars.\n"
+        "No emoji, markdown, em-dash, colon, question mark, exclamation. No Chinese characters. Both end with a period."
     ),
 }
 
