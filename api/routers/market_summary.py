@@ -266,44 +266,74 @@ def _build_indicator_text(lang='ko', region: str = 'us'):
     return '\n'.join(lines)                                  # 줄바꿈으로 합쳐서 반환
 
 
-_SUMMARY_PROMPTS = {                                         # 시황 종합 요약 — 1줄 핵심 + 1줄 인사이트
+_SUMMARY_PROMPTS = {                                         # 시황 종합 요약 — 4줄 "제목 — 내용" 형식 (옛 형식 복원, 신호탭 자리만 평소 이탈도 D² 로 교체)
     'ko': """/no_think
-너는 한국어 시장 객관 설명자다. 시황 탭 입력 지표(공포탐욕·평소와의 거리(D²)·경기 국면 등) 를 종합해 *2줄* 출력.
+너는 투자자에게 쉽게 설명해주는 한국어 금융 애널리스트다.
+주어진 지표를 종합해 시장 브리핑을 작성하라.
 
-형식 (반드시 이 두 줄, 각 줄 앞에 이모지 1개):
-1. [이모지] 핵심 한 줄 — 핵심 3지표 (심리 N · 평소와의 거리 D²(상위 N%) · 경기 [국면]) 한 문장 압축, 80자 이내.
-2. [이모지] 인사이트 한 줄 — 위 세 지표가 *서로 어떻게 맞물리는지* 메커니즘 1문장 (예: "탐욕인데 평소와의 거리도 큼 → 심리·시장 상태가 함께 평소 영역을 벗어남"). 80자 이내.
+반드시 아래 4줄을 출력하라. 각 줄은 반드시 "제목 — 내용" 형식이다.
+"—" (em dash) 앞뒤에 반드시 공백을 넣어라. 제목과 내용을 절대 붙여 쓰지 마라.
+
+[이모지] 시장 심리 — (공포탐욕·VIX·RSI를 종합한 심리 해석 1문장)
+[이모지] 평소 이탈도 — (평소와의 거리 D² 와 10년 분포 내 상위 N% 위치를 한 문장으로 묘사. 작을수록 평소 분포 중심, 클수록 평소에서 멀리 떨어진 상태)
+[이모지] 펀더멘털 — (시장 이성 점수 기반 주가-펀더멘털 관계 1문장. 양수=이성, 음수=감정)
+[이모지] 종합 — (위 3가지를 종합한 *현재 상태 기록* 1문장. 행동 제안·방향 예측 X)
+
+예시:
+❄️ 시장 심리 — 공포 지수 19로 극단적 공포 구간이며, 투자 심리가 크게 위축된 상태입니다.
+📊 평소 이탈도 — D² 8.2 로 10년 상위 18% 위치, 평소 분포에서 다소 떨어진 상태입니다.
+🧭 펀더멘털 — 이성 점수 -2.1로 주가와 펀더멘털 사이 괴리가 존재합니다.
+🎯 종합 — 심리·시장 상태·펀더멘털이 같은 방향으로 평소에서 벗어난 *교과서적 동반 이격* 상태입니다.
+
+이모지 선택:
+- 공포/평소와 멈: 🔻❄️🌧️⚠️🥶  탐욕/극단: 🔥🚀☀️💪🟢  중간: ⚖️🔄🌤️
+- 평소 이탈도: 📊📈📉🔍  펀더멘털 괴리: 🧭📉🔍  반영: ✅💎📊  종합: 🎯💡⭐🔑
+- 4줄 모두 다른 이모지
 
 자문 가드 (절대 위반 금지):
 - 매수/매도/추천/유리/불리/위험/안전/매수타이밍/상승전망/하락전망/예측/전망/기대/포트폴리오/목표가/수익률 보장 단어 금지.
-- *crash/surge·간극·상승 우위·하락 우위·신호 간극* 단어 금지 (옛 신호탭 폐기됨, 현 탭은 평소와의 거리 D² 만 사용).
+- *crash/surge·간극·상승 우위·하락 우위·신호 간극* 단어 금지 (옛 신호탭 폐기됨, 평소 이탈도 D² + 분위만 사용).
 - 미래 방향 추정 ("~할 것이다", "~로 이어질 가능성") 금지.
-- "현재 데이터의 위치/상태/상관 사실" 만 진술. 일반론적 메커니즘 (교과서 인과) 만 인사이트로.
 
 기타 규칙:
-- 마크다운 X. 부드러운 어투 (~입니다, ~상태입니다).
+- 반드시 "제목 — 내용" 형식 (— 앞뒤 공백 필수). 마크다운(**볼드** 등) 절대 사용 금지.
+- 부드러운 어투 (~입니다, ~상태입니다). 각 줄 60자 이내.
 - 영문 약어/snake_case 변수명 그대로 쓰지 말고 한국어 자연어로 (예: hy_spread → 하이일드 스프레드).
-- *한자 절대 사용 금지* — 한글/영문/숫자/기호만 (예: "對立" → "대립", "中立" → "중립").
-- 이모지 두 줄 다른 것 사용. 핵심: ⚖️🔄📊  인사이트: 🧭🔍💡.""",
+- *한자 절대 사용 금지* — 한글/영문/숫자/기호만.""",
 
     'en': """/no_think
-You are an objective market describer in plain English. Synthesize the input indicators (Fear & Greed, anomaly distance D², cycle phase, etc.) into *2 lines*.
+You are a financial analyst who explains market conditions to investors in plain English.
+Synthesize the given indicators into a market briefing.
 
-Format (exactly two lines, each prefixed with one emoji):
-1. [emoji] Headline — 3 key metrics (sentiment N · anomaly distance D² (top N%) · cycle [phase]) in one short sentence, ≤100 chars.
-2. [emoji] Insight — one-sentence mechanism describing how the three metrics *interlock* (e.g., "greed coexists with high anomaly distance → both sentiment and market state sit outside their typical range"), ≤120 chars.
+Output exactly 4 lines. Each line must follow the format: "Title — Content".
+Use an em dash "—" with spaces on both sides. Never merge the title and content.
+
+[emoji] Market Sentiment — (1 sentence interpreting Fear & Greed, VIX, RSI)
+[emoji] Anomaly Distance — (1 sentence describing today's D² and its top N% position in the 10-year distribution; smaller = closer to typical, larger = farther from typical)
+[emoji] Fundamentals — (1 sentence on price-fundamental relationship via Market Rationality Score; positive=rational, negative=emotional)
+[emoji] Overall — (1 sentence combining the above 3 as a *current-state record*; NO action suggestion, NO direction prediction)
+
+Example:
+❄️ Market Sentiment — Fear index at 19, deep in extreme fear with severely depressed sentiment.
+📊 Anomaly Distance — D² 8.2 puts today in the top 18% of the 10-year distribution, somewhat off the typical center.
+🧭 Fundamentals — Rationality score -2.1 shows a gap between price and fundamentals.
+🎯 Overall — Sentiment, market state, and fundamentals all deviate from typical together — a textbook co-deviation pattern.
+
+Emoji choices:
+- Fear/typical: 🔻❄️🌧️⚠️🥶  Greed/extreme: 🔥🚀☀️💪🟢  Middle: ⚖️🔄🌤️
+- Anomaly distance: 📊📈📉🔍  Fundamental divergence: 🧭📉🔍  Aligned: ✅💎📊  Overall: 🎯💡⭐🔑
+- Use a different emoji for each line.
 
 Advice-risk guard (must not violate):
 - NO words: buy/sell/recommend/favorable/risky/safe/timing/upside-outlook/downside-outlook/predict/forecast/expect/portfolio/target-price/return-guarantee.
-- NO crash/surge/gap/upside-edge/downside-edge/signal-gap terms (the old signal tab is deprecated; the anomaly tab uses D² + percentile only).
+- NO crash/surge/gap/upside-edge/downside-edge/signal-gap terms (the old signal tab is deprecated; only D² + percentile).
 - NO future-direction inference ("will", "may lead to").
-- State only the current position/state/correlation facts; insight is a textbook mechanism only.
 
 Other rules:
-- No markdown. Professional yet accessible tone.
+- Strictly "Title — Content" format (spaces around — required). No markdown (no bold).
+- Professional yet approachable tone. Each line under 80 characters.
 - Translate snake_case feature names to natural language (e.g., hy_spread → high-yield spread).
-- NO Chinese characters in output (English/numbers/symbols only).
-- Use different emojis on the two lines. Headline: ⚖️🔄📊  Insight: 🧭🔍💡.""",
+- NO Chinese characters in output (English/numbers/symbols only).""",
 }
 
 
@@ -909,9 +939,13 @@ def _build_explain_text(tab: str, lang: str = 'ko', region: str = 'us') -> str:
                 except Exception:
                     ms = {}
             if ms:
-                lines.append("Macro Snapshot:" if is_en else "매크로 스냅샷:")
+                # 매크로 키를 한국어 라벨(의미) + 왜 영향 주는지 한 줄로 묶어 LLM 입력에 미리 변환.
+                # raw 'pmi'/'yield_spread'/'anfci' 등이 LLM 출력에 그대로 echo 되는 문제 차단.
+                lines.append("Macro Snapshot (label, meaning, why it matters):" if is_en
+                             else "매크로 스냅샷 (라벨·의미·왜 영향 주는지):")
                 for k, v in list(ms.items())[:5]:            # 상위 5개 매크로 지표
-                    lines.append(f"  {k}: {v}")
+                    lines.append(f"  - {_ko_feature_why(k, lang)}; "
+                                 f"{'value' if is_en else '값'}: {v}")
             top3 = sc.get('top3_sectors', [])                # 유리한 섹터 상위 3개
             if top3:
                 lines.append("Favorable Sectors:" if is_en else "유리한 섹터:")
@@ -1009,89 +1043,114 @@ def _fmt_signed(v, digits: int = 1, suffix: str = '') -> str:
 
 
 def _fallback_ai_summary(lang: str, region: str) -> str:
-    """Rule-based 시황 요약 — LLM 미가용 시 폴백. 1줄 핵심 + 1줄 인사이트.
+    """Rule-based 시황 요약 — LLM 미가용 시 폴백. 옛 4줄 "제목 — 내용" 형식 복원.
 
     데이터 source:
-      - 공포탐욕지수 (fetch_fear_greed_latest) — 심리
-      - 평소와의 거리 D² + 상위 N% (fetch_anomaly_current) — 시장 상태
-        (옛 crash/surge gap 은 신호탭 폐기로 더 이상 사용 X)
-      - 경기 국면 (fetch_sector_cycle_latest)
-    자문 가드: 매수/매도/추천/예측/전망/유리/불리/간극/상승우위/하락우위 금지.
+      - 공포탐욕지수 (fetch_fear_greed_latest) — 시장 심리
+      - 평소와의 거리 D² + 상위 N% (fetch_anomaly_current) — 평소 이탈도
+        (옛 crash/surge gap 은 신호탭 폐기로 사용 X)
+      - 시장 이성 점수 (fetch_noise_regime_current) — 펀더멘털
+      - 경기 국면 (fetch_sector_cycle_latest) — 종합
+    자문 가드: 매수/매도/추천/예측/전망/유리/불리/간극/상승우위/하락우위 단어 금지.
+    출력 형식: 4 줄, 각 줄 "[이모지] 제목 — 내용", 줄 사이 \n.
     """
     try:
-        sector = fetch_sector_cycle_latest(region=region) or {}
         fg = fetch_fear_greed_latest(region=region) or {}
         an = fetch_anomaly_current(region=region) or {}
+        regime = fetch_noise_regime_current(region=region) or {}
+        sector = fetch_sector_cycle_latest(region=region) or {}
 
         fg_score = fg.get('score')
         fg_label = fg.get('rating') or ''
         d2 = an.get('d2')
         pct_10y = an.get('percentile_10y')
         top_pct = round(100 - float(pct_10y), 1) if isinstance(pct_10y, (int, float)) else None
+        ns = regime.get('noise_score')
         phase = sector.get('phase_name')
 
-        # ── 핵심 한 줄 (📊) ──
-        if lang == 'en':
-            parts = []
-            if fg_score is not None:
-                parts.append(f"sentiment {fg_label} {round(float(fg_score))}")
-            if d2 is not None:
-                parts.append(
-                    f"anomaly distance {d2}"
-                    + (f" (top {top_pct}%)" if top_pct is not None else "")
-                )
-            if phase:
-                parts.append(f"cycle {phase}")
-            line1 = "📊 " + ", ".join(parts) + "." if parts else "📊 indicators loading."
-        else:
-            parts = []
-            if fg_score is not None:
-                parts.append(f"심리 {fg_label} {round(float(fg_score))}")
-            if d2 is not None:
-                parts.append(
-                    f"평소와의 거리 {d2}"
-                    + (f" (상위 {top_pct}%)" if top_pct is not None else "")
-                )
-            if phase:
-                parts.append(f"경기국면 {phase}")
-            line1 = ("📊 " + ", ".join(parts) + " 상태입니다.") if parts else "📊 지표 수집 중입니다."
-
-        # ── 인사이트 한 줄 (🔍) — 사실 기반 동조/괴리 패턴, 방향 예측 X ──
-        is_high_distance = top_pct is not None and top_pct <= 20  # 평소와 멀리 떨어진 영역
-        is_low_distance  = top_pct is not None and top_pct >= 80  # 평소와 가까운 영역
+        is_high_distance = top_pct is not None and top_pct <= 20
+        is_low_distance  = top_pct is not None and top_pct >= 80
         is_greed = ('greed' in fg_label.lower()) or ('탐욕' in fg_label)
         is_fear  = ('fear'  in fg_label.lower()) or ('공포' in fg_label)
 
         if lang == 'en':
+            # ── ❄️ 시장 심리 ──
+            sent_emoji = '🔥' if is_greed else ('❄️' if is_fear else '⚖️')
+            sent_body = (
+                f"Fear & Greed at {round(float(fg_score))} ({fg_label})"
+                if fg_score is not None else "sentiment data loading"
+            )
+            line1 = f"{sent_emoji} Market Sentiment — {sent_body}."
+            # ── 📊 평소 이탈도 ──
+            an_emoji = '📈' if is_high_distance else ('📊' if is_low_distance else '📉')
+            an_body = (
+                f"D² {d2}"
+                + (f", top {top_pct}% in 10-year distribution" if top_pct is not None else "")
+                if d2 is not None else "anomaly data loading"
+            )
+            line2 = f"{an_emoji} Anomaly Distance — {an_body}."
+            # ── 🧭 펀더멘털 ──
+            ns_body = (
+                f"Rationality score {_fmt_signed(ns, 2)} ({'rational' if (ns or 0) >= 0 else 'emotional'} side)"
+                if ns is not None else "rationality data loading"
+            )
+            line3 = f"🧭 Fundamentals — {ns_body}."
+            # ── 🎯 종합 ──
             if is_greed and is_high_distance:
-                ins = "greed-leaning sentiment co-occurs with a snapshot far from typical 10-year mix — a textbook co-deviation pattern"
+                summary = "greed sentiment co-occurs with a far-from-typical market state — textbook co-deviation"
             elif is_fear and is_high_distance:
-                ins = "fear-leaning sentiment co-occurs with a snapshot far from typical 10-year mix — a textbook co-deviation pattern"
+                summary = "fear sentiment co-occurs with a far-from-typical market state — textbook co-deviation"
             elif is_low_distance:
-                ins = "current snapshot sits inside the 10-year typical range — sentiment label is the dominant differentiator today"
+                summary = "today's snapshot sits inside the 10-year typical range; sentiment is the differentiator"
             elif is_greed or is_fear:
-                ins = "sentiment leans one direction while market state sits in a moderate position — partial-alignment pattern"
+                summary = "sentiment leans one way while market state sits in a moderate position — partial alignment"
             else:
-                ins = "indicators co-positioned at current snapshot — state record, not a direction call"
-            line2 = "🔍 " + ins + "."
+                summary = "indicators co-positioned at current snapshot — state record, not a direction call"
+            phase_tag = f" / cycle {phase}" if phase else ""
+            line4 = f"🎯 Overall — {summary}{phase_tag}."
         else:
+            sent_emoji = '🔥' if is_greed else ('❄️' if is_fear else '⚖️')
+            sent_body = (
+                f"공포탐욕지수 {round(float(fg_score))} ({fg_label})"
+                if fg_score is not None else "심리 지표 수집 중"
+            )
+            line1 = f"{sent_emoji} 시장 심리 — {sent_body} 입니다."
+            an_emoji = '📈' if is_high_distance else ('📊' if is_low_distance else '📉')
+            an_body = (
+                f"D² {d2}"
+                + (f", 10년 분포 내 상위 {top_pct}% 위치" if top_pct is not None else "")
+                if d2 is not None else "이상도 데이터 수집 중"
+            )
+            line2 = f"{an_emoji} 평소 이탈도 — {an_body} 입니다."
+            ns_body = (
+                f"이성 점수 {_fmt_signed(ns, 2)} ({'이성' if (ns or 0) >= 0 else '감정'} 우위)"
+                if ns is not None else "이성 점수 수집 중"
+            )
+            line3 = f"🧭 펀더멘털 — {ns_body} 입니다."
             if is_greed and is_high_distance:
-                ins = "탐욕 쪽 심리와 평소와 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격 패턴*"
+                summary = "탐욕 심리와 평소에서 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격*"
             elif is_fear and is_high_distance:
-                ins = "공포 쪽 심리와 평소와 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격 패턴*"
+                summary = "공포 심리와 평소에서 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격*"
             elif is_low_distance:
-                ins = "오늘 시장 상태는 10년 평소 분포 중심 부근 — 심리 라벨이 오늘의 주된 차별 변수"
+                summary = "오늘 시장 상태는 10년 평소 분포 중심 부근 — 심리가 오늘의 주된 차별 변수"
             elif is_greed or is_fear:
-                ins = "심리는 한쪽으로 기운 반면 시장 상태는 평소 분포 중간 위치 — 부분 정렬 패턴"
+                summary = "심리는 한쪽으로 기운 반면 시장 상태는 평소 분포 중간 위치 — 부분 정렬"
             else:
-                ins = "지표들이 현재 스냅샷에서 공존하는 상태 — 방향 추정이 아닌 상태 기록"
-            line2 = "🔍 " + ins + "입니다."
+                summary = "지표들이 현재 스냅샷에서 공존하는 상태 — 방향 추정이 아닌 상태 기록"
+            phase_tag = f" / 경기국면 {phase}" if phase else ""
+            line4 = f"🎯 종합 — {summary}{phase_tag} 상태입니다."
 
-        return line1 + "\n" + line2
+        return "\n".join([line1, line2, line3, line4])
     except Exception:
-        return ('📊 indicators loading.\n🔍 commentary is using the latest numeric snapshot.'
-                if lang == 'en'
-                else '📊 지표 수집 중입니다.\n🔍 현재 지표 기준 스냅샷으로 안내 중입니다.')
+        if lang == 'en':
+            return ("❄️ Market Sentiment — sentiment data loading.\n"
+                    "📊 Anomaly Distance — anomaly data loading.\n"
+                    "🧭 Fundamentals — rationality data loading.\n"
+                    "🎯 Overall — commentary using the latest numeric snapshot.")
+        return ("❄️ 시장 심리 — 심리 데이터 수집 중입니다.\n"
+                "📊 평소 이탈도 — 이상도 데이터 수집 중입니다.\n"
+                "🧭 펀더멘털 — 이성 점수 수집 중입니다.\n"
+                "🎯 종합 — 현재 지표 기준 스냅샷으로 안내 중입니다.")
 
 
 # 기술 변수명 → (한국어 라벨, 의미, 왜 모델에 영향 주는지). LLM 미가용 fallback 에서 사용.
@@ -1123,6 +1182,44 @@ _FEATURE_LABEL_KO = {
                         '회사채와 국채의 금리 차로, 자금 시장 신뢰도를 반영합니다'),
     'yield_curve':     ('수익률 곡선', '장단기 금리차',
                         '장기 금리에서 단기 금리를 뺀 값으로, 경기 사이클 위치를 반영합니다'),
+    # 거시경제(섹터) 탭 매크로 지표 ── US 10
+    'pmi':             ('제조업 PMI', '50 기준 확장/수축',
+                        'PMI 가 50 이상이면 일반적으로 제조업 활동 확장 신호로 해석되어 경기 국면 분류 입력으로 쓰입니다'),
+    'yield_spread':    ('장단기 금리차', '10Y-3M 스프레드',
+                        '장기 금리에서 단기 금리를 뺀 값으로 경기 사이클 위치(역전 시 둔화·역전 해소 시 회복)를 반영합니다'),
+    'anfci':           ('금융환경지수', '신용·유동성 통합 스트레스',
+                        '신용·유동성·위험 지표를 하나로 합친 값으로 자금시장 환경을 한 수치로 요약합니다'),
+    'icsa_yoy':        ('신규실업수당 청구 YoY', '고용 시장 변화',
+                        '일자리 손실 속도를 추적해 경기 둔화/확장의 단기 신호로 쓰입니다'),
+    'permit_yoy':      ('주택 착공허가 YoY', '주거 투자 선행',
+                        '미래 건설 활동의 선행 지표로 거시 사이클 진입을 예고합니다'),
+    'real_retail_yoy': ('실질 소매판매 YoY', '가계 소비 모멘텀',
+                        '인플레이션 보정 후 가계 소비 흐름으로 경기 확장 강도를 반영합니다'),
+    'capex_yoy':       ('설비투자 YoY', '기업 투자',
+                        '기업의 미래 생산 능력 확장 의지를 반영해 사이클 후반 강도 지표로 쓰입니다'),
+    'real_income_yoy': ('실질 가처분 소득 YoY', '가계 구매력',
+                        '인플레이션 보정 후 가계 소득 흐름으로 소비 여력의 기반을 보여줍니다'),
+    'pmi_chg3m':       ('PMI 3개월 변화', 'PMI 모멘텀',
+                        '단기 변화율로 사이클 전환점 신호를 잡아내는 보조 지표입니다'),
+    'capex_yoy_chg3m': ('설비투자 3개월 변화', '투자 모멘텀',
+                        '기업 투자 흐름의 단기 변화율을 추적합니다'),
+    # KR 8
+    'kr_indpro_yoy':   ('한국 산업생산 YoY', '제조업 산출량',
+                        '한국 제조업 산출량의 전년 동기 대비 변화로 한국 사이클 위치를 반영합니다'),
+    'kr_yield_spread': ('한국 장단기 금리차', '사이클 위치',
+                        '한국 국채의 장단기 금리차로 한국 경기 사이클 위치를 반영합니다'),
+    'kr_credit_spread':('한국 신용 스프레드', '자금 시장 신뢰도',
+                        '한국 회사채-국채 금리차로 한국 자금시장 환경을 보여줍니다'),
+    'kr_unemp_rate':   ('한국 실업률', '고용 여건',
+                        '한국 노동시장 여유 정도로 가계 구매력의 기반을 반영합니다'),
+    'kr_permit_yoy':   ('한국 주택 착공허가 YoY', '주거 투자 선행',
+                        '한국 미래 건설 활동의 선행 지표입니다'),
+    'kr_retail_yoy':   ('한국 소매판매 YoY', '가계 소비',
+                        '한국 가계 소비 흐름의 전년 대비 변화입니다'),
+    'kr_capex_yoy':    ('한국 설비투자 YoY', '기업 투자',
+                        '한국 기업의 설비 투자 흐름입니다'),
+    'kr_cpi_yoy':      ('한국 소비자물가 YoY', '인플레이션',
+                        '한국 소비자물가 상승률로 통화정책·기업 마진과 연동됩니다'),
 }
 _FEATURE_LABEL_EN = {
     'hy_spread':       ('high-yield spread', 'credit risk premium',
@@ -1151,6 +1248,44 @@ _FEATURE_LABEL_EN = {
                         'corporate-vs-treasury yield gap reflecting funding-market confidence'),
     'yield_curve':     ('yield curve', 'long-short rate gap',
                         'long-minus-short rate spread reflecting business-cycle position'),
+    # macro indicators (sector tab) — US 10
+    'pmi':             ('Manufacturing PMI', '50 = expansion/contraction line',
+                        'PMI > 50 generally signals manufacturing expansion, fed into cycle phase classification'),
+    'yield_spread':    ('yield spread', '10Y minus 3M',
+                        'long-minus-short rate gap reflects cycle position (inversion = slowdown signal)'),
+    'anfci':           ('NFCI', 'financial conditions index',
+                        'composite of credit/liquidity/risk indicators, summarizes funding-market environment'),
+    'icsa_yoy':        ('Initial Claims YoY', 'labor market change',
+                        'tracks job-loss pace as a short-cycle slowdown/expansion signal'),
+    'permit_yoy':      ('Building Permits YoY', 'residential investment lead',
+                        'leading indicator of future construction, signals cycle entry'),
+    'real_retail_yoy': ('Real Retail Sales YoY', 'consumption momentum',
+                        'inflation-adjusted household spending flow, reflects expansion strength'),
+    'capex_yoy':       ('Capex YoY', 'business investment',
+                        'firms\' future capacity expansion intent, late-cycle strength gauge'),
+    'real_income_yoy': ('Real Disposable Income YoY', 'household purchasing power',
+                        'inflation-adjusted income flow, foundation of consumption capacity'),
+    'pmi_chg3m':       ('PMI 3-month change', 'PMI momentum',
+                        'short-term rate of change captures cycle inflection signals'),
+    'capex_yoy_chg3m': ('Capex 3-month change', 'investment momentum',
+                        'short-term rate of change in business investment flow'),
+    # KR 8
+    'kr_indpro_yoy':   ('Korea IP YoY', 'manufacturing output',
+                        'YoY change in Korea manufacturing output reflects KR cycle position'),
+    'kr_yield_spread': ('Korea yield spread', 'cycle position',
+                        'Korean Treasury long-short rate gap reflects KR cycle position'),
+    'kr_credit_spread':('Korea credit spread', 'funding-market confidence',
+                        'Korean corporate-vs-Treasury yield gap, KR funding environment'),
+    'kr_unemp_rate':   ('Korea unemployment rate', 'labor slack',
+                        'Korean labor market slack, foundation of household purchasing power'),
+    'kr_permit_yoy':   ('Korea Building Permits YoY', 'residential investment lead',
+                        'leading indicator of future Korean construction'),
+    'kr_retail_yoy':   ('Korea Retail Sales YoY', 'household consumption',
+                        'YoY change in Korean household spending'),
+    'kr_capex_yoy':    ('Korea Capex YoY', 'business investment',
+                        'flow of Korean business investment'),
+    'kr_cpi_yoy':      ('Korea CPI YoY', 'inflation',
+                        'Korean consumer-price growth, ties to monetary policy and corporate margins'),
 }
 
 
@@ -1314,7 +1449,8 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                     ms = json.loads(ms)
                 except Exception:
                     ms = {}
-            macro_str = ', '.join(f"{k} {v}" for k, v in list(ms.items())[:4]) or '-'
+            # 매크로 키를 한국어 라벨(의미) 로 변환해 LLM/사용자 양쪽이 영문 snake_case 보지 않게.
+            macro_str = ', '.join(f"{_ko_feature(k, lang)} {v}" for k, v in list(ms.items())[:4]) or '-'
             top3 = sc.get('top3_sectors') or []
             sectors = ', '.join(
                 f"{x.get('sector')}({x.get('return')}%)" if isinstance(x, dict) and x.get('return') is not None
