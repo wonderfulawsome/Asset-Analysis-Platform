@@ -510,13 +510,17 @@ async function loadAiSummary() {
 
 // ── 각 탭 AI 해설 (타이핑 없음, 일반 문단) ──
 function _formatExplainText(raw) {
+  // 줄바꿈은 보존하고 공백/탭만 압축. 이전엔 \s{2,} 가 \n\n 까지 단일 공백으로
+  // 합쳐버려 백엔드의 [1]/[2]/[3] 블록 분리가 화면에서 사라지는 문제 있었음.
   let text = raw
     .replace(/\*\*(.+?)\*\*/g, '$1')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
     .trim();
-  // 기존 줄바꿈 유지
+  // [1]/[2]/[3] 블록 마커 앞에 강제로 빈 줄 삽입 (백엔드가 합쳐 보낸 케이스 보강)
+  text = text.replace(/(?<!^)\s*(\[[1-3]\])\s*/g, '\n\n$1 ');
+  // 줄바꿈을 <br> 로 변환 (\n\n → <br><br> 자연 처리)
   text = text.replace(/\n/g, '<br>');
-  // 줄바꿈이 없는 경우: 문장 끝(다. 요. 됩니다. 등) 뒤에 줄바꿈 삽입
+  // 줄바꿈이 전혀 없는 경우 fallback: 문장 끝(다. 요. 됩니다. 등) 뒤에 줄바꿈
   if (!text.includes('<br>')) {
     text = text.replace(/(다\.)\s*/g, '$1<br>');
   }
@@ -2182,12 +2186,10 @@ function setupPullToRefresh() {
 setupPullToRefresh();
 
 // ── 초기화 ──
-function dismissSplash() {
+function dismissSplash(skipAnimation) {
   const splash = document.getElementById('splash');
-  if (!splash) return;
-  splash.classList.add('fade-out');
   const onEnd = () => {
-    splash.remove();
+    if (splash && splash.parentNode) splash.remove();
     if (!getHoldings()) {
       showHoldingsSetup();
     } else {
@@ -2203,6 +2205,13 @@ function dismissSplash() {
     }
     initFadeTargets();
   };
+  // skipAnimation: 같은 세션에서 두 번째 진입(/about ← 뒤로) 시 page paint 전에
+  // html.splash-skip 클래스로 splash 가 이미 display:none — 페이드 애니메이션 우회.
+  if (!splash || skipAnimation) {
+    onEnd();
+    return;
+  }
+  splash.classList.add('fade-out');
   splash.addEventListener('transitionend', onEnd);
   setTimeout(onEnd, 600);
 }
@@ -2243,13 +2252,21 @@ function trackVisit() {
   // 페이지 로드 시 방문 기록 전송
   trackVisit();
 
+  // 같은 세션 두 번째 진입이면 splash 우회 (html.splash-skip 도 이미 적용된 상태).
+  // 첫 진입 시점에 플래그 set — 이후 같은 세션의 모든 /stocks 진입은 skipSplash=true.
+  const skipSplash = !!sessionStorage.getItem('splashShown');
+  try { sessionStorage.setItem('splashShown', '1'); } catch (e) { /* private mode noop */ }
+
   const splashStart = Date.now();
   let splashDismissed = false;
   function safeDismiss() {
     if (splashDismissed) return;
     splashDismissed = true;
-    dismissSplash();
+    dismissSplash(skipSplash);
   }
+
+  // skipSplash 인 경우 즉시 dismiss — 데이터 로드는 병렬로 계속 진행.
+  if (skipSplash) safeDismiss();
 
   // 최대 6초 안전 타임아웃 — API 실패해도 스플래시는 닫힘
   const safetyTimer = setTimeout(safeDismiss, 6000);
@@ -2275,7 +2292,8 @@ function trackVisit() {
 
   clearTimeout(safetyTimer);
   const elapsed = Date.now() - splashStart;
-  const remaining = Math.max(0, 2200 - elapsed);
+  // skipSplash 면 minimum-show 시간 없이 즉시. 첫 진입은 2200ms 최소 노출.
+  const remaining = skipSplash ? 0 : Math.max(0, 2200 - elapsed);
 
   setTimeout(safeDismiss, remaining);
 })();
