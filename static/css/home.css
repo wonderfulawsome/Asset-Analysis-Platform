@@ -39,6 +39,7 @@
   color: var(--text-primary, #fff);
   letter-spacing: -0.2px;
   min-height: 26px;
+  white-space: pre-line;                       /* 백엔드 \n 분리 → 요약/인사이트 줄바꿈 */
 }
 .home-ai-meta {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0;
