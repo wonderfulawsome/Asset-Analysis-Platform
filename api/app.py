@@ -173,6 +173,11 @@ def stocks_page(request: Request):
 def stats_page(request: Request):
     return templates.TemplateResponse(request=request, name='stats.html')
 
+@app.get('/about')
+def about_page(request: Request):
+    """가이드 페이지 — Passive 소개·사용법·지표·모델·데이터 출처·면책 single long page."""
+    return templates.TemplateResponse(request=request, name='about.html')
+
 # /realestate/* 는 모두 Vite 빌드 index.html로 — React Router가 클라이언트 라우팅 처리.
 # /static/realestate/assets/* 는 StaticFiles 마운트가 먼저 잡으므로 충돌 없음.
 @app.get('/realestate')

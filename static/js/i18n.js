@@ -494,6 +494,28 @@ const I18N = {
     'featDesc.vix_term': 'VIX 선물 원월물-근월물 차이. 역전되면 "지금 당장"의 공포가 극심해 심리 주도 장세',
     'featDesc.hy_spread': '정크본드 스프레드. 신용시장 공포가 주식까지 전이되면 펀더멘털과 무관하게 일괄 매도 발생',
     'featDesc.realized_vol': '실제 주가 변동 크기. 변동성이 높은 구간은 투자자들이 이성보다 감정으로 거래하는 전형적 노이즈 국면',
+
+    // ── 햄버거 메뉴 / About 페이지 ──
+    'menu.title': '메뉴',
+    'menu.about': 'About — Passive 가이드',
+    'menu.settings': '설정',
+    'menu.disclaimer': '면책 고지',
+    'about.back': '← 뒤로',
+    'about.title': 'Passive 가이드',
+    'about.tocLabel': '목차',
+    'about.intro.title': '소개',
+    'about.intro.lead': 'Passive 가 무엇을 측정하고 무엇을 측정하지 않는지 한눈에.',
+    'about.usage.title': '사용 방법',
+    'about.usage.lead': '메인 탭 5개의 역할과 화면 구성.',
+    'about.metrics.title': '분석 지표',
+    'about.metrics.lead': '화면에 표시되는 각 지표가 무엇을 측정하고 어떻게 읽는지.',
+    'about.models.title': '머신러닝 모델',
+    'about.models.lead': '동기 / 입력 / 출력 / 한계 4-line 형식.',
+    'about.sources.title': '데이터 출처',
+    'about.sources.lead': '어떤 외부 데이터 소스에서 어떤 지표가 오는지.',
+    'about.disclaimer.title': '면책',
+    'about.disclaimer.lead': '본 정보는 투자자문이 아니며 투자 판단·책임은 사용자에게 있습니다.',
+    'about.placeholder': '(작성 예정)',
   },
 
   en: {
@@ -982,6 +1004,28 @@ const I18N = {
     'featDesc.vix_term': 'VIX futures front-back spread. Inversion = extreme immediate fear, sentiment-driven market',
     'featDesc.hy_spread': 'Junk bond spread. When credit fear spills to equities, indiscriminate selling regardless of fundamentals',
     'featDesc.realized_vol': 'Actual price fluctuation. High-volatility periods indicate emotion-driven trading, a classic noise regime',
+
+    // ── Hamburger menu / About page ──
+    'menu.title': 'Menu',
+    'menu.about': 'About — Passive Guide',
+    'menu.settings': 'Settings',
+    'menu.disclaimer': 'Disclaimer',
+    'about.back': '← Back',
+    'about.title': 'Passive Guide',
+    'about.tocLabel': 'Contents',
+    'about.intro.title': 'Introduction',
+    'about.intro.lead': 'What Passive measures — and what it does not.',
+    'about.usage.title': 'How to Use',
+    'about.usage.lead': 'The role and layout of each main tab.',
+    'about.metrics.title': 'Analytics Metrics',
+    'about.metrics.lead': 'What each on-screen metric measures and how to read it.',
+    'about.models.title': 'Machine Learning Models',
+    'about.models.lead': 'Each model in 4 lines: motivation / input / output / limits.',
+    'about.sources.title': 'Data Sources',
+    'about.sources.lead': 'Which external sources feed which metric.',
+    'about.disclaimer.title': 'Disclaimer',
+    'about.disclaimer.lead': 'Not investment advice — decisions and responsibility rest with the user.',
+    'about.placeholder': '(Content forthcoming)',
   }
 };
 
