@@ -233,15 +233,22 @@ def _build_indicator_text(lang='ko', region: str = 'us'):
                 interp = '주가와 펀더멘털이 크게 괴리됨 (감정 지배)'
             lines.append(f"시장 이성 점수: {ns} → {interp}")
             lines.append(f"  (양수일수록 이성적/펀더멘털 반영, 음수가 클수록 감정적/괴리)")
-    cs = fetch_crash_surge_current(region=region)            # 폭락/급등 점수 조회
-    if cs:
-        c_s = cs.get('crash_score') or cs.get('crash_prob') or 0  # 하락 점수 (필드명 호환)
-        s_s = cs.get('surge_score') or cs.get('surge_prob') or 0  # 상승 점수 (필드명 호환)
-        gap = round(s_s - c_s, 1)                            # 간극 = 상승 - 하락 (양수=상승 우위)
+    # 이상 탐지 (평소와의 거리 D²) — 신호 탭 crash/surge 폐기되고 anomaly 차트로 교체된 이후 정합 데이터 source.
+    an = fetch_anomaly_current(region=region)
+    if an:
+        d2 = an.get('d2')
+        pct_10y = an.get('percentile_10y')
+        top_pct = round(100 - float(pct_10y), 1) if isinstance(pct_10y, (int, float)) else None
         if lang == 'en':
-            lines.append(f"Crash Risk: {c_s}pts, Surge Potential: {s_s}pts, Gap: {gap:+.1f}pts")
+            lines.append(
+                f"Anomaly Distance (D²): {d2}"
+                + (f", top {top_pct}% in 10-year distribution" if top_pct is not None else "")
+            )
         else:
-            lines.append(f"하락 위험도: {c_s}점, 상승 기대도: {s_s}점, 간극: {gap:+.1f}점")
+            lines.append(
+                f"평소와의 거리(D²): {d2}"
+                + (f" — 10년 분포 내 상위 {top_pct}%" if top_pct is not None else "")
+            )
     prices = fetch_index_prices_latest(region=region)        # ETF 가격 조회
     if prices:
         major = [p for p in prices if p.get('ticker') in L['major_tickers']]
@@ -261,14 +268,15 @@ def _build_indicator_text(lang='ko', region: str = 'us'):
 
 _SUMMARY_PROMPTS = {                                         # 시황 종합 요약 — 1줄 핵심 + 1줄 인사이트
     'ko': """/no_think
-너는 한국어 시장 객관 설명자다. 시황 탭 입력 지표(공포탐욕·간극·경기 국면 등) 를 종합해 *2줄* 출력.
+너는 한국어 시장 객관 설명자다. 시황 탭 입력 지표(공포탐욕·평소와의 거리(D²)·경기 국면 등) 를 종합해 *2줄* 출력.
 
 형식 (반드시 이 두 줄, 각 줄 앞에 이모지 1개):
-1. [이모지] 핵심 한 줄 — 핵심 3지표 (심리 N · 신호 간극 +/-X · 경기 [국면]) 한 문장 압축, 60자 이내.
-2. [이모지] 인사이트 한 줄 — 위 세 지표가 *서로 어떻게 맞물리는지* 메커니즘 1문장 (예: "탐욕인데 간극은 (-) → 심리와 신호가 어긋난 상태"). 80자 이내.
+1. [이모지] 핵심 한 줄 — 핵심 3지표 (심리 N · 평소와의 거리 D²(상위 N%) · 경기 [국면]) 한 문장 압축, 80자 이내.
+2. [이모지] 인사이트 한 줄 — 위 세 지표가 *서로 어떻게 맞물리는지* 메커니즘 1문장 (예: "탐욕인데 평소와의 거리도 큼 → 심리·시장 상태가 함께 평소 영역을 벗어남"). 80자 이내.
 
 자문 가드 (절대 위반 금지):
 - 매수/매도/추천/유리/불리/위험/안전/매수타이밍/상승전망/하락전망/예측/전망/기대/포트폴리오/목표가/수익률 보장 단어 금지.
+- *crash/surge·간극·상승 우위·하락 우위·신호 간극* 단어 금지 (옛 신호탭 폐기됨, 현 탭은 평소와의 거리 D² 만 사용).
 - 미래 방향 추정 ("~할 것이다", "~로 이어질 가능성") 금지.
 - "현재 데이터의 위치/상태/상관 사실" 만 진술. 일반론적 메커니즘 (교과서 인과) 만 인사이트로.
 
@@ -279,16 +287,17 @@ _SUMMARY_PROMPTS = {                                         # 시황 종합 요
 - 이모지 두 줄 다른 것 사용. 핵심: ⚖️🔄📊  인사이트: 🧭🔍💡.""",
 
     'en': """/no_think
-You are an objective market describer in plain English. Synthesize the input indicators (Fear & Greed, gap, cycle phase, etc.) into *2 lines*.
+You are an objective market describer in plain English. Synthesize the input indicators (Fear & Greed, anomaly distance D², cycle phase, etc.) into *2 lines*.
 
 Format (exactly two lines, each prefixed with one emoji):
-1. [emoji] Headline — 3 key metrics (sentiment N · signal gap +/-X · cycle [phase]) in one short sentence, ≤90 chars.
-2. [emoji] Insight — one-sentence mechanism describing how the three metrics *interlock* (e.g., "greed↑ while gap negative → overheating signal coexists with selling flow"), ≤110 chars.
+1. [emoji] Headline — 3 key metrics (sentiment N · anomaly distance D² (top N%) · cycle [phase]) in one short sentence, ≤100 chars.
+2. [emoji] Insight — one-sentence mechanism describing how the three metrics *interlock* (e.g., "greed coexists with high anomaly distance → both sentiment and market state sit outside their typical range"), ≤120 chars.
 
 Advice-risk guard (must not violate):
 - NO words: buy/sell/recommend/favorable/risky/safe/timing/upside-outlook/downside-outlook/predict/forecast/expect/portfolio/target-price/return-guarantee.
+- NO crash/surge/gap/upside-edge/downside-edge/signal-gap terms (the old signal tab is deprecated; the anomaly tab uses D² + percentile only).
 - NO future-direction inference ("will", "may lead to").
-- State only the *current position/state/correlation* facts; insight is a textbook mechanism only.
+- State only the current position/state/correlation facts; insight is a textbook mechanism only.
 
 Other rules:
 - No markdown. Professional yet accessible tone.
@@ -375,23 +384,29 @@ def _build_home_indicator_text(lang: str = 'ko', region: str = 'us') -> str:
         lines.extend(section)
         lines.append("")
 
-    # ── 신호 탭 ──
+    # ── 이상 탐지 탭 (평소와의 거리) ──
+    # 신호 탭이 anomaly 차트로 교체된 이후 ([117]+) 동일 데이터 source 사용.
     section = []
-    cs = fetch_crash_surge_current(region=region)
-    if cs:
-        c_s = cs.get('crash_score') or cs.get('crash_prob') or 0
-        s_s = cs.get('surge_score') or cs.get('surge_prob') or 0
-        gap = round(s_s - c_s, 1)
+    an = fetch_anomaly_current(region=region)
+    if an:
+        d2 = an.get('d2')
+        pct_10y = an.get('percentile_10y')
+        pct_90d = an.get('percentile_90d')
+        top_pct = round(100 - float(pct_10y), 1) if isinstance(pct_10y, (int, float)) else None
         if is_en:
-            section.append(f"Crash Risk: {c_s}pts ({cs.get('crash_grade', '?')})")
-            section.append(f"Surge Potential: {s_s}pts ({cs.get('surge_grade', '?')})")
-            section.append(f"Gap (Surge - Crash): {gap:+.1f}pts")
+            section.append(f"Anomaly Distance (D²): {d2}")
+            if top_pct is not None:
+                section.append(f"Position: top {top_pct}% in 10-year distribution")
+            if pct_90d is not None:
+                section.append(f"90-day percentile: {pct_90d}")
         else:
-            section.append(f"하락 위험도: {c_s}점 ({cs.get('crash_grade', '?')})")
-            section.append(f"상승 기대도: {s_s}점 ({cs.get('surge_grade', '?')})")
-            section.append(f"간극(상승-하락): {gap:+.1f}점")
+            section.append(f"평소와의 거리(D²): {d2}")
+            if top_pct is not None:
+                section.append(f"위치: 10년 분포 내 상위 {top_pct}%")
+            if pct_90d is not None:
+                section.append(f"90일 분위: {pct_90d}")
     if section:
-        lines.append(f"[{'Signal Tab' if is_en else '신호 탭'}]")
+        lines.append(f"[{'Anomaly Tab' if is_en else '이상 탐지 탭'}]")
         lines.extend(section)
         lines.append("")
 
@@ -932,61 +947,83 @@ def _fmt_signed(v, digits: int = 1, suffix: str = '') -> str:
 def _fallback_ai_summary(lang: str, region: str) -> str:
     """Rule-based 시황 요약 — LLM 미가용 시 폴백. 1줄 핵심 + 1줄 인사이트.
 
-    자문 가드: 매수/매도/추천/예측/전망/유리/불리 등 금지. "현재 위치" 사실만.
+    데이터 source:
+      - 공포탐욕지수 (fetch_fear_greed_latest) — 심리
+      - 평소와의 거리 D² + 상위 N% (fetch_anomaly_current) — 시장 상태
+        (옛 crash/surge gap 은 신호탭 폐기로 더 이상 사용 X)
+      - 경기 국면 (fetch_sector_cycle_latest)
+    자문 가드: 매수/매도/추천/예측/전망/유리/불리/간극/상승우위/하락우위 금지.
     """
     try:
-        today = get_market_summary_today(region=region)
-        fg = today.get('fear_greed') or {}
-        cs = today.get('crash_surge') or {}
         sector = fetch_sector_cycle_latest(region=region) or {}
+        fg = fetch_fear_greed_latest(region=region) or {}
+        an = fetch_anomaly_current(region=region) or {}
+
         fg_score = fg.get('score')
         fg_label = fg.get('rating') or ''
-        gap = cs.get('gap')
+        d2 = an.get('d2')
+        pct_10y = an.get('percentile_10y')
+        top_pct = round(100 - float(pct_10y), 1) if isinstance(pct_10y, (int, float)) else None
         phase = sector.get('phase_name')
 
+        # ── 핵심 한 줄 (📊) ──
         if lang == 'en':
             parts = []
             if fg_score is not None:
                 parts.append(f"sentiment {fg_label} {round(float(fg_score))}")
-            if gap is not None:
-                parts.append(f"signal gap {_fmt_signed(gap)}")
+            if d2 is not None:
+                parts.append(
+                    f"anomaly distance {d2}"
+                    + (f" (top {top_pct}%)" if top_pct is not None else "")
+                )
             if phase:
                 parts.append(f"cycle {phase}")
-            line1 = "📊 " + ", ".join(parts) if parts else "📊 indicators loading"
-            # textbook insight clause — co-occurrence pattern, no direction prediction
-            insight_bits = []
-            if fg_label and gap is not None:
-                if 'greed' in fg_label.lower() and float(gap) < 0:
-                    insight_bits.append("greed-leaning sentiment alongside negative signal gap is a textbook divergence pattern")
-                elif 'fear' in fg_label.lower() and float(gap) > 0:
-                    insight_bits.append("fear-leaning sentiment alongside positive signal gap is a textbook divergence pattern")
-                else:
-                    insight_bits.append("sentiment label and signal gap are pointing the same way (alignment pattern)")
-            if not insight_bits:
-                insight_bits.append("indicators co-positioned at current snapshot, read as state — not a direction call")
-            line2 = "🔍 " + insight_bits[0] + "."
-            return line1 + ".\n" + line2
+            line1 = "📊 " + ", ".join(parts) + "." if parts else "📊 indicators loading."
+        else:
+            parts = []
+            if fg_score is not None:
+                parts.append(f"심리 {fg_label} {round(float(fg_score))}")
+            if d2 is not None:
+                parts.append(
+                    f"평소와의 거리 {d2}"
+                    + (f" (상위 {top_pct}%)" if top_pct is not None else "")
+                )
+            if phase:
+                parts.append(f"경기국면 {phase}")
+            line1 = ("📊 " + ", ".join(parts) + " 상태입니다.") if parts else "📊 지표 수집 중입니다."
 
-        parts = []
-        if fg_score is not None:
-            parts.append(f"심리 {fg_label} {round(float(fg_score))}")
-        if gap is not None:
-            parts.append(f"신호 간극 {_fmt_signed(gap)}")
-        if phase:
-            parts.append(f"경기국면 {phase}")
-        line1 = "📊 " + ", ".join(parts) if parts else "📊 지표 수집 중"
-        insight_bits = []
-        if fg_label and gap is not None:
-            if '탐욕' in fg_label and float(gap) < 0:
-                insight_bits.append("탐욕 쪽 심리와 음(-) 신호 간극이 같은 시점에 관측되는 *교과서적 괴리 패턴*")
-            elif '공포' in fg_label and float(gap) > 0:
-                insight_bits.append("공포 쪽 심리와 양(+) 신호 간극이 같은 시점에 관측되는 *교과서적 괴리 패턴*")
+        # ── 인사이트 한 줄 (🔍) — 사실 기반 동조/괴리 패턴, 방향 예측 X ──
+        is_high_distance = top_pct is not None and top_pct <= 20  # 평소와 멀리 떨어진 영역
+        is_low_distance  = top_pct is not None and top_pct >= 80  # 평소와 가까운 영역
+        is_greed = ('greed' in fg_label.lower()) or ('탐욕' in fg_label)
+        is_fear  = ('fear'  in fg_label.lower()) or ('공포' in fg_label)
+
+        if lang == 'en':
+            if is_greed and is_high_distance:
+                ins = "greed-leaning sentiment co-occurs with a snapshot far from typical 10-year mix — a textbook co-deviation pattern"
+            elif is_fear and is_high_distance:
+                ins = "fear-leaning sentiment co-occurs with a snapshot far from typical 10-year mix — a textbook co-deviation pattern"
+            elif is_low_distance:
+                ins = "current snapshot sits inside the 10-year typical range — sentiment label is the dominant differentiator today"
+            elif is_greed or is_fear:
+                ins = "sentiment leans one direction while market state sits in a moderate position — partial-alignment pattern"
             else:
-                insight_bits.append("심리 라벨과 신호 간극 방향이 같은 *정렬 패턴* (방향 예측 X)")
-        if not insight_bits:
-            insight_bits.append("지표들이 현재 스냅샷에서 공존하는 상태 — 방향 추정이 아닌 상태 기록")
-        line2 = "🔍 " + insight_bits[0] + "입니다."
-        return line1 + " 입니다.\n" + line2
+                ins = "indicators co-positioned at current snapshot — state record, not a direction call"
+            line2 = "🔍 " + ins + "."
+        else:
+            if is_greed and is_high_distance:
+                ins = "탐욕 쪽 심리와 평소와 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격 패턴*"
+            elif is_fear and is_high_distance:
+                ins = "공포 쪽 심리와 평소와 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격 패턴*"
+            elif is_low_distance:
+                ins = "오늘 시장 상태는 10년 평소 분포 중심 부근 — 심리 라벨이 오늘의 주된 차별 변수"
+            elif is_greed or is_fear:
+                ins = "심리는 한쪽으로 기운 반면 시장 상태는 평소 분포 중간 위치 — 부분 정렬 패턴"
+            else:
+                ins = "지표들이 현재 스냅샷에서 공존하는 상태 — 방향 추정이 아닌 상태 기록"
+            line2 = "🔍 " + ins + "입니다."
+
+        return line1 + "\n" + line2
     except Exception:
         return ('📊 indicators loading.\n🔍 commentary is using the latest numeric snapshot.'
                 if lang == 'en'
