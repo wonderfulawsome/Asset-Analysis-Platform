@@ -20,6 +20,7 @@ export interface PolygonFeature {
   fillColor: string;
   changePct: number | null;
   subKey?: string;
+  subName?: string | null;        // 폴리곤 중앙 보조 라벨 (예: 대표 법정동명)
 }
 
 interface Props {
@@ -135,13 +136,27 @@ export default function VWorldMap({
   }, [markers, onMarkerClick, ready]);
 
   // 3) polygons — Leaflet path 는 SVG. interactive=true 명시 + bubblingMouseEvents=false
-  // 로 click 이 다른 layer 로 흘러가지 않도록.
+  // 로 click 이 다른 layer 로 흘러가지 않도록. 폴리곤 1개당 가장 큰 ring 의 centroid
+  // 위치에 라벨 (시군구 · 동) 마커 1개 추가 — interactive:false 로 클릭은 폴리곤이 받음.
+  // 줌 레벨 < LABEL_MIN_ZOOM 이면 모든 라벨 숨김 (수도권 전체 줌아웃 시 너무 빽빽).
   useEffect(() => {
-    const map = mapRef.current;
-    if (!ready || !map || !polygons || polygons.length === 0) return;
+    const mapInst = mapRef.current;
+    if (!ready || !mapInst || !polygons || polygons.length === 0) return;
+    const map: L.Map = mapInst;     // narrow non-null reference for closure usage
     const created: L.Layer[] = [];
+    const labelMarkers: L.Marker[] = [];
+    const LABEL_MIN_ZOOM = 9;       // 이 줌 미만이면 라벨 숨김 (수도권 overview 시 정리)
+
+    function ringCentroid(ring: { lat: number; lng: number }[]) {
+      let sLat = 0, sLng = 0;
+      for (const p of ring) { sLat += p.lat; sLng += p.lng; }
+      return { lat: sLat / ring.length, lng: sLng / ring.length };
+    }
+
     polygons.forEach((poly) => {
+      let largestRing: { lat: number; lng: number }[] | null = null;
       poly.paths.forEach((ring) => {
+        if (!largestRing || ring.length > largestRing.length) largestRing = ring;
         const latlngs = ring.map((p) => [p.lat, p.lng] as [number, number]);
         const lpoly = L.polygon(latlngs, {
           color: "#111827",
@@ -153,9 +168,7 @@ export default function VWorldMap({
           bubblingMouseEvents: false,
         });
         lpoly.on("click", (e) => {
-          // Leaflet click event — DomEvent.stop 으로 map click 으로 안 전파
           L.DomEvent.stop(e.originalEvent);
-          console.log("[VWorldMap] polygon click", poly.sggCd, poly.subKey);
           onPolygonClick?.(poly.sggCd, poly.subKey);
         });
         lpoly.on("mouseover", () => lpoly.setStyle({ fillOpacity: 0.65 }));
@@ -163,9 +176,54 @@ export default function VWorldMap({
         lpoly.addTo(map);
         created.push(lpoly);
       });
+
+      // 라벨 — 가장 큰 ring 의 centroid 위에 배치 (다중 ring 시 본체 폴리곤 위로).
+      if (largestRing) {
+        const c = ringCentroid(largestRing);
+        const subPart = poly.subName
+          ? `<span style="color:#888;font-weight:500;letter-spacing:-0.1px;"> · ${poly.subName}</span>`
+          : "";
+        const html = `
+          <div style="
+            font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+            padding: 2px 6px;
+            background: rgba(0,0,0,0.62);
+            border: 1px solid rgba(255,140,0,0.32);
+            border-radius: 3px;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+            transform: translate(-50%, -50%);
+            user-select: none;
+          ">
+            <span style="color:#ffaa44;">${poly.name}</span>${subPart}
+          </div>`;
+        const marker = L.marker([c.lat, c.lng], {
+          icon: L.divIcon({ className: "polygon-label", html, iconSize: [0, 0] }),
+          interactive: false,                 // 클릭은 아래 폴리곤이 받도록
+          keyboard: false,
+        });
+        labelMarkers.push(marker);
+      }
     });
+
+    function applyLabelVisibility() {
+      const visible = map.getZoom() >= LABEL_MIN_ZOOM;
+      labelMarkers.forEach((m) => {
+        const onMap = (m as any)._added === true;
+        if (visible && !onMap) { m.addTo(map); (m as any)._added = true; }
+        else if (!visible && onMap) { m.remove(); (m as any)._added = false; }
+      });
+    }
+    applyLabelVisibility();
+    map.on("zoomend", applyLabelVisibility);
+
     return () => {
       created.forEach((l) => l.remove());
+      labelMarkers.forEach((m) => m.remove());
+      map.off("zoomend", applyLabelVisibility);
     };
   }, [polygons, onPolygonClick, ready]);
 

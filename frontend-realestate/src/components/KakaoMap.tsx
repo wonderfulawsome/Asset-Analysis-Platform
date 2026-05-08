@@ -24,6 +24,7 @@ export interface PolygonFeature {
   // 1개 sgg 가 여러 폴리곤일 때 (현재 부천만) 폴리곤별 sub-area 식별자.
   // MapScreen 의 sgg-overview.bucheon_sub_top key (sosa/wonmi/ojeong) 와 매칭.
   subKey?: string;
+  subName?: string | null;  // 폴리곤 중앙 보조 라벨 (예: 대표 법정동명)
 }
 
 interface Props {
@@ -139,13 +140,25 @@ export default function KakaoMap({
 
   // 3) polygons — 신규. paths 가 [[ring1], [ring2]] 형식이라 각 폴리곤마다 Kakao Polygon 1개 생성.
   // MultiPolygon 의 여러 외곽 polygon 은 따로 그려야 정상 렌더 (kakao Polygon 은 단일 path 만 지원).
+  // 폴리곤 1개당 가장 큰 ring 의 centroid 에 라벨 CustomOverlay 추가 (시군구 · 동, dark terminal 톤).
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map || !window.kakao || !polygons || polygons.length === 0) return;
     const { kakao } = window;
     const created: any[] = [];
+    const labelOverlays: any[] = [];
+    const LABEL_MIN_LEVEL = 10;     // Kakao level <= LABEL_MIN_LEVEL 일 때만 라벨 노출 (확대 상태)
+
+    function ringCentroid(ring: { lat: number; lng: number }[]) {
+      let sLat = 0, sLng = 0;
+      for (const p of ring) { sLat += p.lat; sLng += p.lng; }
+      return { lat: sLat / ring.length, lng: sLng / ring.length };
+    }
+
     polygons.forEach((poly) => {
+      let largestRing: { lat: number; lng: number }[] | null = null;
       poly.paths.forEach((ring) => {
+        if (!largestRing || ring.length > largestRing.length) largestRing = ring;
         const path = ring.map((p) => new kakao.maps.LatLng(p.lat, p.lng));
         const kpoly = new kakao.maps.Polygon({
           map,
@@ -161,9 +174,47 @@ export default function KakaoMap({
         kakao.maps.event.addListener(kpoly, "mouseout", () => kpoly.setOptions({ fillOpacity: 0.45 }));
         created.push(kpoly);
       });
+
+      if (largestRing) {
+        const c = ringCentroid(largestRing);
+        const subPart = poly.subName
+          ? `<span style="color:#888;font-weight:500;letter-spacing:-0.1px;"> · ${poly.subName}</span>`
+          : "";
+        const overlay = new kakao.maps.CustomOverlay({
+          position: new kakao.maps.LatLng(c.lat, c.lng),
+          content: `<div style="
+            font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
+            font-size: 10.5px;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+            padding: 2px 6px;
+            background: rgba(0,0,0,0.62);
+            border: 1px solid rgba(255,140,0,0.32);
+            border-radius: 3px;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+            user-select: none;
+            pointer-events: none;
+          "><span style="color:#ffaa44;">${poly.name}</span>${subPart}</div>`,
+          xAnchor: 0.5,
+          yAnchor: 0.5,
+          clickable: false,
+        });
+        labelOverlays.push(overlay);
+      }
     });
+
+    function applyLabelVisibility() {
+      const visible = map.getLevel() <= LABEL_MIN_LEVEL;
+      labelOverlays.forEach((o) => o.setMap(visible ? map : null));
+    }
+    applyLabelVisibility();
+    kakao.maps.event.addListener(map, "zoom_changed", applyLabelVisibility);
+
     return () => {
       created.forEach((p) => p.setMap?.(null));
+      labelOverlays.forEach((o) => o.setMap?.(null));
+      kakao.maps.event.removeListener(map, "zoom_changed", applyLabelVisibility);
     };
   }, [polygons, onPolygonClick, ready]);
 

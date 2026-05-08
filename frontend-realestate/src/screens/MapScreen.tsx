@@ -83,7 +83,10 @@ async function loadPolygons(overviews: Map<string, SggOverview>): Promise<Polygo
         rings.push(ring.map(([lng, lat]: [number, number]) => ({ lat, lng })));
       }
     }
-    polys.push({ sggCd, name, paths: rings, fillColor, changePct: change, subKey });
+    // 폴리곤 중앙 보조 라벨 — 부천(41194) 의 sub-area 폴리곤은 해당 sub_top 의 동명, 그 외엔 sgg 의 대표 동.
+    const subTop = subKey ? ov?.bucheon_sub_top?.[subKey] : undefined;
+    const subName = (subTop?.top_stdg_nm ?? ov?.top_stdg_nm) ?? null;
+    polys.push({ sggCd, name, paths: rings, fillColor, changePct: change, subKey, subName });
   }
   return polys;
 }
