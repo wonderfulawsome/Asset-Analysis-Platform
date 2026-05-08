@@ -550,9 +550,19 @@ def compute_ranking() -> dict:
         if sgg not in latest_per_sgg or (row.get('stats_ym') or '') > (latest_per_sgg[sgg].get('stats_ym') or ''):
             latest_per_sgg[sgg] = row
 
-    # 2) sgg_overview cache 의 change_pct_3m
-    r2 = client.table('app_cache').select('payload').eq('cache_key', SGG_OVERVIEW_CACHE_KEY).limit(1).execute()
-    overview = r2.data[0]['payload'] if r2.data else []
+    # 2) sgg_overview cache 의 change_pct_3m + trade_count.
+    # 캐시가 비어 있거나 row 자체가 없으면 직접 compute_sgg_overview('') 로 폴백 —
+    # 스케줄러 미동작·신규 환경 등으로 cache 가 미적재된 상황 안전망 (이게 없으면
+    # ranking 의 price_top5 가 빈 배열 + trade_count 가 null 로 노출됨).
+    overview: list[dict] = []
+    try:
+        r2 = client.table('app_cache').select('payload').eq('cache_key', SGG_OVERVIEW_CACHE_KEY).limit(1).execute()
+        overview = (r2.data[0]['payload'] if r2.data else []) or []
+    except Exception as e:
+        print(f'[ranking] sgg_overview cache 조회 실패: {e}')
+    if not overview:
+        print('[ranking] sgg_overview 캐시 비어 있음 → compute_sgg_overview 직접 호출')
+        overview = compute_sgg_overview('')
     overview_by_sgg = {o['sgg_cd']: o for o in overview}
 
     # 거래량 회복 — trade_vs_long_ratio 큰 순 (1.0 초과만)
