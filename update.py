@@ -9021,3 +9021,166 @@ requestAnimationFrame(() => mapRef.current?.relayout?.());
 #
 # [structure.md]
 # 26 섹션 (이상 탐지 탭) "마지막 갱신 시점" 엔트리 [123] 추가.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [124] 2026-05-08 (UTC) — 이상치 탐지 차트 안 "상위 N%" 라벨 표시
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# 10년 D² 추이 차트에 오늘 위치를 "상위 N%" 로 직접 노출. 기존엔 차트 하단에
+# 별도 카드/문구에서만 표기되었고, 차트 자체는 점·선만 보여 사용자가 "오늘이
+# 얼마나 드문 위치인지" 차트만 보고 즉시 읽기 어려웠음.
+#
+# [왜 — 사용자 요청]
+# 사용자: "상위 몇퍼센트인지도 그래프 안에 표시하도록해봐"
+#
+# [상위% 정의]
+# percentile_10y 는 D²(today) 가 10년 hist 분포에서 차지하는 누적 위치(0~100).
+# pct=95 면 95% 이하가 today 보다 작음 → today 는 상위 5%.
+# 따라서 표시값 = round(100 - percentile_10y), [0,100] clamp, finite check.
+#
+# [구현 — static/js/anomaly.js renderChart()]
+#   1. 상위% 계산
+#      const pctRaw = current.percentile_10y;
+#      const hasPct = pctRaw !== null && pctRaw !== undefined && Number.isFinite(pctRaw);
+#      const topPct = hasPct ? Math.max(0, Math.min(100, Math.round(100 - pctRaw))) : null;
+#   2. 라벨 위치 (오늘 점 기준)
+#      - 기본: 점 위쪽 9px (annoY = lastY - 9)
+#      - 점이 차트 상단 근처(<24px)면 아래로 회피 (annoY = lastY + 16)
+#      - x: 점 좌측 6px, pad.left + 4 보다 안쪽 보장
+#      - text-anchor: 'end' — 라벨이 점 옆에 자연스럽게 끝남
+#   3. SVG <text> 요소 (조건부 렌더, hasPct=false 면 생략)
+#      - fill: percentileLabel().color (5단계 강도 색 — 평소 가까움 청색 / 다름 적색)
+#      - paint-order:stroke + stroke:#fff:3px — 그래프 area gradient 위에서도
+#        가독성 보장 (텍스트 둘레에 흰 테두리 후 안쪽만 컬러 채움).
+#   4. 범례에도 함께 표기 — "오늘 (3.2 · 상위 12%)" 로 확장.
+#      차트 안 점 라벨(시각적) + 범례 텍스트(스크린리더/접근성) 이중 노출.
+#
+# [트레이드오프 / 디자인 결정]
+#   (a) 색은 percentileLabel 색을 그대로 사용 — 점·라벨·범례 동일 색으로
+#       한 단위(unit) 로 인식되게.
+#   (b) 흰 stroke outline — 라이트/다크 모드 무관 가독성. 별도 박스/배경
+#       추가 안 함 (차트 깔끔함 우선).
+#   (c) 정수 반올림 — "12.34%" 보다 "12%" 가 직관적. 사용자가 정확값 원하면
+#       contributors 카드 하단 stat 에서 확인 가능.
+#   (d) hasPct false 케이스 (백엔드 None) → 라벨 / 범례 양쪽 모두 미표시 —
+#       "0%" 같은 잘못된 시각화 차단.
+#
+# [수정 파일]
+#   static/js/anomaly.js
+#     - renderChart(): topPct 계산, annoX/annoY 위치 계산, SVG <text> 추가,
+#       범례 "오늘 (...)" 에 ` · 상위 N%` 합성.
+#   templates/stocks.html
+#     - anomaly.js?v=7 → v=8 (캐시 버스트)
+#
+# [검증]
+#   - 알고리즘·API·DB 변동 0, 시각화만 변경.
+#   - 자문 리스크 가드: "상위 N%" 는 사실 기록 (분포 위치). 매수/매도/방향
+#     단어 없음 — disclaimer (과거 데이터 기준 거리 측정, 미래 방향 예측 X)
+#     아래에서 안전.
+#   - paint-order/stroke 는 SVG2 표준 — 모든 모던 브라우저 지원.
+#
+# [structure.md]
+# 26 섹션 (이상 탐지 탭) "마지막 갱신 시점" 엔트리 [124] 추가.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [125] 2026-05-08 (UTC) — 상위% 라벨 위치 정리 + 상위 10/20% 경계 실선
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# (1) [124] 의 차트 안 SVG "상위 N%" 라벨 제거 — 사용자 피드백 "주황색 글씨로
+#     상위 29퍼라고 되어있는거는 삭제". (2) 범례의 "상위 N%" 부분만 주황(#f97316)
+#     글씨로 강조 — 사용자 "위쪽 상위 29퍼를 주황색 글씨로 바꿔봐". (3) 차트에
+#     상위 10%·20% 컷 실선 + 라벨 추가 — 사용자 "실선으로 상위 10퍼센트 구간과
+#     20퍼센트 구간을 그래프에다가 표시".
+#
+# [왜 — 사용자 요청]
+# 차트 안 점 옆 라벨이 "오늘" 위치를 가리켜 차트 보기에 방해. 대신 평시 분포
+# 어디부터가 "드문 영역" 인지 정적 기준선(상위 10/20% 컷) 을 그려두면 사용자가
+# 오늘 점이 어느 밴드에 있는지 직접 읽을 수 있음.
+#
+# [상위 10/20% 정의 — 시계열 분포 기준]
+# vals = series 의 d2 값 정렬 → percentileOf(p) 는 sorted[floor(N*p/100)] 반환.
+# p90 = 상위 10% 컷 (이 위쪽이 상위 10%), p80 = 상위 20% 컷.
+# percentile_10y (백엔드 단일값) 와는 다른 산출 — 화면 표시되는 시계열 분포에
+# 일치시켜 차트 일관성 확보.
+#
+# [구현 — static/js/anomaly.js renderChart()]
+#   1. 분포 컷 계산
+#      const sortedVals = [...vals].sort((a,b) => a-b);
+#      const percentileOf = p => sortedVals[floor(N*p/100)] (clamp 포함, 빈 배열 null);
+#      const p90 = percentileOf(90);
+#      const p80 = percentileOf(80);
+#   2. 임계 색상 상수
+#      ORANGE_TOP10 = '#f97316' (deeper orange, 더 strict 컷)
+#      ORANGE_TOP20 = '#fbbf24' (amber, looser 컷)
+#   3. SVG 합성 (thresholdLines string)
+#      각 컷에 대해 <line x1=pad.left x2=W-pad.right y1=y2=y(p)> + 우상단
+#      <text> 라벨 ("상위 10%" / "상위 20%"), 모두 paint-order:stroke +
+#      stroke:#fff:3px 로 area gradient 위 가독성 보장.
+#   4. <circle> (오늘 점) 보다 thresholdLines 를 먼저 렌더 → 점이 라인 위에
+#      덮이도록.
+#   5. 차트 안 <text> 점옆 라벨 제거 — [124] 의 annoX/annoY/SVG <text> 블록
+#      통째로 삭제. annoX/annoY 변수도 미사용이라 함께 제거 (cleanup).
+#   6. 범례 텍스트 분할: "오늘 (3.2 · 상위 29%)" 의 "· 상위 29%" 부분만
+#      <span style="color:#f97316;font-weight:700">…</span> 으로 감쌈.
+#      var(--sub) gray 컨텍스트 안에서 주황만 부각.
+#
+# [수정 파일]
+#   static/js/anomaly.js
+#     - vals 계산 직후 sortedVals/percentileOf/p90/p80 추가
+#     - 상위 10/20 ORANGE 상수 + thresholdLines 합성
+#     - 차트 안 SVG text 제거 (annoX/annoY 변수 함께 삭제)
+#     - 범례 합성에 <span> 으로 "상위 N%" 만 색 분리
+#   templates/stocks.html
+#     - anomaly.js?v=8 → v=9
+#
+# [트레이드오프]
+#   (a) 시계열 분포 기준 컷이라 데이터가 바뀔 때마다 라인 위치도 미세 변동 —
+#       의도된 동작 (사용자가 보는 차트 자체에 일관). 백엔드 percentile_10y
+#       (전체 hist 분포 기준) 과 살짝 다를 수 있으나 사용자에게 동시 노출되는
+#       라벨은 백엔드값(상위 N%) 단일 — 혼란 없음.
+#   (b) 상단 텍스트 라벨은 우상단 정렬 — 점이 차트 우측 상단에 있을 때 겹칠
+#       소지 있으나 흰색 outline (3px) 으로 가독성 보존.
+#
+# [검증]
+#   - 알고리즘·API·DB 변동 0, 시각화만 변경.
+#   - 자문 리스크 가드: "상위 N%" 사실 표시, 매수/매도/방향 단어 0 — 안전.
+#
+# [structure.md]
+# 26 섹션 (이상 탐지 탭) "마지막 갱신 시점" 엔트리 [125] 추가.
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# [126] 2026-05-08 (UTC) — 차트 임계 실선 상위 20% 제거, 상위 10% 만 표시
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# [개요]
+# [125] 에서 추가했던 두 줄 (상위 10% / 상위 20%) 중 사용자 요청으로 상위 20%
+# (#fbbf24 amber) 줄·라벨 삭제. 차트엔 상위 10% (#f97316) 한 줄만 남음.
+#
+# [왜 — 사용자 요청]
+# 사용자: "상위 10퍼만 표시하도록 다시 변경해봐"
+#
+# [구현 — static/js/anomaly.js renderChart()]
+#   1. percentileOf helper 제거 — p90 단일 사용이라 인라인으로 충분.
+#      const p90 = sortedVals[floor(N*0.9)] (clamp + 빈 배열 null fallback)
+#   2. ORANGE_TOP20 상수 삭제, p80 계산·렌더 블록 삭제.
+#   3. thresholdLines 합성은 p90 분기 1개만 유지.
+#   4. 범례·점·기타 영역은 [125] 그대로 (오늘 점 옆 텍스트 없음, 범례 "· 상위 N%"
+#      만 ORANGE_TOP10 강조 유지).
+#
+# [수정 파일]
+#   static/js/anomaly.js
+#     - sortedVals/percentileOf/p90/p80 블록 → sortedVals + 단일 p90 인라인
+#     - ORANGE_TOP20 상수 삭제, p80 if 블록 삭제
+#   templates/stocks.html
+#     - anomaly.js?v=9 → v=10
+#
+# [검증]
+#   - 알고리즘·API·DB 변동 0, 시각화만 축소.
+#
+# [structure.md]
+# 26 섹션 "마지막 갱신 시점" 엔트리 [126] 추가.

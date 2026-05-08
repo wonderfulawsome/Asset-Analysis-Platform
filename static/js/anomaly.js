@@ -151,8 +151,36 @@
     const yMax = yTransform(yMaxRaw);
     const yRange = yMax - yMin || 1;
 
+    // 상위 10% 경계값 — 시계열 분포 기준 (p90)
+    const sortedVals = [...vals].sort((a, b) => a - b);
+    const p90 = sortedVals.length
+      ? sortedVals[Math.min(sortedVals.length - 1, Math.floor(sortedVals.length * 0.9))]
+      : null;
+
+    // 강세장(1) / 하락장(0) 배경 음영 색
+    const REGIME_BULL_FILL = '#22c55e';   // green
+    const REGIME_BEAR_FILL = '#ef4444';   // red
+
     const x = i => pad.left + (i / (series.length - 1)) * cW;
     const y = v => pad.top + (1 - (yTransform(v) - yMin) / yRange) * cH;
+
+    // regime_50 라벨 연속 구간을 <rect> 음영 띠로 합성 (x() 정의 이후 실행)
+    let regimeBands = '';
+    {
+      const N = series.length;
+      let i = 0;
+      while (i < N) {
+        const r = series[i].regime_50;
+        if (r !== 0 && r !== 1) { i++; continue; }
+        let j = i;
+        while (j < N && series[j].regime_50 === r) j++;
+        const x1 = x(i);
+        const x2 = j < N ? x(j) : (W - pad.right);
+        const fill = r === 1 ? REGIME_BULL_FILL : REGIME_BEAR_FILL;
+        regimeBands += `<rect x="${x1.toFixed(1)}" y="${pad.top}" width="${Math.max(0.5, x2 - x1).toFixed(1)}" height="${cH}" fill="${fill}" opacity="0.10"/>`;
+        i = j;
+      }
+    }
 
     const path = series.map((s, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(s.d2 || 0).toFixed(1)}`).join(' ');
     const baseY = y(0).toFixed(1);
@@ -191,10 +219,27 @@
     const lastY = y(lastVal).toFixed(1);
     const lblColor = percentileLabel(current.percentile_10y).color;
 
+    // 오늘의 "상위 N%" — percentile_10y 는 누적분포 위치 (0~100), 상위% = 100 - pct
+    const pctRaw = current.percentile_10y;
+    const hasPct = pctRaw !== null && pctRaw !== undefined && Number.isFinite(pctRaw);
+    const topPct = hasPct ? Math.max(0, Math.min(100, Math.round(100 - pctRaw))) : null;
+    const topPctText = hasPct ? `상위 ${topPct}%` : '';
+
+    // 상위 10% 경계 실선
+    const ORANGE_TOP10 = '#f97316';
+    let thresholdLines = '';
+    if (p90 !== null) {
+      const yp90 = y(p90).toFixed(1);
+      thresholdLines += `<line x1="${pad.left}" y1="${yp90}" x2="${W - pad.right}" y2="${yp90}" stroke="${ORANGE_TOP10}" stroke-width="1" opacity="0.85"/>`;
+      thresholdLines += `<text x="${(W - pad.right - 4).toFixed(1)}" y="${(parseFloat(yp90) - 3).toFixed(1)}" text-anchor="end" style="font-size:10px;font-weight:600;fill:${ORANGE_TOP10};paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round">상위 10%</text>`;
+    }
+
     el.innerHTML = `
-      <div style="display:flex;justify-content:center;gap:12px;margin-bottom:6px;font-size:11px;color:var(--sub)">
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;vertical-align:middle"></span> 평소와의 거리 (시계열)</span>
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${lblColor};vertical-align:middle"></span> 오늘 (${(current.d2 || 0).toFixed(1)})</span>
+      <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:6px;font-size:11px;color:var(--sub);white-space:nowrap;overflow-x:auto">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b82f6;vertical-align:middle"></span> 평소와의 거리</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${lblColor};vertical-align:middle"></span> 오늘 (${(current.d2 || 0).toFixed(1)}${hasPct ? ` · <span style="color:${ORANGE_TOP10};font-weight:700">${topPctText}</span>` : ''})</span>
+        <span><span style="display:inline-block;width:14px;height:8px;background:${REGIME_BULL_FILL};opacity:0.45;vertical-align:middle"></span> 강세장</span>
+        <span><span style="display:inline-block;width:14px;height:8px;background:${REGIME_BEAR_FILL};opacity:0.45;vertical-align:middle"></span> 하락장</span>
       </div>
       <div class="line-chart-wrap">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
@@ -204,9 +249,11 @@
               <stop offset="100%" stop-color="#3b82f6" stop-opacity="0"/>
             </linearGradient>
           </defs>
+          ${regimeBands}
           ${gridLines}
           <path d="${area}" fill="url(#an-grad)" stroke="none"/>
           <path d="${path}" fill="none" stroke="#3b82f6" stroke-width="1.2"/>
+          ${thresholdLines}
           <circle cx="${lastX}" cy="${lastY}" r="4" fill="${lblColor}" stroke="#fff" stroke-width="1.2"/>
           ${yLabels}
           ${xLabels}
