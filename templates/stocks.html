@@ -36,13 +36,16 @@
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(!t){t='dark';localStorage.setItem('theme','dark');}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
-    // /about (또는 향후 메뉴 진입 페이지) 에서 ← 뒤로 진입 시에만 splash 우회.
-    // 첫 사이트 진입 / 새 탭 / F5 reload 는 정상 splash. F5 는 일부 브라우저에서 document.referrer 가
-    // 직전 referrer(/about) 를 그대로 유지해 referrer 만 보면 잘못 우회됨 → Performance Navigation API
-    // 로 reload 타입을 먼저 가려내고, 그 외에만 referrer 검사.
+    // splash 노출 정책:
+    //   - F5/Ctrl+R (reload)         → 무조건 정상 splash (사용자가 "새로고침" 의지로 재진입)
+    //   - 모바일 시스템 뒤로/forward (back_forward) → 무조건 splash 우회, 즉시 홈화면 복귀
+    //     (referrer 는 일부 브라우저에서 빈 값이거나 /about 이 아닐 수 있어 신뢰 X)
+    //   - 그 외 (navigate: 새 진입·링크 클릭): referrer 가 /about 이면 우회 (← 뒤로 링크 클릭 등)
+    //   - 첫 사이트 진입 / 새 탭 / 외부 링크 → 정상 splash
     (function(){try{
       var nav=(performance.getEntriesByType&&performance.getEntriesByType('navigation')[0])||{};
-      if(nav.type==='reload')return; // F5/Ctrl+R → 무조건 splash 정상 노출
+      if(nav.type==='reload')return;
+      if(nav.type==='back_forward'){document.documentElement.classList.add('splash-skip');return;}
       var r=document.referrer||'';
       if(/\/about(?:\/|$|\?|#)/.test(r))document.documentElement.classList.add('splash-skip');
     }catch(e){}})();
