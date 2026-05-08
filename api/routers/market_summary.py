@@ -3,7 +3,7 @@ import time                                                  # 캐시 만료 시
 import threading                                             # 캐시 동시 접근 보호용 Lock
 import json                                                  # JSONB 필드 파싱용
 from datetime import datetime, timezone, timedelta           # KST 시간 변환용
-from fastapi import APIRouter, Query                         # FastAPI 라우터 + 쿼리 파라미터
+from fastapi import APIRouter, Query, BackgroundTasks       # FastAPI 라우터 + 쿼리 파라미터 + 백그라운드 작업
 import yfinance as yf                                        # RSI 실시간 계산용 Yahoo Finance
 from database.repositories import (                          # DB 조회 함수들
     fetch_fear_greed_latest,                                 # 최신 공포탐욕지수 조회
@@ -561,6 +561,71 @@ def precompute_ai_summary(lang: str, region: str) -> bool:
     return True
 
 
+# ── 옵션 C: 백그라운드 LLM 워커 ────────────────────────────────────────────
+# 사용자 요청이 cache miss 시 즉시 fallback 응답 + 여기서 LLM 비동기 실행해
+# 다음 요청용 캐시(_ai_cache + app_cache 또는 ai_explain_cache) 만 채운다.
+# 한 키당 동시 실행 1건만 허용 (중복 LLM 호출·중복 비용 차단).
+_bg_running: set[str] = set()
+_bg_lock = threading.Lock()
+
+
+def _bg_generate_summary(lang: str, region: str) -> None:
+    """백그라운드: 시황 AI 요약 LLM 생성 → app_cache + in-memory 적재."""
+    bg_key = f'summary:{lang}:{region}'
+    with _bg_lock:
+        if bg_key in _bg_running:
+            return
+        _bg_running.add(bg_key)
+    try:
+        out = _generate_ai_summary(lang, region)
+        if out and out.get('summary'):
+            try:
+                upsert_app_cache(_ai_summary_cache_key(lang, region),
+                                 {**out, 'cached': True, 'source': 'app_cache'})
+            except Exception as e:
+                print(f'[AI Summary BG] cache write failed: {e}')
+            with _ai_lock:
+                _ai_cache[_cache_key(lang, region)] = {
+                    'summary': out['summary'],
+                    'generated_at': out.get('generated_at'),
+                    'expires': time.time() + _AI_TTL,
+                }
+            print(f'[AI Summary BG] {lang}/{region} 생성·캐시 완료')
+    except Exception as e:
+        print(f'[AI Summary BG] {lang}/{region} 실패: {e}')
+    finally:
+        with _bg_lock:
+            _bg_running.discard(bg_key)
+
+
+def _bg_generate_explain(tab: str, lang: str, region: str) -> None:
+    """백그라운드: 5탭 AI 해설 LLM 생성 → ai_explain_cache + in-memory 적재."""
+    bg_key = f'explain:{tab}:{lang}:{region}'
+    with _bg_lock:
+        if bg_key in _bg_running:
+            return
+        _bg_running.add(bg_key)
+    try:
+        out = _generate_ai_explain(tab, lang, region)
+        if out and out.get('explanation'):
+            try:
+                upsert_ai_explain(tab, lang, region, out['explanation'])
+            except Exception as e:
+                print(f'[AI Explain BG {tab}/{lang}/{region}] cache write failed: {e}')
+            cache_key = f'explain_{tab}_{lang}_{region}'
+            with _explain_lock:
+                _explain_cache[cache_key] = {
+                    'text': out['explanation'],
+                    'expires': time.time() + _EXPLAIN_TTL,
+                }
+            print(f'[AI Explain BG {tab}/{lang}/{region}] 생성·캐시 완료')
+    except Exception as e:
+        print(f'[AI Explain BG {tab}/{lang}/{region}] 실패: {e}')
+    finally:
+        with _bg_lock:
+            _bg_running.discard(bg_key)
+
+
 @router.get('/home-headline')
 def get_home_headline(lang: str = Query('ko'), region: str = Query('us')):
     """홈 화면 상단 — 5개 탭 지표 비교 후 1~2문장 헤드라인.
@@ -600,16 +665,24 @@ def get_home_headline(lang: str = Query('ko'), region: str = Query('us')):
 
 
 @router.get('/ai-summary')                                   # GET /api/market-summary/ai-summary
-def get_ai_summary(lang: str = Query('ko'), region: str = Query('us')):
+def get_ai_summary(background_tasks: BackgroundTasks,
+                   lang: str = Query('ko'),
+                   region: str = Query('us')):
+    """옵션 C: cache miss 시 즉시 fallback 응답 + 백그라운드에서 LLM 생성하여 다음 요청용
+    캐시(app_cache + in-memory) 만 채운다. 사용자는 첫 요청도 ~1초 내 응답받고, 새로고침
+    또는 다음 진입 시 LLM 결과 노출. 동일 키 동시 실행은 _bg_running 으로 차단.
+    """
     lang = lang if lang in ('ko', 'en') else 'ko'
     region = _norm_region(region)
     err = _ERR_MSGS[lang]
     key = _cache_key(lang, region)
     now = time.time()
+    # 1차: in-memory cache hit
     with _ai_lock:
         c = _ai_cache.get(key)
         if c and c['summary'] and now < c['expires']:
             return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
+    # 2차: DB (app_cache) hit
     try:
         payload = fetch_app_cache(_ai_summary_cache_key(lang, region))
         if payload and payload.get('summary'):
@@ -620,26 +693,17 @@ def get_ai_summary(lang: str = Query('ko'), region: str = Query('us')):
                     'expires': now + _AI_TTL,
                 }
             return {**payload, 'cached': True, 'source': 'app_cache'}
-        out = _generate_ai_summary(lang, region)
-        if out and out.get('summary'):
-            payload = {**out, 'cached': False, 'source': 'generated'}
-            try:
-                upsert_app_cache(_ai_summary_cache_key(lang, region), {**out, 'cached': True, 'source': 'app_cache'})
-            except Exception as e:
-                print(f'[AI Summary] cache write failed: {e}')
-            with _ai_lock:
-                _ai_cache[key] = {
-                    'summary': out['summary'],
-                    'generated_at': out.get('generated_at'),
-                    'expires': now + _AI_TTL,
-                }
-            return payload
-        fallback = _fallback_ai_summary(lang, region)
-        return {'summary': fallback, 'generated_at': _kst_now_str(), 'cached': False, 'source': 'fallback'}
     except Exception as e:
-        print(f'[AI Summary] error: {e}')
+        print(f'[AI Summary] DB read 실패 (계속 진행): {e}')
+    # 3차: cache miss → 즉시 fallback 응답 + 백그라운드 LLM 생성 (다음 요청용 캐시)
+    try:
         fallback = _fallback_ai_summary(lang, region)
-        return {'summary': fallback or err['fail'], 'generated_at': _kst_now_str(), 'cached': False, 'source': 'fallback'}
+    except Exception as e:
+        print(f'[AI Summary] fallback error: {e}')
+        fallback = err.get('fail') or '현재 지표 기준으로 시장 상황을 점검 중입니다.'
+    background_tasks.add_task(_bg_generate_summary, lang, region)
+    return {'summary': fallback, 'generated_at': _kst_now_str(),
+            'cached': False, 'source': 'fallback'}
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1393,12 +1457,15 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
 
 
 @router.get('/ai-explain')                                   # GET /api/market-summary/ai-explain
-def get_ai_explain(tab: str = Query(..., description='fundamental, signal, sector, sector-val, sector-mom'),
+def get_ai_explain(background_tasks: BackgroundTasks,
+                   tab: str = Query(..., description='fundamental, signal, sector, sector-val, sector-mom'),
                    lang: str = Query('ko'),
                    region: str = Query('us')):
-    """2-tier 즉시 응답: in-memory cache → DB (ai_explain_cache).
-
-    스케줄러가 미리 생성해 DB 적재한다. 캐시가 비면 사용자 요청에서는 생성하지 않는다.
+    """옵션 C 적용:
+    1) in-memory cache hit → 즉시 응답.
+    2) DB (ai_explain_cache) hit → 즉시 응답 + in-memory 채움.
+    3) cache miss → *fallback 즉시 응답* + 백그라운드에서 LLM 생성하여 다음 요청용 캐시 적재.
+    동일 (tab,lang,region) 동시 LLM 실행은 _bg_running 으로 차단.
     """
     lang = lang if lang in ('ko', 'en') else 'ko'
     region = _norm_region(region)
@@ -1435,37 +1502,11 @@ def get_ai_explain(tab: str = Query(..., description='fundamental, signal, secto
             'generated_at': row.get('generated_at'),
         }
 
-    # Cache miss: generate on demand, then fall back to a rule-based explanation.
-    out = None
-    try:
-        out = _generate_ai_explain(tab, lang, region)
-    except Exception as e:
-        print(f'[AI Explain {tab}/{lang}/{region}] on-demand generation failed: {e}')
-
-    if out and out.get('explanation'):
-        try:
-            upsert_ai_explain(tab, lang, region, out['explanation'])
-        except Exception as e:
-            print(f'[AI Explain {tab}/{lang}/{region}] cache write failed: {e}')
-        with _explain_lock:
-            _explain_cache[cache_key] = {
-                'text': out['explanation'],
-                'expires': now + _EXPLAIN_TTL,
-            }
-        return {
-            'explanation': out['explanation'],
-            'tab': tab,
-            'cached': False,
-            'generated_at': out.get('generated_at'),
-            'source': 'generated',
-        }
-
+    # 3차: cache miss → fallback 즉시 응답 + 백그라운드 LLM 생성 등록 (다음 요청용 캐시).
+    # fallback 은 _explain_cache 에 *짧게* 저장하지 않는다 — 다음 요청은 BG 결과나 DB 를
+    # 다시 확인하도록 두어, BG 가 끝나는 즉시 LLM 결과로 자연 교체되게 함.
     fallback = _fallback_ai_explain(tab, lang, region)
-    with _explain_lock:
-        _explain_cache[cache_key] = {
-            'text': fallback,
-            'expires': now + _EXPLAIN_TTL,
-        }
+    background_tasks.add_task(_bg_generate_explain, tab, lang, region)
     return {
         'explanation': fallback or err['no_data'],
         'tab': tab,
