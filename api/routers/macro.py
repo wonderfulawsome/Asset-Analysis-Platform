@@ -287,7 +287,13 @@ def get_valuation_signal(region: str = Query('us')):
     interpretation = today.get('interpretation')
     baseline_snapshot = today.get('baseline_snapshot')
 
-    # 안전망: 사전 적재 안 됐으면 on-the-fly (느림 — 스케줄러 정상 동작 시 도달 X)
+    # KR 5-comp 신규 스키마 감지: per_15y/trend 키 없는 옛 스냅샷이면 무효화 → 새로 빌드.
+    # (DB 옛 row 의 baseline_snapshot 은 3-key 스키마라 그대로 두면 frontend 5-comp 표시 안 됨)
+    if region == 'kr' and isinstance(baseline_snapshot, dict):
+        if 'per_15y' not in baseline_snapshot or 'trend' not in baseline_snapshot:
+            baseline_snapshot = None
+
+    # 안전망: 사전 적재 안 됐거나 옛 스키마면 on-the-fly (느림 — 스케줄러 정상 동작 시 도달 X)
     # region 별 분기 — KR 은 valuation_signal_kr.get_kr_baselines, US 는 valuation_signal.get_baselines
     if not interpretation or not baseline_snapshot:
         try:
