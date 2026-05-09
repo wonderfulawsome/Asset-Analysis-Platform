@@ -305,24 +305,32 @@ def _regenerate_in_background(ticker: str):
 @router.get('/similar')
 def get_similar_patterns(
     ticker: str = Query('SPY', description='ETF 티커 (US 심볼 또는 KR 6자리)'),
-    window: int = Query(60, ge=20, le=180, description='매칭 구간 길이 (영업일)'),
+    window: int = Query(60, ge=20, le=252, description='매칭 구간 길이 (영업일)'),
     top_k: int = Query(3, ge=1, le=10, description='반환 매칭 수'),
-    followup: int = Query(30, ge=0, le=120, description='매칭 직후 후속 일수'),
+    followup: int = Query(30, ge=0, le=252, description='매칭 직후 후속 일수'),
+    mode: str = Query('shape', description='shape=모양 매칭 (Pearson 상관) / magnitude=강도 매칭 (누적수익률)'),
 ):
     """오늘의 차트 패턴과 비슷한 과거 구간 top-K + 그 다음 후속 구간.
 
-    Pearson 상관 on z-score 정규화 log-return. KR/US 모두 지원.
-    응답 자체에 자문 가드 disclaimer 포함.
+    mode='shape' (default): 누적 path Pearson 상관 + 방향 필터. 패턴 모양 매칭.
+    mode='magnitude': 누적 수익률 |diff| 기준 + 후속 분포 통계. 강도 매칭.
+
+    KR/US 모두 지원. 응답에 disclaimer 포함.
     """
     if not _is_kr_ticker(ticker):
         ticker = ticker.upper()
     if ticker not in CHART_TICKERS and ticker not in CHART_TICKERS_KR:
         return {'error': 'unsupported ticker'}
+    if mode not in ('shape', 'magnitude'):
+        return {'error': f'unsupported mode: {mode}'}
     try:
+        if mode == 'magnitude':
+            from processor.feature_chart_similarity import find_magnitude_matches
+            return find_magnitude_matches(ticker, window=window, followup=followup, top_k=top_k)
         from processor.feature_chart_similarity import find_similar_patterns
         return find_similar_patterns(ticker, window=window, followup=followup, top_k=top_k)
     except Exception as e:
-        print(f'[Chart] similar 실패: {e}')
+        print(f'[Chart] similar 실패 (mode={mode}): {e}')
         return {'error': 'similarity computation failed'}
 
 

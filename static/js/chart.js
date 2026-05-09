@@ -908,12 +908,32 @@ function renderChartSummary(el, candles) {
 
 let _similarVisible = false;
 let _similarData = null;
+let _similarMode = 'shape';                           // 'shape' | 'magnitude'
 
 function setupPredictButton() {                       // 함수명은 유지 (initChartTab 호출 호환)
   const btn = document.getElementById('predict-toggle-btn');
   if (!btn) return;
   btn.addEventListener('click', () => toggleSimilarPatterns());
-  // legacy 30일 예측 코드는 더 이상 호출되지 않음 (_predictVisible=false 고정).
+
+  // 모드 세그먼트: 모양/강도 토글 — 활성 카드 닫고 모드만 변경.
+  const seg = document.getElementById('similar-mode-seg');
+  if (seg) {
+    seg.addEventListener('click', (e) => {
+      const target = e.target.closest('.similar-mode-btn');
+      if (!target) return;
+      const mode = target.dataset.mode;
+      if (mode !== 'shape' && mode !== 'magnitude') return;
+      if (mode === _similarMode) return;
+      _similarMode = mode;
+      seg.querySelectorAll('.similar-mode-btn').forEach(b => {
+        const on = b.dataset.mode === mode;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+      // 열려있던 결과 닫기 — 모드 바뀌면 이전 결과 무효
+      if (_similarVisible) toggleSimilarPatterns();
+    });
+  }
 }
 
 async function toggleSimilarPatterns() {
@@ -932,7 +952,11 @@ async function toggleSimilarPatterns() {
   btn.disabled = true;
   btn.textContent = t('chart.similarLoading') || '⌛ 유사 패턴 검색 중...';
   try {
-    const url = `/api/chart/similar?ticker=${encodeURIComponent(_chartTicker)}&window=60&top_k=3&followup=30`;
+    // shape: 60일 + 후속 30일 + top 3 / magnitude: 126일 (6개월) + 후속 126일 + top 5
+    const params = _similarMode === 'magnitude'
+      ? '&window=126&top_k=5&followup=126&mode=magnitude'
+      : '&window=60&top_k=3&followup=30&mode=shape';
+    const url = `/api/chart/similar?ticker=${encodeURIComponent(_chartTicker)}${params}`;
     const res = await fetch(url);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
@@ -977,11 +1001,93 @@ function _renderSimilarHost(data) {
     host.innerHTML = `<div style="color:var(--sub);font-size:12px;padding:8px 4px;">유사 패턴이 충분히 발견되지 않았습니다.${dbgTxt}</div>`;
     return;
   }
-  const cards = data.matches.map(m => _buildSimilarCardHtml(m, data.window_days, data.followup_days)).join('');
+  // 강도 매칭 모드: 상단에 후속 분포 통계 박스 추가
+  let summaryHtml = '';
+  if (data.mode === 'magnitude' && data.summary && data.today_window) {
+    summaryHtml = _buildMagnitudeSummaryHtml(data.today_window, data.summary,
+                                             data.window_days, data.followup_days);
+  }
+  const cards = data.matches
+    .map(m => (data.mode === 'magnitude'
+      ? _buildMagnitudeCardHtml(m, data.window_days, data.followup_days)
+      : _buildSimilarCardHtml(m, data.window_days, data.followup_days)))
+    .join('');
   const disc = data.disclaimer
     ? `<div style="font-size:10px;color:var(--sub2);text-align:right;padding:2px 4px;">${data.disclaimer}</div>`
     : '';
-  host.innerHTML = cards + disc;
+  host.innerHTML = summaryHtml + cards + disc;
+}
+
+// ── 강도 매칭: 후속 분포 요약 박스 ──────────────────────────────────
+// 사실 진술만 (자문 가드): "유사 강도 N건 · 후속 평균/중앙값/최저/최고 · 후속 -10% 이상 하락 M건"
+function _buildMagnitudeSummaryHtml(todayWindow, summary, windowDays, followupDays) {
+  const todayPct = todayWindow.total_pct;
+  const todaySign = todayPct >= 0 ? '+' : '';
+  return `
+    <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px 12px;">
+      <div style="grid-column:1/-1;font-size:12px;color:var(--sub);margin-bottom:2px;">
+        <strong style="color:var(--text);">오늘 ${windowDays}일 누적 ${todaySign}${todayPct.toFixed(1)}%</strong>
+        와 비슷한 강도 시점 <strong style="color:var(--text);">${summary.n_matches}건</strong> 의 후속 ${followupDays}일 분포
+      </div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 중앙값</span> <strong style="color:${summary.post_median_pct >= 0 ? 'var(--green)' : 'var(--red)'};">${summary.post_median_pct >= 0 ? '+' : ''}${summary.post_median_pct.toFixed(1)}%</strong></div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 평균</span> <strong style="color:${summary.post_mean_pct >= 0 ? 'var(--green)' : 'var(--red)'};">${summary.post_mean_pct >= 0 ? '+' : ''}${summary.post_mean_pct.toFixed(1)}%</strong></div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 최저</span> <strong style="color:var(--red);">${summary.post_min_pct.toFixed(1)}%</strong></div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 최고</span> <strong style="color:var(--green);">+${summary.post_max_pct.toFixed(1)}%</strong></div>
+      <div style="grid-column:1/-1;font-size:11px;color:var(--sub);">
+        후속 기간 중 ‑10% 이상 낙폭 발생: <strong style="color:var(--text);">${summary.n_drawdown_10pct}건</strong> / ${summary.n_matches}건
+      </div>
+    </div>`;
+}
+
+// ── 강도 매칭 카드: 매칭 구간(실선) + 후속(점선) + 매칭/후속 % 라벨 ─────
+function _buildMagnitudeCardHtml(m, windowDays, followupDays) {
+  const W = 360, H = 120, pad = { l: 32, r: 8, t: 8, b: 18 };
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+  const data = m.data || [];
+  if (data.length < 2) return '';
+  const closes = data.map(d => d.close);
+  const minC = Math.min(...closes);
+  const maxC = Math.max(...closes);
+  const range = (maxC - minC) || 1;
+  const x = i => pad.l + (i / (data.length - 1)) * cW;
+  const y = v => pad.t + (1 - (v - minC) / range) * cH;
+
+  let boundary = data.findIndex(d => d.is_followup);
+  if (boundary < 1) boundary = data.length;
+  const matchPath = data.slice(0, boundary)
+    .map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.close).toFixed(1)}`).join(' ');
+  const followupPath = boundary < data.length
+    ? data.slice(boundary - 1).map((d, i) =>
+        `${i === 0 ? 'M' : 'L'}${x(boundary - 1 + i).toFixed(1)},${y(d.close).toFixed(1)}`
+      ).join(' ')
+    : '';
+  const boundaryX = boundary < data.length ? x(boundary - 1).toFixed(1) : null;
+
+  const matchSign = m.match_total_pct >= 0 ? '+' : '';
+  const postSign = m.post_total_pct >= 0 ? '+' : '';
+  const postColor = m.post_total_pct >= 0 ? 'var(--green)' : 'var(--red)';
+  const ddColor = m.post_max_dd_pct <= -10 ? 'var(--red)' : 'var(--sub)';
+  const yMaxLabel = `<text x="${pad.l - 4}" y="${(pad.t + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--sub2)">${maxC.toFixed(2)}</text>`;
+  const yMinLabel = `<text x="${pad.l - 4}" y="${(H - pad.b).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--sub2)">${minC.toFixed(2)}</text>`;
+
+  return `
+    <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;font-size:12px;flex-wrap:wrap;gap:6px;">
+        <span style="font-weight:700;">#${m.rank} 매칭 ${matchSign}${m.match_total_pct.toFixed(1)}%</span>
+        <span style="color:var(--sub);font-size:11px;">${m.match_start} ~ ${m.match_end}</span>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;height:120px;">
+        ${yMaxLabel}${yMinLabel}
+        ${boundaryX ? `<line x1="${boundaryX}" y1="${pad.t}" x2="${boundaryX}" y2="${(H - pad.b).toFixed(1)}" stroke="rgba(255,140,0,0.45)" stroke-width="1" stroke-dasharray="2,3"/>` : ''}
+        <path d="${matchPath}" fill="none" stroke="var(--text)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+        ${followupPath ? `<path d="${followupPath}" fill="none" stroke="var(--sub)" stroke-width="1.4" stroke-dasharray="3,3" vector-effect="non-scaling-stroke"/>` : ''}
+      </svg>
+      <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:6px;flex-wrap:wrap;gap:4px;">
+        <span><span style="color:var(--sub);">후속 ${followupDays}일</span> <strong style="color:${postColor};">${postSign}${m.post_total_pct.toFixed(1)}%</strong></span>
+        <span><span style="color:var(--sub);">후속 최대 낙폭</span> <strong style="color:${ddColor};">${m.post_max_dd_pct.toFixed(1)}%</strong></span>
+      </div>
+    </div>`;
 }
 
 function _buildSimilarCardHtml(m, windowDays, followupDays) {

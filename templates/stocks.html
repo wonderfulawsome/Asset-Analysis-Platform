@@ -29,7 +29,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=120">
+  <link rel="stylesheet" href="/static/css/main.css?v=123">
   <!-- Tailwind CDN 제거: preflight 가 body 의 margin:0 auto 를 덮어써 홈 뷰가 좌측 정렬됨.
        홈 뷰는 home.css 자체 grid 로 처리하므로 Tailwind 없이도 동작 -->
   <link rel="stylesheet" href="/static/css/home.css?v=14">
@@ -99,7 +99,6 @@
         <button id="holdings-back" class="holdings-back-btn" data-i18n="holdings.back">← 뒤로</button>
         <div class="holdings-top-actions">
           <button id="setup-theme" class="setup-toggle-btn" aria-label="Toggle dark mode"></button>
-          <button id="setup-lang" class="setup-toggle-btn setup-lang-btn">EN</button>
         </div>
       </div>
       <div class="holdings-header" data-i18n="holdings.title">보유 종목 설정</div>
@@ -189,7 +188,6 @@
     </div>
     <div class="header-right">
       <button id="btn-theme" class="theme-btn" aria-label="Toggle dark mode"></button>
-      <button id="btn-lang" class="lang-btn">EN</button>
       <div id="btn-edit-holdings" class="settings-btn">⚙️</div>
     </div>
   </header>
@@ -484,8 +482,12 @@
         <div class="chart-stats-grid"><div class="chart-stat-card"><div class="skeleton" style="height:14px;width:50%;border-radius:4px;margin:4px auto"></div></div><div class="chart-stat-card"><div class="skeleton" style="height:14px;width:50%;border-radius:4px;margin:4px auto"></div></div><div class="chart-stat-card"><div class="skeleton" style="height:14px;width:50%;border-radius:4px;margin:4px auto"></div></div></div>
       </div>
 
-      <!-- 30일 예측 버튼 -->
+      <!-- 유사 과거 패턴 (모양 / 강도 두 모드) -->
       <div class="fade-target" style="margin-top:10px;">
+        <div id="similar-mode-seg" class="similar-mode-seg" role="tablist" aria-label="매칭 모드">
+          <button type="button" class="similar-mode-btn active" data-mode="shape" role="tab" aria-selected="true">모양 매칭</button>
+          <button type="button" class="similar-mode-btn" data-mode="magnitude" role="tab" aria-selected="false">강도 매칭</button>
+        </div>
         <button id="predict-toggle-btn" class="predict-btn-wide" data-i18n="chart.similarBtn">↗ 유사 과거 패턴 보기 →</button>
         <div id="predict-legend" class="predict-legend" style="margin-top:8px;"></div>
       </div>
@@ -629,11 +631,12 @@
     // 날짜 포맷 적용
     var _dateEl = document.getElementById('app-date');
     if (_dateEl) _dateEl.textContent = formatDate(new Date());
-    // 언어 전환 버튼 이벤트
-    document.getElementById('btn-lang').addEventListener('click', switchLang);
-    document.getElementById('setup-lang').addEventListener('click', switchLang);
+    // 언어 전환 버튼 제거됨 — 한국어 단일 언어로 운영. switchLang 함수와
+    // i18n.js 의 lang 전환 로직 자체는 보존 (추후 복귀 대비), 진입점만 제거.
+    // localStorage('lang') 가 'en' 으로 남아 있을 수 있어 강제로 'ko' 동기화.
+    try { if (localStorage.getItem('lang') !== 'ko') localStorage.setItem('lang', 'ko'); } catch (e) {}
   </script>
-  <script src="/static/js/chart.js?v=29"></script>
+  <script src="/static/js/chart.js?v=30"></script>
   <script src="/static/js/main.js?v=136"></script>
   <script src="/static/js/sector.js?v=9"></script>
   <script src="/static/js/home.js?v=44"></script>
