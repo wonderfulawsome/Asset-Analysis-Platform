@@ -1065,6 +1065,7 @@ function _buildMagnitudeCardHtml(m, windowDays, followupDays) {
   const boundaryX = boundary < data.length ? x(boundary - 1).toFixed(1) : null;
 
   const matchSign = m.match_total_pct >= 0 ? '+' : '';
+  const matchColor = m.match_total_pct >= 0 ? 'var(--green)' : 'var(--red)';
   const postSign = m.post_total_pct >= 0 ? '+' : '';
   const postColor = m.post_total_pct >= 0 ? 'var(--green)' : 'var(--red)';
   const ddColor = m.post_max_dd_pct <= -10 ? 'var(--red)' : 'var(--sub)';
@@ -1074,7 +1075,7 @@ function _buildMagnitudeCardHtml(m, windowDays, followupDays) {
   return `
     <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;font-size:12px;flex-wrap:wrap;gap:6px;">
-        <span style="font-weight:700;">#${m.rank} 매칭 ${matchSign}${m.match_total_pct.toFixed(1)}%</span>
+        <span style="font-weight:700;">#${m.rank} <span style="color:var(--sub);font-weight:600;">지난 6개월 수익률</span> <span style="color:${matchColor};">${matchSign}${m.match_total_pct.toFixed(1)}%</span></span>
         <span style="color:var(--sub);font-size:11px;">${m.match_start} ~ ${m.match_end}</span>
       </div>
       <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;height:120px;">
