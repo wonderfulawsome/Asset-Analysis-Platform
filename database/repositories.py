@@ -683,6 +683,69 @@ def fetch_user_stats(date: str, year_month: str) -> dict:
 ############ Supabase DB의 각 테이블에 데이터를 저장(upsert)하고 조회(fetch)하는 함수들을 모아놓은 파일
 
 
+# ── chart_close_cache ──────────────────────────────────────────
+# AI 차트 유사 패턴 매칭용 ticker 별 종가 시계열 캐시.
+# scheduler 가 매일 1회 yfinance/pykrx 로 fetch → 본 테이블 upsert.
+# 사용자 클릭 시 endpoint 가 fetch_chart_closes() 로 DB select → 응답 가속.
+# 마이그레이션: migrations/2026_05_09_add_chart_close_cache.sql
+
+def upsert_chart_closes(ticker: str, dated_closes: list[tuple]) -> int:
+    """ticker 의 (date_str, close_float) 리스트를 chart_close_cache 에 upsert.
+
+    Args:
+        ticker: 'SPY' / '069500' 등
+        dated_closes: [(YYYY-MM-DD, float), ...]
+    Returns: 적재된 행 수 (실패 시 0).
+    """
+    if not dated_closes:
+        return 0
+    records = [
+        {'ticker': ticker, 'date': d, 'close': float(c)}
+        for d, c in dated_closes
+        if c is not None and not (isinstance(c, float) and (c != c))  # NaN 제외
+    ]
+    if not records:
+        return 0
+    try:
+        client = get_client()
+        # Supabase upsert 는 PK 충돌 시 update — chunk 로 쪼개서 안정성 확보 (한 번에 너무 많으면 timeout)
+        n = 0
+        chunk = 500
+        for i in range(0, len(records), chunk):
+            client.table('chart_close_cache') \
+                .upsert(records[i:i + chunk], on_conflict='ticker,date') \
+                .execute()
+            n += len(records[i:i + chunk])
+        return n
+    except Exception as e:
+        print(f'[DB] chart_close_cache upsert 실패 ({ticker}): {e}')
+        return 0
+
+
+def fetch_chart_closes(ticker: str, days: int = 2520) -> list[dict]:
+    """ticker 의 최근 days 거래일 종가 (오래된 → 최신 순).
+
+    Returns: [{'date': 'YYYY-MM-DD', 'close': float}, ...]. 실패·미적재 시 [].
+    """
+    client = get_client()
+    try:
+        # PostgREST: order by date DESC + limit, 그 후 파이썬에서 reverse
+        resp = (
+            client.table('chart_close_cache')
+            .select('date, close')
+            .eq('ticker', ticker)
+            .order('date', desc=True)
+            .limit(days)
+            .execute()
+        )
+        rows = resp.data or []
+        # 최신 → 오래된 순으로 받았으므로 뒤집어 반환 (오래된 → 최신)
+        return list(reversed(rows))
+    except Exception as e:
+        print(f'[DB] chart_close_cache 조회 실패 ({ticker}): {e}')
+        return []
+
+
 # ── page_view ──────────────────────────────────────────
 # 사용자 페이지·탭 단위 조회 추적. user_visit 와는 별개 (user_visit 는 일자별 1행, 본 테이블은
 # 페이지 진입/탭 전환/이탈마다 1행 누적). 마이그레이션: 2026_05_09_add_page_view.sql

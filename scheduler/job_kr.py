@@ -251,6 +251,20 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] ai-explain precompute 실패: {e}')
             traceback.print_exc()
 
+        # 12) AI 차트 유사 패턴 매칭용 KR ETF close 시계열 적재 (chart_close_cache).
+        # 매일 1회 pykrx → DB upsert. 사용자 클릭 시 응답 ~200ms.
+        try:
+            print('[KR-Pipeline] AI 차트 유사 패턴용 close 시계열 적재 (KR 12개)...')
+            from processor.feature_chart_similarity import precompute_chart_closes
+            from api.routers.chart import CHART_TICKERS_KR as _CHART_KR
+            result = precompute_chart_closes(list(_CHART_KR))
+            print(f"[KR-Pipeline] chart_close_cache OK={len(result['ok'])} FAIL={len(result['fail'])} rows={result['total_rows']}")
+            if result['fail']:
+                print(f"[KR-Pipeline] 실패 ticker: {result['fail']}")
+        except Exception as e:
+            print(f'[KR-Pipeline] chart_close_cache precompute 실패: {e}')
+            traceback.print_exc()
+
     except Exception as e:
         print(f'[KR-Pipeline] 전체 실패: {e}')
         traceback.print_exc()

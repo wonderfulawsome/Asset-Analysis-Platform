@@ -859,6 +859,21 @@ def run_pipeline(light: bool = False) -> None:
         print(f'[Step 12] AI 해설 precompute 실패, 건너뜀: {e}')
         traceback.print_exc()
 
+    # Step 13: AI 차트 유사 패턴 매칭용 close 시계열 적재 (chart_close_cache).
+    # 매일 1회 미리 fetch 해두면 사용자 클릭 시 외부 API 호출 없이 DB select 만 → 응답 ~200ms.
+    # US ticker 만 여기서 처리 (KR 은 job_kr 에서).
+    try:
+        print('\n[Step 13] AI 차트 유사 패턴용 close 시계열 적재 (US 16개)...')
+        from processor.feature_chart_similarity import precompute_chart_closes
+        from api.routers.chart import CHART_TICKERS as _CHART_US
+        result = precompute_chart_closes(list(_CHART_US))
+        print(f"[Step 13] OK={len(result['ok'])} FAIL={len(result['fail'])} rows={result['total_rows']}")
+        if result['fail']:
+            print(f"[Step 13] 실패 ticker: {result['fail']}")
+    except Exception as e:
+        print(f'[Step 13] chart_close_cache precompute 실패, 건너뜀: {e}')
+        traceback.print_exc()
+
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')
     print(f'[Pipeline-{mode}] 완료 (소요: {elapsed}초)')

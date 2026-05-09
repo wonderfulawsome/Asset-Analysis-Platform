@@ -4,13 +4,56 @@
 유사도: z-score 정규화한 log-return 의 Pearson 상관.
 
 자문 가드: 응답에 면책 문구 포함. 호출 측 UI 도 "과거 관찰일 뿐 미래 예측 X" 노출 필수.
+
+데이터 source 우선순위 (응답 가속용):
+  1) Supabase chart_close_cache (scheduler 가 매일 적재) — DB select ~50~150ms
+  2) in-memory LRU 캐시 (TTL ~6h) — 첫 ticker fetch 후 같은 프로세스 안에서 즉시 hit
+  3) yfinance / pykrx 외부 API (1~3s) — DB·메모리 모두 miss 시 폴백
 """
 import datetime
+import threading
+import time
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
+
+# in-memory 캐시 — (ticker, fetched_ts) 별 close pd.Series 저장.
+# TTL 6시간 — 장중 갱신 의미 적고 매번 fetch 비용이 큼.
+_close_cache: dict = {}
+_close_cache_lock = threading.Lock()
+_CLOSE_CACHE_TTL_SEC = 6 * 60 * 60
+
+def precompute_chart_closes(tickers: list[str]) -> dict:
+    """scheduler 용 — 주어진 ticker 목록의 close 시계열을 외부 API 로 fetch 후
+    chart_close_cache 테이블에 upsert. in-memory 캐시도 함께 채움.
+
+    Returns: {'ok': [...], 'fail': [...], 'total_rows': int}
+    """
+    from database.repositories import upsert_chart_closes
+    ok, fail = [], []
+    total_rows = 0
+    for t in tickers:
+        try:
+            series = _fetch_close_external(t)
+            if series.empty or len(series) < 100:
+                fail.append(t)
+                continue
+            dated = [(idx.strftime('%Y-%m-%d'), float(v))
+                     for idx, v in series.items() if v == v]  # NaN 제외
+            n = upsert_chart_closes(t, dated)
+            total_rows += n
+            ok.append(t)
+            # in-memory 도 채움
+            with _close_cache_lock:
+                _close_cache[t] = {'series': series, 'ts': time.time()}
+            print(f'[similarity precompute] {t}: {len(dated)} rows upsert 완료')
+        except Exception as e:
+            print(f'[similarity precompute] {t} 실패: {e}')
+            fail.append(t)
+    return {'ok': ok, 'fail': fail, 'total_rows': total_rows}
+
 
 DEFAULT_WINDOW = 60                # 매칭에 쓸 구간 길이 (영업일)
 DEFAULT_FOLLOWUP = 30              # 매칭 직후 후속 구간 길이
@@ -25,8 +68,11 @@ def _is_kr_ticker(ticker: str) -> bool:
     return ticker.isdigit() and len(ticker) == 6
 
 
-def _fetch_close(ticker: str) -> pd.Series:
-    """KR (pykrx → yfinance(.KS) 폴백) / US (yfinance) 종가 시계열. 7년 이상."""
+def _fetch_close_external(ticker: str) -> pd.Series:
+    """외부 API 직접 호출 (yfinance/pykrx). DB·메모리 캐시 모두 miss 시 폴백 + scheduler 의 적재 source.
+
+    KR (pykrx 7년 → yfinance(.KS) 폴백) / US (yfinance 10년).
+    """
     if _is_kr_ticker(ticker):
         try:
             from pykrx import stock
@@ -63,6 +109,53 @@ def _fetch_close(ticker: str) -> pd.Series:
     except Exception as e:
         print(f'[similarity US] {ticker} 실패: {e}')
         return pd.Series(dtype=float)
+
+
+def _fetch_close_from_db(ticker: str) -> pd.Series:
+    """Supabase chart_close_cache 에서 ticker 의 close 시계열 조회. 미적재면 빈 Series."""
+    try:
+        from database.repositories import fetch_chart_closes
+        rows = fetch_chart_closes(ticker, days=2520)
+        if not rows:
+            return pd.Series(dtype=float)
+        idx = pd.to_datetime([r['date'] for r in rows])
+        vals = [float(r['close']) for r in rows]
+        series = pd.Series(vals, index=idx, name='Close')
+        return series
+    except Exception as e:
+        print(f'[similarity] {ticker} DB cache 조회 실패: {e}')
+        return pd.Series(dtype=float)
+
+
+def _fetch_close(ticker: str) -> pd.Series:
+    """3-tier fetch: in-memory cache → DB cache → 외부 API.
+
+    1차: _close_cache 메모리 dict, TTL 6h. 같은 프로세스에서 같은 ticker 재요청 즉시.
+    2차: chart_close_cache 테이블 (scheduler 적재). DB select ~100ms.
+    3차: yfinance/pykrx (1~3s). DB 미적재 ticker / DB 장애 시 폴백.
+
+    어느 단계든 성공하면 in-memory 캐시 채움 → 다음 요청은 즉시.
+    """
+    now = time.time()
+    # 1차: in-memory
+    with _close_cache_lock:
+        cached = _close_cache.get(ticker)
+        if cached and (now - cached['ts']) < _CLOSE_CACHE_TTL_SEC:
+            return cached['series']
+
+    # 2차: DB
+    series = _fetch_close_from_db(ticker)
+    if not series.empty and len(series) > 100:
+        with _close_cache_lock:
+            _close_cache[ticker] = {'series': series, 'ts': now}
+        return series
+
+    # 3차: 외부 API
+    series = _fetch_close_external(ticker)
+    if not series.empty:
+        with _close_cache_lock:
+            _close_cache[ticker] = {'series': series, 'ts': now}
+    return series
 
 
 def _cumulative_log_returns(close_window: pd.Series) -> np.ndarray:
