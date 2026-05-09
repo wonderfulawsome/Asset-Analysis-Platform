@@ -901,10 +901,144 @@ function renderChartSummary(el, candles) {
 }
 
 // ═════════════════════════════════
-// ── 30일 예측 (캔들차트 연장) ──
+// ── 유사 과거 패턴 매칭 ──
+// 오늘의 60일 차트와 가장 비슷했던 과거 60일 구간 top-3 + 후속 30일.
+// 같은 #predict-toggle-btn 엘리먼트를 재사용 (id/CSS 는 그대로, 동작만 교체).
 // ═════════════════════════════════
 
-function setupPredictButton() {
+let _similarVisible = false;
+let _similarData = null;
+
+function setupPredictButton() {                       // 함수명은 유지 (initChartTab 호출 호환)
+  const btn = document.getElementById('predict-toggle-btn');
+  if (!btn) return;
+  btn.addEventListener('click', () => toggleSimilarPatterns());
+  // legacy 30일 예측 코드는 더 이상 호출되지 않음 (_predictVisible=false 고정).
+}
+
+async function toggleSimilarPatterns() {
+  const btn = document.getElementById('predict-toggle-btn');
+  if (!btn) return;
+  if (_similarVisible) {
+    _similarVisible = false;
+    _similarData = null;
+    btn.classList.remove('active');
+    _renderSimilarHost(null);
+    btn.textContent = t('chart.similarBtn') || '↗ 유사 과거 패턴 보기 →';
+    return;
+  }
+  _similarVisible = true;
+  btn.classList.add('active');
+  btn.disabled = true;
+  btn.textContent = t('chart.similarLoading') || '⌛ 유사 패턴 검색 중...';
+  try {
+    const url = `/api/chart/similar?ticker=${encodeURIComponent(_chartTicker)}&window=60&top_k=3&followup=30`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _similarData = data;
+    _renderSimilarHost(data);
+  } catch (e) {
+    console.error('[similar] fail', e);
+    _similarVisible = false;
+    btn.classList.remove('active');
+    _renderSimilarHost({ error: String(e && e.message || e) });
+  } finally {
+    btn.disabled = false;
+    btn.textContent = _similarVisible
+      ? (t('chart.similarClose') || '유사 패턴 닫기')
+      : (t('chart.similarBtn') || '↗ 유사 과거 패턴 보기 →');
+  }
+}
+
+function _renderSimilarHost(data) {
+  // host: #predict-toggle-btn 의 부모(.fade-target) 안에 #similar-cards-host 1개.
+  const wrap = document.getElementById('predict-toggle-btn')?.parentElement;
+  if (!wrap) return;
+  let host = document.getElementById('similar-cards-host');
+  if (!host) {
+    host = document.createElement('div');
+    host.id = 'similar-cards-host';
+    host.style.cssText = 'margin-top:14px;display:flex;flex-direction:column;gap:10px;';
+    wrap.appendChild(host);
+  }
+  if (!data) { host.innerHTML = ''; return; }
+  if (data.error) {
+    host.innerHTML = `<div style="color:var(--sub);font-size:12px;padding:8px 4px;">유사 패턴 검색 실패: ${data.error}</div>`;
+    return;
+  }
+  if (!data.matches || data.matches.length === 0) {
+    const dbg = data.debug || {};
+    const dbgTxt = Object.keys(dbg).length
+      ? `<div style="color:var(--sub2);font-size:10px;font-family:var(--mono);margin-top:6px;">${
+          Object.entries(dbg).map(([k, v]) => `${k}=${v}`).join(' · ')
+        }</div>`
+      : '';
+    host.innerHTML = `<div style="color:var(--sub);font-size:12px;padding:8px 4px;">유사 패턴이 충분히 발견되지 않았습니다.${dbgTxt}</div>`;
+    return;
+  }
+  const cards = data.matches.map(m => _buildSimilarCardHtml(m, data.window_days, data.followup_days)).join('');
+  const disc = data.disclaimer
+    ? `<div style="font-size:10px;color:var(--sub2);text-align:right;padding:2px 4px;">${data.disclaimer}</div>`
+    : '';
+  host.innerHTML = cards + disc;
+}
+
+function _buildSimilarCardHtml(m, windowDays, followupDays) {
+  // 미니 SVG 차트: 매칭 구간(실선) + 후속 구간(점선) + 경계 수직선.
+  const W = 360, H = 120, pad = { l: 32, r: 8, t: 8, b: 18 };
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+  const data = m.data || [];
+  if (data.length < 2) return '';
+  const closes = data.map(d => d.close);
+  const minC = Math.min(...closes);
+  const maxC = Math.max(...closes);
+  const range = (maxC - minC) || 1;
+  const x = i => pad.l + (i / (data.length - 1)) * cW;
+  const y = v => pad.t + (1 - (v - minC) / range) * cH;
+
+  // 매칭 구간(is_followup=false) 끝 인덱스
+  let boundary = data.findIndex(d => d.is_followup);
+  if (boundary < 1) boundary = data.length;  // 후속 없음
+  const matchPath = data.slice(0, boundary)
+    .map((d, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(d.close).toFixed(1)}`).join(' ');
+  const followupPath = boundary < data.length
+    ? data.slice(boundary - 1).map((d, i) =>
+        `${i === 0 ? 'M' : 'L'}${x(boundary - 1 + i).toFixed(1)},${y(d.close).toFixed(1)}`
+      ).join(' ')
+    : '';
+  const boundaryX = boundary < data.length ? x(boundary - 1).toFixed(1) : null;
+
+  const corrPct = (m.similarity * 100).toFixed(1);
+  const followupTag = followupPath
+    ? `<span style="margin-left:6px;color:var(--sub2);">+ ${followupDays}일 후속 (점선)</span>`
+    : '';
+
+  // y 라벨 (min/max)
+  const yMaxLabel = `<text x="${pad.l - 4}" y="${(pad.t + 4).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--sub2)">${maxC.toFixed(2)}</text>`;
+  const yMinLabel = `<text x="${pad.l - 4}" y="${(H - pad.b).toFixed(1)}" text-anchor="end" font-size="9" fill="var(--sub2)">${minC.toFixed(2)}</text>`;
+
+  return `
+    <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;font-size:12px;flex-wrap:wrap;gap:6px;">
+        <span style="font-weight:700;">#${m.rank} 유사도 ${corrPct}%</span>
+        <span style="color:var(--sub);font-size:11px;">${m.match_start} ~ ${m.match_end}${followupTag}</span>
+      </div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" preserveAspectRatio="none" style="display:block;height:120px;">
+        ${yMaxLabel}${yMinLabel}
+        ${boundaryX ? `<line x1="${boundaryX}" y1="${pad.t}" x2="${boundaryX}" y2="${(H - pad.b).toFixed(1)}" stroke="rgba(255,140,0,0.45)" stroke-width="1" stroke-dasharray="2,3"/>` : ''}
+        <path d="${matchPath}" fill="none" stroke="var(--text)" stroke-width="1.6" vector-effect="non-scaling-stroke"/>
+        ${followupPath ? `<path d="${followupPath}" fill="none" stroke="var(--sub)" stroke-width="1.4" stroke-dasharray="3,3" vector-effect="non-scaling-stroke"/>` : ''}
+      </svg>
+    </div>`;
+}
+
+function setupPredictButton__legacy_unused() {
+  // ── 30일 예측 (레거시, 사용 안 함) ──
+  // 사용자 요청으로 패턴 매칭 으로 교체 (2026-05-09).
+  // _predictVisible / _predictData 는 false/null 로 고정 — 캔들차트의 forecast 그리기 분기는
+  // 영구히 미진입. 코드 보존 차원에서 함수만 유지.
   const btn = document.getElementById('predict-toggle-btn');
   if (!btn) return;
   btn.addEventListener('click', async () => {
@@ -1004,11 +1138,11 @@ function hidePredictSection() {
   renderPredictLegend(false);
 }
 
-// 일봉일 때만 예측 버튼 표시 (KR 은 모델 미학습이라 항상 숨김)
+// 일봉일 때만 예측 버튼 표시. US/KR 양쪽 지원 (KR 은 처음 요청 시 모델 학습 트리거).
 function updatePredictBtnVisibility() {
   const wrap = document.getElementById('predict-toggle-btn')?.parentElement;
   if (!wrap) return;
-  const showable = _chartInterval === '1d' && _currentRegion() !== 'kr';
+  const showable = _chartInterval === '1d';
   wrap.style.display = showable ? '' : 'none';
 }
 

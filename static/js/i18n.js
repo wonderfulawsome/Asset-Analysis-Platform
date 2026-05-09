@@ -181,14 +181,17 @@ const I18N = {
     'chart.periodLabel': '6개월',                 // 기간 라벨
     'chart.priceRange': '가격 범위',              // 가격 범위
     'chart.pctChange': '변동',                    // % 변동
-    'chart.predictBtn': '30일 예측',
-    'chart.predictTitle': '30일 주가 예측 (Ensemble)',
+    'chart.predictBtn': '↗ 유사 과거 패턴 보기 →',
+    'chart.similarBtn': '↗ 유사 과거 패턴 보기 →',
+    'chart.similarLoading': '⌛ 유사 패턴 검색 중...',
+    'chart.similarClose': '유사 패턴 닫기',
+    'chart.predictTitle': '유사 과거 패턴 (60일 + 후속 30일)',
     'chart.predictActual': '실제 종가',
-    'chart.predictForecast': '예측',
-    'chart.predictConfidence': '80% 신뢰구간',
-    'chart.predictLoading': '예측 모델 실행 중',
-    'chart.predictError': '예측 데이터를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.',
-    'chart.predictDisclaimer': '본 예측은 통계 모델 기반이며 투자 조언이 아닙니다. 투자 판단의 책임은 본인에게 있습니다.',
+    'chart.predictForecast': '후속',
+    'chart.predictConfidence': '유사도',
+    'chart.predictLoading': '⌛ 유사 패턴 검색 중...',
+    'chart.predictError': '유사 패턴을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.',
+    'chart.predictDisclaimer': '과거 관찰 사실일 뿐 미래 가격을 예측하지 않습니다.',
 
     // ── 상세 페이지 ──
     'detail.back': '← 뒤로',                     // 뒤로
@@ -691,14 +694,17 @@ const I18N = {
     'chart.periodLabel': '6M',
     'chart.priceRange': 'Price Range',
     'chart.pctChange': 'Chg',
-    'chart.predictBtn': '30-Day Forecast',
-    'chart.predictTitle': '30-Day Price Forecast (Ensemble)',
-    'chart.predictActual': 'Actual Close',
-    'chart.predictForecast': 'Forecast',
-    'chart.predictConfidence': '80% Confidence',
-    'chart.predictLoading': 'Running forecast model',
-    'chart.predictError': 'Failed to load prediction. Please try again later.',
-    'chart.predictDisclaimer': 'This forecast is based on statistical models and is not investment advice. You are solely responsible for your investment decisions.',
+    'chart.predictBtn': '↗ Similar Past Patterns →',
+    'chart.similarBtn': '↗ Similar Past Patterns →',
+    'chart.similarLoading': '⌛ Searching similar patterns...',
+    'chart.similarClose': 'Close patterns',
+    'chart.predictTitle': 'Similar Past Patterns (60-day + 30-day follow-up)',
+    'chart.predictActual': 'Match',
+    'chart.predictForecast': 'Follow-up',
+    'chart.predictConfidence': 'Similarity',
+    'chart.predictLoading': '⌛ Searching similar patterns...',
+    'chart.predictError': 'Failed to load similar patterns. Please try again later.',
+    'chart.predictDisclaimer': 'Past observation only; future prices are not predicted.',
 
     // ── Detail Page ──
     'detail.back': '← Back',
