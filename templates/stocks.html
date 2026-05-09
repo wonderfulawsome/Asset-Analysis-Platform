@@ -29,10 +29,10 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=127">
+  <link rel="stylesheet" href="/static/css/main.css?v=128">
   <!-- Tailwind CDN 제거: preflight 가 body 의 margin:0 auto 를 덮어써 홈 뷰가 좌측 정렬됨.
        홈 뷰는 home.css 자체 grid 로 처리하므로 Tailwind 없이도 동작 -->
-  <link rel="stylesheet" href="/static/css/home.css?v=16">
+  <link rel="stylesheet" href="/static/css/home.css?v=17">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){var t=localStorage.getItem('theme');if(!t){t='dark';localStorage.setItem('theme','dark');}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
@@ -243,51 +243,77 @@
       <div id="home-ai-meta" class="home-ai-meta"></div>
     </div>
 
-    <!-- 8개 탐색 타일 -->
-    <div class="home-tiles-label">탐색</div>
-    <div class="home-tiles">
-      <button class="home-tile" data-tile="ai-chart">
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="11" width="3" height="7" rx="0.5"/><rect x="10.5" y="7" width="3" height="11" rx="0.5"/><rect x="16" y="13" width="3" height="5" rx="0.5"/><path d="M5 9 L10 5 L14 8 L19 4"/></svg></span>
-        <span class="ht-title">AI차트</span>
-        <span class="ht-sub">AI 가격 예측 차트</span>
+    <!-- 주요 신호 — 행 리스트 (Coinbase Watchlist 패턴: 아이콘 좌측, 제목/부제 가운데, 화살표 우측) -->
+    <div class="home-section-label">주요 신호</div>
+    <div class="home-rows">
+      <button class="home-tile home-row" data-tile="ai-chart">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="11" width="3" height="7" rx="0.5"/><rect x="10.5" y="7" width="3" height="11" rx="0.5"/><rect x="16" y="13" width="3" height="5" rx="0.5"/><path d="M5 9 L10 5 L14 8 L19 4"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title">AI차트</span>
+          <span class="hr-sub">AI 가격 예측 차트</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
-      <button class="home-tile" data-tile="market">
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H7 L9 6 L12 18 L14 9 L16 13 L18 12 H21"/></svg></span>
-        <span class="ht-title">시황</span>
-        <span class="ht-sub">심리·요약·보유</span>
+      <button class="home-tile home-row" data-tile="market">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H7 L9 6 L12 18 L14 9 L16 13 L18 12 H21"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title">시황</span>
+          <span class="hr-sub">심리·요약·보유</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
-      <button class="home-tile" data-tile="fundamental">
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="3" height="14" rx="0.5"/><rect x="9" y="9" width="3" height="11" rx="0.5"/><rect x="14" y="12" width="3" height="8" rx="0.5"/><rect x="19" y="15" width="2" height="5" rx="0.5"/></svg></span>
-        <span class="ht-title">펀더멘털</span>
-        <span class="ht-sub">Noise vs Signal</span>
+      <button class="home-tile home-row" data-tile="fundamental">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="3" height="14" rx="0.5"/><rect x="9" y="9" width="3" height="11" rx="0.5"/><rect x="14" y="12" width="3" height="8" rx="0.5"/><rect x="19" y="15" width="2" height="5" rx="0.5"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title">펀더멘털</span>
+          <span class="hr-sub">Noise vs Signal</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
-      <button class="home-tile" data-tile="signal">
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" opacity="0.5"/><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3"/></svg></span>
-        <span class="ht-title" data-i18n="tile.anomaly">이상 탐지</span>
-        <span class="ht-sub" data-i18n="tile.anomalySub">과거 대비 이상도</span>
+      <button class="home-tile home-row" data-tile="signal">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" opacity="0.5"/><circle cx="12" cy="12" r="10" opacity="0.25"/><path d="M12 2 v3 M12 19 v3 M2 12 h3 M19 12 h3"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title" data-i18n="tile.anomaly">이상 탐지</span>
+          <span class="hr-sub" data-i18n="tile.anomalySub">과거 대비 이상도</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
-      <button class="home-tile" data-tile="macro">
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12 h18 M12 3 a13 13 0 0 1 0 18 M12 3 a13 13 0 0 0 0 18"/></svg></span>
-        <span class="ht-title">거시경제</span>
-        <span class="ht-sub">FRED · 매크로</span>
+      <button class="home-tile home-row" data-tile="market-valuation">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 A9 9 0 0 1 21 17"/><path d="M12 17 L17 8"/><circle cx="12" cy="17" r="1.4" fill="currentColor"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title">시장 밸류</span>
+          <span class="hr-sub">ERP · 고/저평가</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
-      <button class="home-tile" data-tile="sector-val">
-        <span class="ht-badge">NEW</span>
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 L9 11 L13 14 L21 6"/><path d="M15 6 H21 V12"/></svg></span>
-        <span class="ht-title">섹터 밸류에이션</span>
-        <span class="ht-sub">가격 vs EPS</span>
+    </div>
+
+    <!-- 더 보기 -->
+    <div class="home-section-label">더 보기</div>
+    <div class="home-rows">
+      <button class="home-tile home-row" data-tile="macro">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12 h18 M12 3 a13 13 0 0 1 0 18 M12 3 a13 13 0 0 0 0 18"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title">거시경제</span>
+          <span class="hr-sub">FRED · 매크로</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
-      <button class="home-tile" data-tile="sector-mom">
-        <span class="ht-badge">NEW</span>
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="14" width="3" height="6" rx="0.5"/><rect x="10.5" y="9" width="3" height="11" rx="0.5"/><rect x="16" y="4" width="3" height="16" rx="0.5"/></svg></span>
-        <span class="ht-title">섹터 모멘텀</span>
-        <span class="ht-sub">1주·1개월 수익률 랭킹</span>
+      <button class="home-tile home-row" data-tile="sector-val">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 L9 11 L13 14 L21 6"/><path d="M15 6 H21 V12"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title">섹터 밸류에이션</span>
+          <span class="hr-sub">가격 vs EPS</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
-      <button class="home-tile" data-tile="market-valuation">
-        <span class="ht-badge">NEW</span>
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 A9 9 0 0 1 21 17"/><path d="M12 17 L17 8"/><circle cx="12" cy="17" r="1.4" fill="currentColor"/></svg></span>
-        <span class="ht-title">시장 밸류</span>
-        <span class="ht-sub">ERP · 고/저평가</span>
+      <button class="home-tile home-row" data-tile="sector-mom">
+        <span class="hr-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="14" width="3" height="6" rx="0.5"/><rect x="10.5" y="9" width="3" height="11" rx="0.5"/><rect x="16" y="4" width="3" height="16" rx="0.5"/></svg></span>
+        <span class="hr-text">
+          <span class="hr-title">섹터 모멘텀</span>
+          <span class="hr-sub">1주·1개월 수익률 랭킹</span>
+        </span>
+        <span class="hr-chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>
       </button>
     </div>
   </section>
@@ -315,22 +341,22 @@
       <!-- Portfolio Summary -->
       <div id="portfolio-summary" class="portfolio-card fade-target"></div>
 
-      <!-- Indicators -->
-      <div class="ind-grid fade-target">
-        <div class="ind-card">
-          <div class="ind-label">VIX</div>
-          <div id="vix-val" class="ind-value">--</div>
-          <div id="vix-sub" class="ind-status">--</div>
+      <!-- Indicators — 3개 카드 → 1 strip (Coinbase Watchlist 패턴: 한 컨테이너 내부 hairline 분리) -->
+      <div class="stat-strip fade-target">
+        <div class="stat-cell">
+          <div class="stat-label">VIX</div>
+          <div id="vix-val" class="stat-value">--</div>
+          <div id="vix-sub" class="stat-status">--</div>
         </div>
-        <div class="ind-card">
-          <div class="ind-label">VOL</div>
-          <div id="vol-val" class="ind-value">--</div>
-          <div id="vol-sub" class="ind-status">--</div>
+        <div class="stat-cell">
+          <div class="stat-label">VOL</div>
+          <div id="vol-val" class="stat-value">--</div>
+          <div id="vol-sub" class="stat-status">--</div>
         </div>
-        <div class="ind-card">
-          <div class="ind-label">P/C</div>
-          <div id="pc-val" class="ind-value">--</div>
-          <div id="pc-sub" class="ind-status">--</div>
+        <div class="stat-cell">
+          <div class="stat-label">P/C</div>
+          <div id="pc-val" class="stat-value">--</div>
+          <div id="pc-sub" class="stat-status">--</div>
         </div>
       </div>
 
@@ -642,9 +668,9 @@
     try { if (localStorage.getItem('lang') !== 'ko') localStorage.setItem('lang', 'ko'); } catch (e) {}
   </script>
   <script src="/static/js/chart.js?v=32"></script>
-  <script src="/static/js/main.js?v=136"></script>
+  <script src="/static/js/main.js?v=137"></script>
   <script src="/static/js/sector.js?v=9"></script>
-  <script src="/static/js/home.js?v=46"></script>
+  <script src="/static/js/home.js?v=47"></script>
   <script src="/static/js/anomaly.js?v=13"></script>
   <script src="/static/js/menu.js?v=2"></script>
 </body>

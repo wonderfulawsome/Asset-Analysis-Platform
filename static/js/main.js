@@ -822,13 +822,13 @@ function deltaArrow(cur, prev, invert) {
 // region 별 정적 라벨 텍스트 갱신 — KR 모드면 VIX 카드만 숨김 + P/C → 외국인 라벨
 function _applyRegionMarketLabels() {
   const isKr = _curRegion() === 'kr';
-  // ind-grid 에 kr-2col 클래스 토글 — VIX 숨김 후 남은 2개를 50/50 으로
-  document.querySelectorAll('.ind-grid').forEach(grid => {
+  // stat-strip 에 kr-2col 클래스 토글 — VIX 셀 숨김 후 남은 2개를 50/50 으로
+  document.querySelectorAll('.stat-strip').forEach(grid => {
     grid.classList.toggle('kr-2col', isKr);
   });
-  // VIX 카드 — KR 모드에서 숨김
-  document.querySelectorAll('.ind-card').forEach(card => {
-    const lab = card.querySelector('.ind-label');
+  // VIX 셀 — KR 모드에서 숨김
+  document.querySelectorAll('.stat-cell').forEach(card => {
+    const lab = card.querySelector('.stat-label');
     if (!lab) return;
     const txt = lab.textContent.trim();
     if (txt === 'VIX' || txt === 'VKOSPI') {
@@ -836,7 +836,7 @@ function _applyRegionMarketLabels() {
     }
   });
   // P/C → 외국인 순매수 라벨
-  document.querySelectorAll('.ind-card .ind-label').forEach(el => {
+  document.querySelectorAll('.stat-cell .stat-label').forEach(el => {
     const txt = el.textContent.trim();
     if (txt === 'P/C') el.textContent = isKr ? '외국인 순매수' : 'P/C';
     if (txt === '외국인 순매수' && !isKr) el.textContent = 'P/C';
