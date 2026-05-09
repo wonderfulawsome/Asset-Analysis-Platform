@@ -495,6 +495,100 @@ def get_sgg_overview(ym: str = Query(default='', description='YYYYMM, 미지정 
 
 
 # ─────────────────────────────────────────────────────────
+# /emd-overview — 행정동(법정동) 단위 변화율 — EMD 폴리곤 색상 매핑용
+# ─────────────────────────────────────────────────────────
+EMD_OVERVIEW_CACHE_KEY = 'emd_overview'
+
+
+def compute_emd_overview() -> list[dict]:
+    """region_summary 의 stdg(법정동) 별 월별 시계열 → change_pct_1m / change_pct_3m 산출.
+
+    EMD 폴리곤(KOSTAT 행정동) 의 fillColor 매핑에 사용. 한 stdg 가 여러 행정동 영역에
+    분포할 수 있어 정확 매칭은 아니지만, 행정동·법정동 이름이 일치하는 70%+ 케이스에서
+    per-EMD distinct 색상 제공.
+    """
+    from database.supabase_client import get_client
+    client = get_client()
+    PAGE = 1000
+    offset = 0
+    rows: list[dict] = []
+    while True:
+        chunk = (
+            client.table('region_summary')
+            .select('sgg_cd,stdg_cd,stdg_nm,stats_ym,median_price_per_py')
+            .order('id', desc=False)
+            .range(offset, offset + PAGE - 1)
+            .execute().data or []
+        )
+        rows.extend(chunk)
+        if len(chunk) < PAGE:
+            break
+        offset += PAGE
+
+    # (sgg, stdg) → ym → median_price_per_py
+    by_stdg: dict[tuple, dict] = {}
+    for r in rows:
+        if r.get('median_price_per_py') is None:
+            continue
+        key = (r.get('sgg_cd', ''), r.get('stdg_cd', ''))
+        d = by_stdg.setdefault(key, {'_nm': r.get('stdg_nm'), 'series': {}})
+        d['series'][r['stats_ym']] = float(r['median_price_per_py'])
+
+    out: list[dict] = []
+    for (sgg_cd, stdg_cd), data in by_stdg.items():
+        yms = sorted(data['series'].keys())
+        if len(yms) < 2:
+            continue
+        latest_ym = yms[-1]
+        latest = data['series'][latest_ym]
+        prev1_ym = yms[-2]
+        prev3_ym = yms[max(0, len(yms) - 4)]
+        prev1 = data['series'][prev1_ym]
+        prev3 = data['series'][prev3_ym]
+        change_pct_1m = round((latest / prev1 - 1) * 100, 2) if prev1 and latest_ym != prev1_ym else None
+        change_pct_3m = round((latest / prev3 - 1) * 100, 2) if prev3 and latest_ym != prev3_ym else None
+        out.append({
+            'sgg_cd': sgg_cd,
+            'stdg_cd': stdg_cd,
+            'stdg_nm': data['_nm'],
+            'stats_ym': latest_ym,
+            'median_price_per_py': round(latest, 0),
+            'change_pct_1m': change_pct_1m,
+            'change_pct_3m': change_pct_3m,
+        })
+    return out
+
+
+@router.get('/emd-overview')
+def get_emd_overview():
+    """app_cache 에서 사전 계산된 EMD overview 조회. miss 시 직접 계산 + 적재."""
+    from database.supabase_client import get_client
+    client = get_client()
+    try:
+        r = (
+            client.table('app_cache')
+            .select('payload')
+            .eq('cache_key', EMD_OVERVIEW_CACHE_KEY)
+            .limit(1)
+            .execute()
+        )
+        if r.data and r.data[0].get('payload'):
+            return r.data[0]['payload']
+    except Exception as e:
+        print(f'[emd-overview] cache read 실패: {e}')
+
+    payload = compute_emd_overview()
+    try:
+        client.table('app_cache').upsert(
+            {'cache_key': EMD_OVERVIEW_CACHE_KEY, 'payload': payload},
+            on_conflict='cache_key',
+        ).execute()
+    except Exception as e:
+        print(f'[emd-overview] cache write 실패: {e}')
+    return payload
+
+
+# ─────────────────────────────────────────────────────────
 # /ranking — 수도권 시군구 랭킹 카드 2종 (거래량 회복 + 가격 상승)
 # ─────────────────────────────────────────────────────────
 RANKING_CACHE_KEY = 'ranking'

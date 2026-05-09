@@ -14,15 +14,132 @@ import type { SggOverview, BuySignal, RegionSummary } from "../types/api";
 
 // 모듈 레벨 캐시 — 라우팅으로 MapScreen unmount 후 재마운트 시 fetch 재실행 회피.
 // 첫 마운트만 비동기 fetch, 이후 마운트는 캐시값으로 즉시 setState.
-let _cachedPolygons: PolygonFeature[] | null = null;
+let _cachedPolygons: PolygonFeature[] | null = null;          // 시군구 폴리곤 (~50)
+let _cachedEmdPolygons: PolygonFeature[] | null = null;       // 행정동 폴리곤 (~1100, lazy)
 let _cachedOverviews: Map<string, SggOverview> | null = null;
 let _cachedGeoJson: any = null;
+// emd-overview 의 row 단위 저장 — fillColor + click 시 stdg_cd 라우팅용.
+type EmdRow = {
+  sgg_cd: string;
+  stdg_cd: string;
+  stdg_nm: string;
+  change_pct_1m: number | null;
+  median_price_per_py: number | null;
+};
+let _cachedEmdLookup: Map<string, Map<string, EmdRow>> | null = null;  // sgg_cd → norm_name → row
+let _emdLoadPromise: Promise<PolygonFeature[]> | null = null;
+let _emdLookupPromise: Promise<Map<string, Map<string, EmdRow>>> | null = null;
+
+const EMD_MIN_ZOOM = 11;                                      // Leaflet zoom ≥ 11 일 때 행정동 outline overlay 노출
+
+// 행정동 ↔ 법정동 이름 정규화 — KOSTAT 행정동의 숫자 접미사 제거.
+//   사직동 → 사직동, 신흥1동 → 신흥동, 왕십리2동 → 왕십리동, 화수1·화평동 → 화수·화평동
+function normalizeStdgName(s: string): string {
+  return s.replace(/\d+동/g, '동').replace(/\s+/g, '').trim();
+}
 
 async function fetchGeoJson() {
   if (_cachedGeoJson) return _cachedGeoJson;
   const res = await fetch("/static/realestate/geojson/metro-sgg.geojson");
   _cachedGeoJson = await res.json();
   return _cachedGeoJson;
+}
+
+// 법정동(stdg) 단위 lookup — EMD 폴리곤 색상 + 클릭 시 stdg 상세 라우팅용.
+async function loadEmdLookup(): Promise<Map<string, Map<string, EmdRow>>> {
+  if (_cachedEmdLookup) return _cachedEmdLookup;
+  if (_emdLookupPromise) return _emdLookupPromise;
+  _emdLookupPromise = (async () => {
+    const res = await fetch("/api/realestate/emd-overview");
+    const rows: EmdRow[] = await res.json();
+    const lookup = new Map<string, Map<string, EmdRow>>();
+    for (const r of rows) {
+      if (!r.sgg_cd || !r.stdg_nm) continue;
+      let bySgg = lookup.get(r.sgg_cd);
+      if (!bySgg) { bySgg = new Map(); lookup.set(r.sgg_cd, bySgg); }
+      bySgg.set(normalizeStdgName(r.stdg_nm), r);
+    }
+    _cachedEmdLookup = lookup;
+    _emdLookupPromise = null;
+    return lookup;
+  })();
+  return _emdLookupPromise;
+}
+
+// 행정동(읍·면·동) 폴리곤 lazy fetch + 변환.
+// 색상 결정 우선순위:
+//   1) emdLookup[mois_sgg_cd][정규화된 EMD 이름] → 법정동 단위 change_pct_1m (per-EMD distinct)
+//   2) overviews[mois_sgg_cd].change_pct_1m → parent 시군구 색 fallback
+//   3) 둘 다 없으면 fill 없음 (스트로크만)
+async function loadEmdPolygons(
+  overviews: Map<string, SggOverview>,
+  emdLookup: Map<string, Map<string, EmdRow>>,
+): Promise<PolygonFeature[]> {
+  if (_cachedEmdPolygons) return _cachedEmdPolygons;
+  if (_emdLoadPromise) return _emdLoadPromise;
+  _emdLoadPromise = (async () => {
+    const res = await fetch("/static/realestate/geojson/metro-emd.geojson");
+    const geo = await res.json();
+    const polys: PolygonFeature[] = [];
+    let stdgMatched = 0, sggFallback = 0, noColor = 0;
+    for (const feat of geo.features ?? []) {
+      const code = feat.properties?.code as string | undefined;
+      const name = feat.properties?.name as string | undefined;
+      const moisSggCd = feat.properties?.mois_sgg_cd as string | undefined;
+      if (!code || !name) continue;
+      const geom = feat.geometry;
+      const rings: { lat: number; lng: number }[][] = [];
+      if (geom.type === "MultiPolygon") {
+        for (const poly of geom.coordinates) {
+          for (const ring of poly) {
+            rings.push(ring.map(([lng, lat]: [number, number]) => ({ lat, lng })));
+          }
+        }
+      } else if (geom.type === "Polygon") {
+        for (const ring of geom.coordinates) {
+          rings.push(ring.map(([lng, lat]: [number, number]) => ({ lat, lng })));
+        }
+      }
+      // 1) per-EMD 단위 (법정동 단위) — name 정규화 후 lookup, 매칭되면 stdg row 사용
+      let change: number | null = null;
+      let matchedStdgCd: string | undefined = undefined;
+      if (moisSggCd) {
+        const bySgg = emdLookup.get(moisSggCd);
+        const stdgRow = bySgg?.get(normalizeStdgName(name));
+        if (stdgRow) {
+          matchedStdgCd = stdgRow.stdg_cd;            // 클릭 시 라우팅 키
+          if (stdgRow.change_pct_1m != null) {
+            change = stdgRow.change_pct_1m;
+            stdgMatched++;
+          }
+        }
+      }
+      // 2) parent 시군구 fallback (색상만)
+      if (change == null && moisSggCd) {
+        const parentOv = overviews.get(moisSggCd);
+        if (parentOv?.change_pct_1m != null) {
+          change = parentOv.change_pct_1m;
+          sggFallback++;
+        }
+      }
+      const fillColor = change != null ? changePctColor(change) : "";
+      if (!fillColor) noColor++;
+      polys.push({
+        sggCd: moisSggCd ?? code,
+        name,
+        paths: rings,
+        fillColor,
+        changePct: change,
+        subKey: matchedStdgCd,           // 매칭된 stdg_cd → click 시 /stdg/{stdgCd} 라우팅
+        // noLabel 제거 — VWorldMap 의 overlay 라벨 로직이 줌 13+ 에서만 노출하므로 밀도 안전.
+      });
+    }
+    console.log(`[MapScreen] EMD coloring: stdgMatched=${stdgMatched}, sggFallback=${sggFallback}, noColor=${noColor}, total=${polys.length}`);
+    _cachedEmdPolygons = polys;
+    _emdLoadPromise = null;
+    return polys;
+  })();
+  return _emdLoadPromise;
 }
 
 function fallbackOverviewsFromGeo(geo: any): SggOverview[] {
@@ -95,11 +212,77 @@ export default function MapScreen() {
   const navigate = useNavigate();
   // 모듈 캐시 hit 시 초기 state 가 즉시 채워져 첫 paint 부터 지도·색상 표시
   const [polygons, setPolygons] = useState<PolygonFeature[]>(_cachedPolygons ?? []);
+  const [emdPolygons, setEmdPolygons] = useState<PolygonFeature[] | null>(_cachedEmdPolygons);
+  const [zoom, setZoom] = useState<number>(0);     // 0 = 미초기화 (VWorldMap onZoomChange 가 첫 통지)
   const [overviews, setOverviews] = useState<Map<string, SggOverview>>(_cachedOverviews ?? new Map());
   const [selected, setSelected] = useState<SelectedRegion | null>(null);
   const [signal, setSignal] = useState<BuySignal | null>(null);
   const [topStdgSummary, setTopStdgSummary] = useState<RegionSummary | null>(null);
   const [loading, setLoading] = useState(false);    // FeatureCard fetch 진행 표시
+
+  // 줌 ≥ EMD_MIN_ZOOM 첫 진입 시 행정동 폴리곤 lazy load.
+  // overviews + emdLookup 둘 다 준비된 뒤에 진행 — fillColor 산출에 필요.
+  useEffect(() => {
+    if (zoom < EMD_MIN_ZOOM) return;
+    if (emdPolygons !== null) return;
+    if (overviews.size === 0) return;
+    let cancelled = false;
+    loadEmdLookup()
+      .then((lookup) => loadEmdPolygons(overviews, lookup))
+      .then((polys) => { if (!cancelled) setEmdPolygons(polys); })
+      .catch((e) => console.error("[MapScreen] emd load fail", e));
+    return () => { cancelled = true; };
+  }, [zoom, emdPolygons, overviews]);
+
+  // sgg 폴리곤은 항상 표시 (색상·클릭 보존). emd outline 은 줌 임계값 도달 시 overlay 로 추가.
+  const overlayLayer: PolygonFeature[] | undefined =
+    zoom >= EMD_MIN_ZOOM && emdPolygons ? emdPolygons : undefined;
+
+  // EMD 폴리곤 클릭 핸들러 — 기존 sgg click 과 같은 패턴: FeatureCard modal 먼저 띄우고,
+  // 사용자가 카드 탭 시 stdg detail (/stdg/{stdgCd}) 로 이동.
+  // 매칭된 stdg 가 있으면 stdg 데이터로 채움, 없으면 부모 시군구 데이터로 폴백.
+  function handleEmdClick(sggCd: string, name: string, stdgCd?: string) {
+    if (!sggCd) return;
+    // emdLookup 에서 매칭 row 가져오기 (cached module 변수 직접 참조 — 이미 로드됨)
+    let emdRow: EmdRow | undefined = undefined;
+    if (_cachedEmdLookup) {
+      const bySgg = _cachedEmdLookup.get(sggCd);
+      emdRow = bySgg?.get(normalizeStdgName(name));
+    }
+    const ov = overviews.get(sggCd);
+    const next: SelectedRegion = {
+      sggCd,
+      sggNm: ov?.sgg_nm ?? sggCd,
+      topStdgNm: name,                                  // 클릭한 EMD 이름
+      topStdgCd: stdgCd ?? null,                        // 매칭된 stdg_cd (FeatureCard onTap 의 라우팅 키)
+      medianPricePerPy: emdRow?.median_price_per_py ?? ov?.median_price_per_py ?? null,
+      changePct: emdRow?.change_pct_1m ?? ov?.change_pct_1m ?? null,
+    };
+    setSelected(next);
+    // signal + region_summary 병렬 fetch — 기존 handlePolygonClick 와 동일 흐름
+    setSignal(null);
+    setTopStdgSummary(null);
+    setLoading(true);
+    const tasks: Promise<unknown>[] = [];
+    tasks.push(
+      apiFetch<BuySignal | Record<string, never>>(ENDPOINTS.buySignal(sggCd))
+        .then((s) => {
+          if (s && typeof s === 'object' && Object.keys(s).length > 0) setSignal(s as BuySignal);
+        })
+        .catch(() => {})
+    );
+    if (stdgCd) {
+      tasks.push(
+        apiFetch<RegionSummary[]>(ENDPOINTS.summary(sggCd))
+          .then((rows) => {
+            const match = rows.find((r) => r.stdg_cd === stdgCd) ?? rows[0] ?? null;
+            if (match) setTopStdgSummary(match);
+          })
+          .catch(() => {})
+      );
+    }
+    Promise.all(tasks).finally(() => setLoading(false));
+  }
 
   useEffect(() => {
     // 캐시 hit 면 fetch skip — detail 페이지에서 돌아왔을 때 즉시 표시
@@ -206,7 +389,10 @@ export default function MapScreen() {
     <div className="relative h-full w-full">
       <VWorldMap
         polygons={polygons}
+        overlayPolygons={overlayLayer}
         onPolygonClick={handlePolygonClick}
+        onOverlayClick={handleEmdClick}
+        onZoomChange={setZoom}
         center={{ lat: 37.45, lng: 127.0 }}
         level={11}
         maxLevel={10}
@@ -237,14 +423,16 @@ export default function MapScreen() {
         {/* MARKET BRIEF (시그널 분포 + LLM 요약) */}
         <div className="pointer-events-auto"><MarketSummaryCard /></div>
 
-        {/* CHOROPLETH 캡션 + 색상 범례 — 한 줄 */}
+        {/* CHOROPLETH 캡션 + 색상 범례 — 한 줄. emd overlay 활성 시 동 boundary 표시 안내. */}
         <div className="flex items-center gap-2 text-[9px] font-mono tracking-widest
                         bg-term-panel border border-term-border px-2 py-1 pointer-events-auto">
           <span className="text-term-orange font-bold">시군구 색칠</span>
           <span className="text-term-dim">·</span>
           <span className="text-term-text">{polygons.length}개</span>
           <span className="text-term-dim">·</span>
-          <span className="text-term-text">전월 대비</span>
+          <span className="text-term-text">
+            {overlayLayer ? `+ 동 ${overlayLayer.length}` : "전월 대비"}
+          </span>
           <span className="ml-auto flex items-center gap-1.5">
             <Legend color="#dc2626" label="+5↑" />
             <Legend color="#f87171" label="+1" />
@@ -261,7 +449,10 @@ export default function MapScreen() {
         topStdgSummary={topStdgSummary}
         loading={loading}
         onTap={() => {
+          // 매칭된 stdg 가 있으면 stdg 상세, 없으면 부모 시군구 상세로 폴백 — 거래건수
+          // 데이터 없는 EMD 도 항상 detail 진입 가능하도록.
           if (selected?.topStdgCd) navigate(`/stdg/${selected.topStdgCd}`);
+          else if (selected?.sggCd) navigate(`/region/${selected.sggCd}`);
         }}
         onTapSgg={() => {
           if (selected?.sggCd) navigate(`/region/${selected.sggCd}`);

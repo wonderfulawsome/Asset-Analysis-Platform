@@ -21,6 +21,7 @@ export interface PolygonFeature {
   changePct: number | null;
   subKey?: string;
   subName?: string | null;        // 폴리곤 중앙 보조 라벨 (예: 대표 법정동명)
+  noLabel?: boolean;              // true 면 라벨 미렌더 — 행정동 등 다수 폴리곤에서 라벨 스킵
 }
 
 interface Props {
@@ -28,6 +29,11 @@ interface Props {
   onMarkerClick?: (sggCd: string) => void;
   polygons?: PolygonFeature[];
   onPolygonClick?: (sggCd: string, subKey?: string) => void;
+  // overlayPolygons — 본 polygons 위에 추가 layer (행정동 등 세분 layer).
+  // onOverlayClick 이 있으면 클릭 받음. 없으면 stroke 만 보고 클릭 pass-through.
+  overlayPolygons?: PolygonFeature[];
+  onOverlayClick?: (sggCd: string, name: string, subKey?: string) => void;
+  onZoomChange?: (zoom: number) => void;       // 줌 변경 시 부모 알림 — 줌 기반 폴리곤 layer 전환용
   center?: { lat: number; lng: number };
   level?: number;          // VWorld zoom (Leaflet 7~18). Kakao level 과 호환되도록 변환.
   maxLevel?: number;       // Kakao "최대 줌아웃 레벨" → Leaflet minZoom 으로 매핑
@@ -43,6 +49,9 @@ export default function VWorldMap({
   onMarkerClick,
   polygons,
   onPolygonClick,
+  overlayPolygons,
+  onOverlayClick,
+  onZoomChange,
   center = { lat: 37.5665, lng: 126.978 },
   level = 9,
   maxLevel,
@@ -87,6 +96,12 @@ export default function VWorldMap({
 
         mapRef.current = map;
         setReady(true);
+
+        // 줌 변경 콜백 — 부모(MapScreen)에서 줌 기반 layer 전환에 사용.
+        if (onZoomChange) {
+          map.on("zoomend", () => onZoomChange(map.getZoom()));
+          onZoomChange(map.getZoom());                  // 초기 1회 통지
+        }
 
         // 컨테이너 크기 변할 때마다 invalidateSize 호출 (라우팅 복귀 시 0×0 방지)
         if (containerRef.current && "ResizeObserver" in window) {
@@ -179,7 +194,8 @@ export default function VWorldMap({
 
       // 라벨 — 가장 큰 ring 의 centroid 위에 배치 (다중 ring 시 본체 폴리곤 위로).
       // 시군구명만 노출 (사용자 요청 — 동명 보조 라벨 제거).
-      if (largestRing) {
+      // poly.noLabel=true (예: 1000+ 행정동 layer) 면 라벨 스킵.
+      if (largestRing && !poly.noLabel) {
         const c = ringCentroid(largestRing);
         const html = `
           <div style="
@@ -223,6 +239,97 @@ export default function VWorldMap({
       map.off("zoomend", applyLabelVisibility);
     };
   }, [polygons, onPolygonClick, ready]);
+
+  // 4) overlayPolygons — 본 polygons 위에 stroke + (옵션) fill + 라벨 layer.
+  // 행정동(읍·면·동) 같은 세분 boundary 를 표시. onOverlayClick 있으면 클릭 받음.
+  // 라벨은 줌 ≥ OVERLAY_LABEL_MIN_ZOOM 에서만 노출 (1100+ EMD 라벨 밀도 회피).
+  useEffect(() => {
+    const mapInst = mapRef.current;
+    if (!ready || !mapInst || !overlayPolygons || overlayPolygons.length === 0) return;
+    const map: L.Map = mapInst;
+    const created: L.Layer[] = [];
+    const overlayLabelMarkers: L.Marker[] = [];
+    const OVERLAY_LABEL_MIN_ZOOM = 12;     // 줌 12+ EMD 라벨 노출 — 사용자가 자주 도달하는 줌
+    const isClickable = !!onOverlayClick;
+
+    function ringCentroidEmd(ring: { lat: number; lng: number }[]) {
+      let sLat = 0, sLng = 0;
+      for (const p of ring) { sLat += p.lat; sLng += p.lng; }
+      return { lat: sLat / ring.length, lng: sLng / ring.length };
+    }
+    overlayPolygons.forEach((poly) => {
+      const hasFill = !!poly.fillColor;
+      let largestRing: { lat: number; lng: number }[] | null = null;
+      poly.paths.forEach((ring) => {
+        if (!largestRing || ring.length > largestRing.length) largestRing = ring;
+        const latlngs = ring.map((p) => [p.lat, p.lng] as [number, number]);
+        const lpoly = L.polygon(latlngs, {
+          color: "rgba(255,255,255,0.55)",   // 흰색 stroke — sgg 색 위 가장 일관 contrast
+          weight: 1.0,
+          opacity: 0.9,
+          fill: hasFill,
+          fillColor: poly.fillColor,
+          fillOpacity: hasFill ? 0.55 : 0,
+          interactive: isClickable,            // 핸들러 있으면 클릭 받음, 없으면 pass-through
+          bubblingMouseEvents: false,
+        });
+        if (isClickable) {
+          lpoly.on("click", (e) => {
+            L.DomEvent.stop(e.originalEvent);
+            onOverlayClick(poly.sggCd, poly.name, poly.subKey);
+          });
+          lpoly.on("mouseover", () => lpoly.setStyle({ fillOpacity: hasFill ? 0.75 : 0 }));
+          lpoly.on("mouseout", () => lpoly.setStyle({ fillOpacity: hasFill ? 0.55 : 0 }));
+        }
+        lpoly.addTo(map);
+        created.push(lpoly);
+      });
+
+      // 라벨 marker — poly.noLabel=true 면 스킵. centroid 위에 작은 글자 + 어두운 박스.
+      if (largestRing && !poly.noLabel) {
+        const c = ringCentroidEmd(largestRing);
+        const html = `
+          <div style="
+            font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
+            font-size: 9.5px;
+            font-weight: 600;
+            letter-spacing: -0.2px;
+            padding: 1px 4px;
+            background: rgba(0,0,0,0.55);
+            border-radius: 2px;
+            white-space: nowrap;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+            color: #fff;
+            transform: translate(-50%, -50%);
+            user-select: none;
+            pointer-events: none;
+          ">${poly.name}</div>`;
+        const marker = L.marker([c.lat, c.lng], {
+          icon: L.divIcon({ className: "polygon-label-emd", html, iconSize: [0, 0] }),
+          interactive: false,
+          keyboard: false,
+        });
+        overlayLabelMarkers.push(marker);
+      }
+    });
+
+    function applyOverlayLabelVisibility() {
+      const visible = map.getZoom() >= OVERLAY_LABEL_MIN_ZOOM;
+      overlayLabelMarkers.forEach((m) => {
+        const onMap = (m as any)._added === true;
+        if (visible && !onMap) { m.addTo(map); (m as any)._added = true; }
+        else if (!visible && onMap) { m.remove(); (m as any)._added = false; }
+      });
+    }
+    applyOverlayLabelVisibility();
+    map.on("zoomend", applyOverlayLabelVisibility);
+
+    return () => {
+      created.forEach((l) => l.remove());
+      overlayLabelMarkers.forEach((m) => m.remove());
+      map.off("zoomend", applyOverlayLabelVisibility);
+    };
+  }, [overlayPolygons, onOverlayClick, ready]);
 
   return (
     <div className="relative h-full w-full">
