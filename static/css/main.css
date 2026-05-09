@@ -2447,13 +2447,13 @@ html[lang="en"] .card-tappable::after {
    region-toggle 와 톤 통일: 회색 트랙 + 활성 카드 + 오렌지 포인트.
    ──────────────────────────────────────────────────────────── */
 .similar-mode-seg {
-  display: inline-flex;
+  display: flex;
   position: relative;
   width: 100%;
   max-width: 320px;
   height: 30px;
   padding: 2px;
-  margin: 0 0 8px;
+  margin: 0 auto 8px;        /* 가로 가운데 정렬 */
   border-radius: 8px;
   background: rgba(120, 120, 128, 0.12);
   user-select: none;
