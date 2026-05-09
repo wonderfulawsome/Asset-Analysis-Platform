@@ -49,7 +49,7 @@ export default function RankingScreen() {
       {/* SECTION 01 — 거래량 회복 */}
       <div className="mb-2">
         <TerminalSection
-          title="거래량 회복 · TOP 5"
+          title="거래량 회복 · TOP 50"
           right={data?.updated_at ? `${data.updated_at.slice(5)} 갱신` : "로딩 중"}
           dense
         >
@@ -78,7 +78,7 @@ export default function RankingScreen() {
 
       {/* SECTION 02 — 가격 상승률 */}
       <TerminalSection
-        title="가격 3개월 변화 · TOP 5"
+        title="가격 3개월 변화 · TOP 50"
         right={data?.updated_at ? `${data.updated_at.slice(5)} 갱신` : "로딩 중"}
         dense
       >

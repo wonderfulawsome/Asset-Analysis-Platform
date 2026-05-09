@@ -591,7 +591,7 @@ def get_emd_overview():
 # ─────────────────────────────────────────────────────────
 # /ranking — 수도권 시군구 랭킹 카드 2종 (거래량 회복 + 가격 상승)
 # ─────────────────────────────────────────────────────────
-RANKING_CACHE_KEY = 'ranking'
+RANKING_CACHE_KEY = 'ranking_top50'                       # top5 → top50 확장 시 cache_key bump 으로 옛 row 자동 무효화
 
 # 시군구 코드 → 한국어 표시명 (간단 매핑, 부족분은 '시군구' 라벨 그대로)
 _SGG_KO_NAMES: dict[str, str] = {
@@ -690,9 +690,10 @@ def compute_ranking() -> dict:
         })
     price_up.sort(key=lambda x: x['change_pct_3m'], reverse=True)
 
-    top_trade = trade_recovery[:5]
-    top_price = price_up[:5]
-    # TOP 10 sgg 의 12개월 평단가 시계열 mini-chart 용 (각 row 옆 inline)
+    top_trade = trade_recovery[:50]
+    top_price = price_up[:50]
+    # TOP 50 합집합 sgg 의 12개월 평단가 시계열 mini-chart 용 (각 row 옆 inline).
+    # 수도권 sgg ~76개라 합집합도 그 이하 — 단일 query 로 fetch.
     target_sggs = list({r['sgg_cd'] for r in top_trade + top_price})
     series_by_sgg = _ranking_price_series(client, target_sggs)
     for r in top_trade + top_price:
