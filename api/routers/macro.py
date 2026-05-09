@@ -169,11 +169,17 @@ _VAL_SIG_TTL = 24 * 3600
 
 
 def build_baseline_snapshot(baselines: dict) -> dict:
-    """API 응답에서 baselines_5y 형태로 그대로 쓰는 dict — 스냅샷용."""
+    """API 응답에서 baselines_5y 형태로 그대로 쓰는 dict — 스냅샷용.
+
+    KR 5-component (per_15y / trend) 키도 함께 노출 — 프론트가 새 분포 표시에 사용.
+    옛 3-key 베이스라인 (US 또는 새 baseline 미적용 KR) 도 backward-compat.
+    """
     return {
         'erp':     baselines.get('erp', {}),
         'vix':     baselines.get('vix', {}),
         'dd':      baselines.get('dd',  {}),
+        'per_15y': baselines.get('per_15y', {}),       # 신규 (KR)
+        'trend':   baselines.get('trend',   {}),       # 신규 (KR)
         'weights': baselines.get('weights', {'erp': 0.4, 'vix': 0.3, 'dd': 0.3}),
     }
 

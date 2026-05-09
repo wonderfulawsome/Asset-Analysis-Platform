@@ -406,7 +406,12 @@
       const vix = (t.vix ?? 0).toFixed(2);
       const erpSign = t.erp >= 0 ? '+' : '';
       const zErp = t.z_erp ?? 0, zVix = t.z_vix ?? 0, zDd = t.z_dd ?? 0, zComp = t.z_comp ?? 0;
+      const zPer = t.z_per ?? 0, zTrend = t.z_trend ?? 0;             // KR 5-comp 신규
+      const trendPct = ((t.price_vs_ma200 ?? 0) * 100).toFixed(1);    // 가격 vs 200d MA (%)
+      const perVal = (t.spy_per ?? 0).toFixed(1);                     // KOSPI PER (KR) / SPY PER (US)
       const W = bs.weights || { erp: 0.4, vix: 0.3, dd: 0.3 };
+      // 새 5-comp 스키마 활성 여부 — KR baseline 에 per_15y/trend 키 존재하고 weights 에도 있을 때
+      const has5Comp = !!(W.per_15y && W.trend && bs.per_15y && bs.trend);
       const sgn = v => (v >= 0 ? '+' : '');
       const wPct = w => Math.round(w * 100);
 
@@ -431,8 +436,15 @@
             vix_label: '월가 공포지수 (VIX)',
             vix_caption: '(20↑ 불안 · 30↑ 패닉)' };
 
-      // 1) 수식 — 일반어
-      fEl.innerHTML = `5년 평균과 비교한 <b>종합 점수</b> = 주식 매력도(${wPct(W.erp)}%) <span style="color:#6b7280;">+</span> 공포(${wPct(W.vix)}%) <span style="color:#6b7280;">+</span> 하락충격(${wPct(W.dd)}%)`;
+      // 1) 수식 — 일반어. 5-comp 활성 시 PER + 추세 추가, 아니면 기존 3-comp.
+      const _plus = '<span style="color:#6b7280;">+</span>';
+      if (has5Comp) {
+        fEl.innerHTML = `5/15년 분포와 비교한 <b>종합 점수</b> = `
+          + `PER 레벨(${wPct(W.per_15y)}%) ${_plus} 추세 위치(${wPct(W.trend)}%) ${_plus} `
+          + `주식 매력도(${wPct(W.erp)}%) ${_plus} 공포(${wPct(W.vix)}%) ${_plus} 하락충격(${wPct(W.dd)}%)`;
+      } else {
+        fEl.innerHTML = `5년 평균과 비교한 <b>종합 점수</b> = 주식 매력도(${wPct(W.erp)}%) ${_plus} 공포(${wPct(W.vix)}%) ${_plus} 하락충격(${wPct(W.dd)}%)`;
+      }
 
       // 2) 게이지 — composite z 기반
       gEl.innerHTML = renderGauge(zComp, t.label);
@@ -459,7 +471,29 @@
           <span class="mv-key"><span class="mv-op"></span>최근 60일 고점 대비 하락</span>
           <span class="mv-val" style="color:${(t.dd_60d ?? 0) >= -0.03 ? '#10b981' : '#ef4444'};">${dd}%</span>
         </div>
+        ${has5Comp ? `
         <div class="mv-row" style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.05);padding-top:10px;">
+          <span class="mv-key"><span class="mv-op"></span>${L.per_label} (15년 평균 ${bs.per_15y.mean ? bs.per_15y.mean.toFixed(1) : '?'}배 대비)</span>
+          <span class="mv-val" style="color:#a855f7;">${perVal}배</span>
+        </div>
+        <div class="mv-row">
+          <span class="mv-key"><span class="mv-op"></span>가격 vs 200일 평균 (5년 평균 ${bs.trend.mean != null ? (bs.trend.mean * 100).toFixed(1) + '%' : '?'} 대비)</span>
+          <span class="mv-val" style="color:${(t.price_vs_ma200 ?? 0) >= 0 ? '#10b981' : '#ef4444'};">${sgn(t.price_vs_ma200 ?? 0)}${trendPct}%</span>
+        </div>
+        ` : ''}
+        <div class="mv-row" style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.05);padding-top:10px;">
+          ${has5Comp ? `
+          <span class="mv-key"><span class="mv-op">${wPct(W.per_15y)}%</span><span>PER 레벨 점수 <small style="color:#6b7280;font-weight:400;">(평균 대비 ${zPer < 0 ? '비쌈' : zPer > 0 ? '쌈' : '평소'})</small></span></span>
+          <span class="mv-val" style="color:${zPer >= 0 ? '#10b981' : '#ef4444'};">${sgn(zPer)}${zPer.toFixed(2)}σ</span>
+          ` : ''}
+        </div>
+        ${has5Comp ? `
+        <div class="mv-row">
+          <span class="mv-key"><span class="mv-op">${wPct(W.trend)}%</span><span>추세 위치 점수 <small style="color:#6b7280;font-weight:400;">(평균 대비 ${zTrend < 0 ? '추세 위' : zTrend > 0 ? '추세 아래' : '평소'})</small></span></span>
+          <span class="mv-val" style="color:${zTrend >= 0 ? '#10b981' : '#ef4444'};">${sgn(zTrend)}${zTrend.toFixed(2)}σ</span>
+        </div>
+        ` : ''}
+        <div class="mv-row">
           <span class="mv-key"><span class="mv-op">${wPct(W.erp)}%</span><span>주식 매력도 점수 <small style="color:#6b7280;font-weight:400;">(${zPhrase(zErp, 'erp')})</small></span></span>
           <span class="mv-val" style="color:${zErp >= 0 ? '#10b981' : '#ef4444'};">${sgn(zErp)}${zErp.toFixed(2)}σ</span>
         </div>
