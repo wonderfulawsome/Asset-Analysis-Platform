@@ -1131,11 +1131,19 @@ function _showPredictError() {
 }
 
 function hidePredictSection() {
+  // 레거시 prediction 상태 (호출 안 됨, 안전 차원에서 reset)
   _predictVisible = false;
   _predictData = null;
   const btn = document.getElementById('predict-toggle-btn');
-  if (btn) btn.classList.remove('active');
+  if (btn) {
+    btn.classList.remove('active');
+    btn.textContent = (typeof t === 'function' ? t('chart.similarBtn') : null) || '↗ 유사 과거 패턴 보기 →';
+  }
   renderPredictLegend(false);
+  // 유사 패턴 카드 / 토글 상태도 함께 초기화 — ticker 또는 interval 변경 시 자동 닫힘.
+  _similarVisible = false;
+  _similarData = null;
+  _renderSimilarHost(null);
 }
 
 // 일봉일 때만 예측 버튼 표시. US/KR 양쪽 지원 (KR 은 처음 요청 시 모델 학습 트리거).
