@@ -12,17 +12,31 @@
     "source": "fallback"
   },
   "dd": {
-    "mean": -0.04671031953844369,
-    "std": 0.04010957572922508,
-    "n": 1224,
-    "source": "kospi_dual"
+    "mean": -0.04,
+    "std": 0.05,
+    "n": 0,
+    "source": "fallback"
   },
-  "updated_at": "2026-05-02T23:17:36.588280",
+  "per_15y": {
+    "mean": 14.0,
+    "std": 4.0,
+    "n": 0,
+    "source": "fallback"
+  },
+  "trend": {
+    "mean": 0.02,
+    "std": 0.1,
+    "n": 0,
+    "source": "fallback"
+  },
+  "updated_at": "2026-05-09T22:04:28.538153",
   "weights": {
-    "erp": 0.4,
-    "vix": 0.3,
-    "dd": 0.3
+    "per_15y": 0.35,
+    "trend": 0.25,
+    "erp": 0.15,
+    "vix": 0.1,
+    "dd": 0.15
   },
-  "last_known_per": 24.82,
-  "last_known_per_updated_at": "2026-05-07T01:51:05.331935"
+  "last_known_per": 26.99,
+  "last_known_per_updated_at": "2026-05-09T22:05:29.915629"
 }

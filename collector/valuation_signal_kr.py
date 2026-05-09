@@ -29,13 +29,18 @@ _BASELINE_PATH = os.path.join(
 )
 _BASELINE_TTL_DAYS = 90
 
-# US 와 동일한 가중치 (KR 분포 검증 후 조정 가능)
-W_ERP, W_VIX, W_DD = 0.4, 0.3, 0.3
+# 가중치 — 구조 valuation(per+trend) 0.6, 단기 sentiment(erp+vix+dd) 0.4
+# 사용자 요청 "급등 후 평온 시점이 저평가로 잘못 측정됨" 해결 — 절대 가격 수준
+# 신호(PER vs 15Y, 가격 vs MA200) 를 composite 의 주축으로 승격.
+W_PER, W_TREND = 0.35, 0.25       # 구조 valuation (CAPE-like + trend gap)
+W_ERP, W_VIX, W_DD = 0.15, 0.10, 0.15  # 기존 단기 sentiment
 
 # 베이스라인 산출 실패 시 fallback (대략적 historical 값 — 첫 실행 보호용)
 _FALLBACK_ERP = {'mean': 0.02, 'std': 0.015, 'n': 0, 'source': 'fallback'}
 _FALLBACK_VKOSPI = {'mean': 18.0, 'std': 5.0, 'n': 0, 'source': 'fallback'}
 _FALLBACK_DD = {'mean': -0.04, 'std': 0.05, 'n': 0, 'source': 'fallback'}
+_FALLBACK_PER_LT = {'mean': 14.0, 'std': 4.0, 'n': 0, 'source': 'fallback'}     # KOSPI 장기 PER ~14
+_FALLBACK_TREND = {'mean': 0.02, 'std': 0.10, 'n': 0, 'source': 'fallback'}     # 평균 +2% 이격, std 10%
 
 # PER hard fallback (캐시도 없는 첫 실행 보호용 — KOSPI 장기 평균 ~14)
 _HARD_FALLBACK_PER = 14.0
@@ -199,24 +204,82 @@ def _compute_kr_dd_baseline_5y() -> dict:
         return _FALLBACK_DD
 
 
+def _compute_kospi_per_baseline_15y() -> dict:
+    """KOSPI 일별 PER 의 15Y 분포 — CAPE-style 절대 valuation 앵커.
+
+    사용자 요청 "급등 후 평온 시점이 저평가로 잘못 측정됨" 해결 핵심.
+    PER 이 historical 평균 대비 +1σ 면 z_per_cheap = -1 → composite 음수 기여.
+    """
+    try:
+        from pykrx import stock
+        end = date.today().strftime('%Y%m%d')
+        start = (date.today() - timedelta(days=365 * 15 + 30)).strftime('%Y%m%d')
+        df = stock.get_index_fundamental(start, end, '1001')
+        if df is None or df.empty:
+            return _FALLBACK_PER_LT
+        per = df['PER'].replace(0, np.nan).dropna()
+        cutoff = pd.Timestamp(date.today() - timedelta(days=365 * 15))
+        per = per[per.index >= cutoff]
+        if len(per) < 200:
+            print(f'[valuation_kr] PER 15Y baseline 표본 부족: {len(per)}')
+            return _FALLBACK_PER_LT
+        return {'mean': float(per.mean()), 'std': float(per.std()),
+                'n': int(len(per)), 'source': 'pykrx_15y'}
+    except Exception as e:
+        print(f'[valuation_kr] PER 15Y baseline 실패: {e}')
+        return _FALLBACK_PER_LT
+
+
+def _compute_kospi_trend_baseline_5y() -> dict:
+    """KOSPI close / 200d MA - 1 의 5Y 분포 — 추세 대비 가격 위치 신호.
+
+    +이면 추세 위(상승 모멘텀/과열 가능), -이면 추세 아래(부진).
+    """
+    try:
+        close = _kospi_close_dual(years=6)  # MA200 warmup 위해 +1Y 여유
+        if close.empty:
+            return _FALLBACK_TREND
+        ma200 = close.rolling(200).mean()
+        gap = (close / ma200 - 1.0).dropna()
+        cutoff = pd.Timestamp(date.today() - timedelta(days=365 * 5))
+        gap = gap[gap.index >= cutoff]
+        if len(gap) < 200:
+            return _FALLBACK_TREND
+        return {'mean': float(gap.mean()), 'std': float(gap.std()),
+                'n': int(len(gap)), 'source': 'kospi_ma200_5y'}
+    except Exception as e:
+        print(f'[valuation_kr] TREND baseline 실패: {e}')
+        return _FALLBACK_TREND
+
+
 def get_kr_baselines(force_refresh: bool = False) -> dict:
-    """3 baseline 합본 + JSON 디스크 캐시 (TTL 90일)."""
+    """5 baseline 합본 + JSON 디스크 캐시 (TTL 90일).
+
+    이전 3-baseline 스키마(erp/vix/dd) 캐시는 자동 무효화 — per_15y / trend 키
+    누락 시 force-refresh 와 동일하게 재계산.
+    """
     if not force_refresh and os.path.exists(_BASELINE_PATH):
         try:
             with open(_BASELINE_PATH) as f:
                 cached = json.load(f)
             updated = datetime.fromisoformat(cached.get('updated_at', '2000-01-01'))
-            if (datetime.now() - updated).days < _BASELINE_TTL_DAYS:
+            has_new_schema = 'per_15y' in cached and 'trend' in cached
+            if has_new_schema and (datetime.now() - updated).days < _BASELINE_TTL_DAYS:
                 return cached
         except Exception:
             pass
 
     bundle = {
-        'erp': _compute_kr_erp_baseline_5y(),
-        'vix': _compute_vkospi_baseline_5y(),
-        'dd':  _compute_kr_dd_baseline_5y(),
+        'erp':     _compute_kr_erp_baseline_5y(),
+        'vix':     _compute_vkospi_baseline_5y(),
+        'dd':      _compute_kr_dd_baseline_5y(),
+        'per_15y': _compute_kospi_per_baseline_15y(),
+        'trend':   _compute_kospi_trend_baseline_5y(),
         'updated_at': datetime.now().isoformat(),
-        'weights': {'erp': W_ERP, 'vix': W_VIX, 'dd': W_DD},
+        'weights': {
+            'per_15y': W_PER, 'trend': W_TREND,
+            'erp': W_ERP, 'vix': W_VIX, 'dd': W_DD,
+        },
     }
     try:
         os.makedirs(os.path.dirname(_BASELINE_PATH), exist_ok=True)
@@ -238,13 +301,33 @@ def _z(value: float, baseline: dict) -> float:
     return (value - baseline['mean']) / std
 
 
-def compute_composite_z(erp: float, vix: float, dd_60d: float, baselines: dict) -> dict:
-    """3-요소 합산 z. 모두 양수=저평가/공포 방향."""
+def compute_composite_z(
+    erp: float,
+    vix: float,
+    dd_60d: float,
+    baselines: dict,
+    kospi_per: float | None = None,
+    price_vs_ma200: float | None = None,
+) -> dict:
+    """5-요소 합산 z. 모두 양수 = 저평가 방향.
+
+    추가 항목 (절대 valuation 앵커):
+      - z_per:   PER 15Y 평균 대비 현재 PER. 부호 반전(높은 PER=비쌈→음수 기여).
+      - z_trend: 가격 vs 200d MA. 부호 반전(이격 큰 양수=비쌈→음수 기여).
+    이 둘이 추가되어 단기 sentiment(erp+vix+dd) 만으로 "급등 후 평온 = 저평가"
+    오판하던 문제 해결. kospi_per / price_vs_ma200 미전달 시 0 기여 (backward compat).
+    """
     z_erp = _z(erp, baselines['erp'])
     z_vix = _z(vix, baselines['vix'])
     z_dd = -_z(dd_60d, baselines['dd'])  # DD 더 음수 → z↑
-    z_comp = W_ERP * z_erp + W_VIX * z_vix + W_DD * z_dd
+    # PER, TREND — 부호 반전 (높은 값 = 비쌈 = 저평가 음수)
+    z_per = -_z(kospi_per, baselines.get('per_15y', _FALLBACK_PER_LT)) if kospi_per is not None else 0.0
+    z_trend = -_z(price_vs_ma200, baselines.get('trend', _FALLBACK_TREND)) if price_vs_ma200 is not None else 0.0
+    z_comp = (W_PER * z_per + W_TREND * z_trend
+              + W_ERP * z_erp + W_VIX * z_vix + W_DD * z_dd)
     return {
+        'z_per': round(z_per, 4),
+        'z_trend': round(z_trend, 4),
         'z_erp': round(z_erp, 4),
         'z_vix': round(z_vix, 4),
         'z_dd': round(z_dd, 4),
@@ -362,8 +445,20 @@ def fetch_valuation_signal_today_kr() -> dict | None:
         earnings_yield = 1.0 / kospi_per
         erp = earnings_yield - tnx_yield
 
+        # Trend gap — 가격 vs 200d MA. close 시리즈는 이미 1Y 분이라 200d MA 계산 가능.
+        # close 가 200일 이상이면 마지막 200일 평균. 미만이면 None (z_trend 0 기여).
+        price_vs_ma200 = None
+        if len(close) >= 200:
+            ma200 = float(close.tail(200).mean())
+            if ma200 > 0:
+                price_vs_ma200 = kospi_today / ma200 - 1.0
+
         baselines = get_kr_baselines()
-        z = compute_composite_z(erp, vix, dd_60d, baselines)
+        z = compute_composite_z(
+            erp, vix, dd_60d, baselines,
+            kospi_per=kospi_per,
+            price_vs_ma200=price_vs_ma200,
+        )
 
         return {
             'date': date.today().isoformat(),
@@ -373,6 +468,7 @@ def fetch_valuation_signal_today_kr() -> dict | None:
             'erp': round(erp, 4),
             'vix': round(vix, 2),                   # 의미: VKOSPI
             'dd_60d': round(dd_60d, 4),
+            'price_vs_ma200': round(price_vs_ma200, 4) if price_vs_ma200 is not None else None,
             **z,
             'label': label_from_z_comp(z['z_comp']),
         }
@@ -476,14 +572,32 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
     roll60_max = close.rolling(60).max()
     dd = close / roll60_max - 1.0
 
-    # 4 시계열 결합 (날짜 인덱스 정렬, forward-fill 으로 비거래일 보간)
-    df = pd.concat([
+    # 200d MA gap — backfill 도 동일 신호 제공 위해 추가 (warmup 200일 필요)
+    ma200 = close.rolling(200).mean()
+    trend = (close / ma200 - 1.0)
+
+    # PER 시계열 — pykrx fundamental 의 일별 PER (close 와 같은 인덱스로 ffill)
+    per_series = None
+    try:
+        from pykrx import stock
+        fund = stock.get_index_fundamental(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), '1001')
+        if fund is not None and not fund.empty:
+            per_series = fund['PER'].replace(0, np.nan)
+    except Exception as e:
+        print(f'[valuation_kr] backfill PER 시계열 실패: {e}')
+
+    # 시계열 결합 (날짜 인덱스 정렬, forward-fill 으로 비거래일 보간)
+    components = [
         close.rename('close'),
         ey.rename('ey'),
         tnx_yield.rename('tnx'),
         vix_series.rename('vix'),
         dd.rename('dd'),
-    ], axis=1).ffill().dropna()
+        trend.rename('trend'),
+    ]
+    if per_series is not None:
+        components.append(per_series.rename('kospi_per'))
+    df = pd.concat(components, axis=1).ffill().dropna(subset=['close', 'ey', 'tnx', 'vix', 'dd'])
 
     df['erp'] = df['ey'] - df['tnx']
 
@@ -493,8 +607,17 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
     baselines = get_kr_baselines()
     rows = []
     for idx, r in df.iterrows():
+        # backfill 도 PER + trend 인자 전달 — 컬럼 없거나 NaN 면 None 으로 0 기여
+        per_val = r.get('kospi_per') if 'kospi_per' in df.columns else None
+        if per_val is not None and (pd.isna(per_val) or per_val <= 0):
+            per_val = None
+        trend_val = r.get('trend')
+        if trend_val is not None and pd.isna(trend_val):
+            trend_val = None
         z = compute_composite_z(float(r['erp']), float(r['vix']),
-                                 float(r['dd']), baselines)
+                                 float(r['dd']), baselines,
+                                 kospi_per=float(per_val) if per_val is not None else None,
+                                 price_vs_ma200=float(trend_val) if trend_val is not None else None)
         rows.append({
             'date': idx.strftime('%Y-%m-%d'),
             'spy_per': round(float(per_series.loc[:idx].iloc[-1]), 2),
