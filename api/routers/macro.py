@@ -164,23 +164,26 @@ _VAL_SIG_PROMPT = """/no_think
 나쁜 예시 (단언/~요체 — 피할 것):
 "종합 점수 -0.63점으로 다소 고평가입니다. PER 28배라 비싸진 시기예요. 분할 매수는 미루세요." """
 
-_val_sig_cache = {'data': None, 'ts': 0}
+_val_sig_cache = {'data': None, 'ts': 0}  # cache reload trigger 2026-05-10d kr-10y
 _VAL_SIG_TTL = 24 * 3600
 
 
 def build_baseline_snapshot(baselines: dict) -> dict:
     """API 응답에서 baselines_5y 형태로 그대로 쓰는 dict — 스냅샷용.
 
-    KR 5-component (per_15y / trend) 키도 함께 노출 — 프론트가 새 분포 표시에 사용.
-    옛 3-key 베이스라인 (US 또는 새 baseline 미적용 KR) 도 backward-compat.
+    KR 5-component (per_15y / trend), US 6-component (cape_15y / buffett_15y / trend)
+    키를 모두 노출 — 프론트가 region 별 분포·formula 표시에 사용.
+    옛 3-key 베이스라인도 backward-compat.
     """
     return {
-        'erp':     baselines.get('erp', {}),
-        'vix':     baselines.get('vix', {}),
-        'dd':      baselines.get('dd',  {}),
-        'per_15y': baselines.get('per_15y', {}),       # 신규 (KR)
-        'trend':   baselines.get('trend',   {}),       # 신규 (KR)
-        'weights': baselines.get('weights', {'erp': 0.4, 'vix': 0.3, 'dd': 0.3}),
+        'erp':         baselines.get('erp', {}),
+        'vix':         baselines.get('vix', {}),
+        'dd':          baselines.get('dd',  {}),
+        'per_15y':     baselines.get('per_15y', {}),       # KR
+        'trend':       baselines.get('trend',   {}),       # KR + US
+        'cape_15y':    baselines.get('cape_15y', {}),      # US
+        'buffett_15y': baselines.get('buffett_15y', {}),   # US
+        'weights':     baselines.get('weights', {'erp': 0.4, 'vix': 0.3, 'dd': 0.3}),
     }
 
 
@@ -191,14 +194,23 @@ def build_valuation_interpretation(today: dict, baselines: dict) -> str:
     DB select 만으로 즉시 응답. endpoint 호출 시점에는 외부 LLM 호출 0회.
     """
     z_comp_now = today.get('z_comp') or 0.0
-    ze = today.get('z_erp') or 0.0
-    zv = today.get('z_vix') or 0.0
-    zd = today.get('z_dd')  or 0.0
-    contribs = {
-        '주식 매력도 점수': ze * 0.4,
-        '공포 점수':        zv * 0.3,
-        '하락 충격 점수':   zd * 0.3,
+    ze  = today.get('z_erp')     or 0.0
+    zv  = today.get('z_vix')     or 0.0
+    zd  = today.get('z_dd')      or 0.0
+    zc  = today.get('z_cape')    or 0.0   # US
+    zb  = today.get('z_buffett') or 0.0   # US
+    zp  = today.get('z_per')     or 0.0   # KR
+    zt  = today.get('z_trend')   or 0.0   # KR + US
+    w   = (baselines or {}).get('weights', {})
+    contribs: dict[str, float] = {
+        '주식 매력도 점수': ze * float(w.get('erp', 0.4)),
+        '공포 점수':        zv * float(w.get('vix', 0.3)),
+        '하락 충격 점수':   zd * float(w.get('dd',  0.3)),
     }
+    if zp and w.get('per'):       contribs['장기 PER 점수']   = zp * float(w['per'])
+    if zc and w.get('cape'):      contribs['CAPE 점수']        = zc * float(w['cape'])
+    if zb and w.get('buffett'):   contribs['Buffett 점수']     = zb * float(w['buffett'])
+    if zt and w.get('trend'):     contribs['추세 점수']        = zt * float(w['trend'])
     dom_name = (min if z_comp_now < 0 else max)(contribs, key=contribs.get)
 
     # 1) Groq LLM
@@ -241,10 +253,21 @@ def build_valuation_interpretation(today: dict, baselines: dict) -> str:
     dd_p  = (today.get('dd_60d') or 0) * 100
     m_vix = baselines['vix']['mean']
     m_dd  = baselines['dd']['mean'] * 100
+    cape_v    = today.get('cape')
+    buffett_v = today.get('buffett_ratio')
+    trend_v   = today.get('price_vs_ma200')
     if dom_name == '주식 매력도 점수':
         cause = f"주가수익비율(PER) {per:.1f}배 + 국채금리 {tnx_p:.2f}% 조합으로 주식 매력도 점수가 5년 평균 대비 낮은 수준"
     elif dom_name == '공포 점수':
         cause = f"공포지수(VIX) {vix_v:.1f}, 5년 평균 {m_vix:.1f} 대비 시장 분위기가 한쪽으로 치우친 상태"
+    elif dom_name == 'CAPE 점수' and cape_v is not None:
+        cause = f"Shiller CAPE {cape_v:.1f}배 — 15년 분포 대비 구조적 밸류에이션이 두드러지는 수준"
+    elif dom_name == 'Buffett 점수' and buffett_v is not None:
+        cause = f"시가총액/GDP 비율 {buffett_v*100:.0f}% — 장기 균형 대비 영향이 큰 수준"
+    elif dom_name == '추세 점수' and trend_v is not None:
+        cause = f"S&P500 200일선 대비 {trend_v*100:+.1f}% — 장기 추세선과의 괴리가 점수에 크게 반영"
+    elif dom_name == '장기 PER 점수':
+        cause = f"15년 PER 분포 대비 현재 수준이 종합 점수에 가장 크게 기여"
     else:
         cause = f"최근 60일 하락폭 {dd_p:+.2f}%, 5년 평균 {m_dd:+.2f}% 대비 영향이 두드러지는 수준"
     if '명확한 저평가' in label:
@@ -257,25 +280,34 @@ def build_valuation_interpretation(today: dict, baselines: dict) -> str:
 
 
 @router.get('/valuation-signal')
-def get_valuation_signal(region: str = Query('us')):
+def get_valuation_signal(
+    region: str = Query('us'),
+    days: int = Query(90, ge=10, le=5000),
+):
     """DB 만 select 하는 fast-path. 스케줄러 [Step 5d] 가 매일 raw·점수·LLM 해설·
     baseline 스냅샷 모두 미리 적재 → endpoint 는 단순 select. 외부 호출 0회.
+
+    days 파라미터: history 길이 (10~5000). 기본 90.
+    days > 500 일 때 weekly downsample (5거래일 평균) 자동 적용 → payload 1/5.
 
     레거시 (interpretation/baseline_snapshot 미적재 행) 안전망:
     - on-the-fly 산출 후 응답 (단 그 결과는 DB 에 다시 적재 안 함 — scheduler 책임)
     """
     region = _norm_region(region)
     now = _time.time()
-    # region 별 캐시키 분리
-    cache_key = f'data_{region}'
+    # region+days 별 캐시키 분리 (days 다른 호출은 별도 캐시)
+    cache_key = f'data_{region}_{days}'
     cached = _val_sig_cache.get(cache_key)
-    cached_ts = _val_sig_cache.get(f'ts_{region}', 0)
+    cached_ts = _val_sig_cache.get(f'ts_{region}_{days}', 0)
     if cached and (now - cached_ts) < _VAL_SIG_TTL:
         return {**cached, 'cached': True}
 
     try:
         today = fetch_valuation_signal_latest(region=region)
-        history = fetch_valuation_signal_history(days=90, region=region)
+        history = fetch_valuation_signal_history(days=days, region=region)
+        # 500+ 행이면 5거래일 평균으로 weekly downsample (그래프 모바일 렌더 + payload)
+        if len(history) > 500:
+            history = _weekly_downsample(history)
     except Exception as e:
         print(f'[valuation_signal] DB fetch 실패: {e}')
         return {'error': f'DB fetch failed: {type(e).__name__}: {str(e)[:200]}'}
@@ -287,11 +319,10 @@ def get_valuation_signal(region: str = Query('us')):
     interpretation = today.get('interpretation')
     baseline_snapshot = today.get('baseline_snapshot')
 
-    # KR 5-comp 신규 스키마 감지: per_15y/trend 키 없는 옛 스냅샷이면 무효화 → 새로 빌드.
-    # (DB 옛 row 의 baseline_snapshot 은 3-key 스키마라 그대로 두면 frontend 5-comp 표시 안 됨)
-    if region == 'kr' and isinstance(baseline_snapshot, dict):
-        if 'per_15y' not in baseline_snapshot or 'trend' not in baseline_snapshot:
-            baseline_snapshot = None
+    # baseline snapshot — DB 의 stored snapshot 은 옛 cron 시점 weights 가 박혀 있을
+    # 수 있어 (KR 5-comp 전환, US 3→6-comp 전환 등) frontend formula 텍스트가 옛 비율
+    # 을 노출. region 무관 항상 rebuild 해서 현재 코드 상수 weights 가 노출되게 강제.
+    baseline_snapshot = None
 
     # 안전망: 사전 적재 안 됐거나 옛 스키마면 on-the-fly (느림 — 스케줄러 정상 동작 시 도달 X)
     # region 별 분기 — KR 은 valuation_signal_kr.get_kr_baselines, US 는 valuation_signal.get_baselines
@@ -317,6 +348,34 @@ def get_valuation_signal(region: str = Query('us')):
         'baselines_5y': baseline_snapshot,
         'cached': False,
     }
-    _val_sig_cache[f'data_{region}'] = response
-    _val_sig_cache[f'ts_{region}'] = now
+    _val_sig_cache[cache_key] = response
+    _val_sig_cache[f'ts_{region}_{days}'] = now
     return response
+
+
+def _weekly_downsample(history: list[dict]) -> list[dict]:
+    """daily history → 5거래일 평균 weekly. 라벨/문자열 필드는 마지막 값 유지."""
+    if not history:
+        return history
+    bins: list[list[dict]] = []
+    bucket: list[dict] = []
+    for row in history:
+        bucket.append(row)
+        if len(bucket) >= 5:
+            bins.append(bucket)
+            bucket = []
+    if bucket:
+        bins.append(bucket)
+
+    out = []
+    numeric_keys = ('z_comp', 'z_cape', 'z_buffett', 'z_trend', 'z_per', 'z_erp', 'z_vix', 'z_dd',
+                    'cape', 'buffett_ratio', 'price_vs_ma200', 'spy_per', 'erp', 'vix', 'dd_60d',
+                    'earnings_yield', 'tnx_yield')
+    for b in bins:
+        last = b[-1]
+        agg: dict = {'date': last['date'], 'region': last.get('region'), 'label': last.get('label')}
+        for k in numeric_keys:
+            vals = [r[k] for r in b if r.get(k) is not None]
+            agg[k] = (sum(vals) / len(vals)) if vals else None
+        out.append(agg)
+    return out

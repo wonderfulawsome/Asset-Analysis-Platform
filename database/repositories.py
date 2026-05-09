@@ -1439,21 +1439,35 @@ def fetch_valuation_signal_latest(region: str = 'us') -> dict | None:
 
 
 def fetch_valuation_signal_history(days: int = 30, region: str = 'us') -> list[dict]:
-    """최근 N 거래일 historical (오래된 → 최신)."""
+    """최근 N 거래일 historical (오래된 → 최신).
+
+    Supabase anon key 가 1행 호출당 최대 1000행 제한 → days>1000 이면 .range() 페이지네이션.
+    """
     client = get_client()
+    out: list[dict] = []
     try:
-        r = (
-            client.table("valuation_signal")
-            .select("*")
-            .eq("region", region)
-            .order("date", desc=True)
-            .limit(days)
-            .execute()
-        )
+        page = 0
+        per = 1000
+        while page * per < days:
+            start = page * per
+            end = min(start + per - 1, days - 1)
+            r = (
+                client.table("valuation_signal")
+                .select("*")
+                .eq("region", region)
+                .order("date", desc=True)
+                .range(start, end)
+                .execute()
+            )
+            chunk = r.data or []
+            out.extend(chunk)
+            if len(chunk) < (end - start + 1):
+                break
+            page += 1
     except Exception as e:
         print(f"[DB] valuation_signal history 실패: {e}")
         return []
-    return list(reversed(r.data or []))
+    return list(reversed(out))
 
 
 # ── ai_headline_cache (홈 화면 LLM 헤드라인) ────────────────────

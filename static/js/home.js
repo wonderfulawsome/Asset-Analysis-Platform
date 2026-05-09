@@ -389,7 +389,10 @@
     fEl.textContent = '로딩 중...';
     [gEl, dEl, hEl, iEl].forEach(el => el && (el.innerHTML = ''));
     try {
-      const r = await fetch('/api/macro/valuation-signal');
+      const url = (typeof window.withRegion === 'function')
+        ? window.withRegion('/api/macro/valuation-signal?days=2520')
+        : '/api/macro/valuation-signal?days=2520';
+      const r = await fetch(url);
       const d = await r.json();
       if (d.error || !d.today) {
         const detail = d.detail ? ` — ${escapeHtml(d.detail)}` : '';
@@ -406,12 +409,19 @@
       const vix = (t.vix ?? 0).toFixed(2);
       const erpSign = t.erp >= 0 ? '+' : '';
       const zErp = t.z_erp ?? 0, zVix = t.z_vix ?? 0, zDd = t.z_dd ?? 0, zComp = t.z_comp ?? 0;
-      const zPer = t.z_per ?? 0, zTrend = t.z_trend ?? 0;             // KR 5-comp 신규
+      const zPer = t.z_per ?? 0, zTrend = t.z_trend ?? 0;             // KR 5-comp / US trend
+      const zCape = t.z_cape ?? 0, zBuffett = t.z_buffett ?? 0;       // US 6-comp
       const trendPct = ((t.price_vs_ma200 ?? 0) * 100).toFixed(1);    // 가격 vs 200d MA (%)
       const perVal = (t.spy_per ?? 0).toFixed(1);                     // KOSPI PER (KR) / SPY PER (US)
+      const capeVal = (t.cape ?? 0).toFixed(1);                       // Shiller CAPE (US)
+      const buffettPct = (t.buffett_ratio == null)
+        ? null
+        : (t.buffett_ratio * 100).toFixed(0);                          // Buffett 비율 (%) 또는 null
       const W = bs.weights || { erp: 0.4, vix: 0.3, dd: 0.3 };
-      // 새 5-comp 스키마 활성 여부 — KR baseline 에 per_15y/trend 키 존재하고 weights 에도 있을 때
+      // 새 5-comp 스키마 (KR) — per_15y/trend 키 존재
       const has5Comp = !!(W.per_15y && W.trend && bs.per_15y && bs.trend);
+      // 새 6-comp 스키마 (US) — cape/buffett/trend 키 존재
+      const has6Comp = !!(W.cape && W.buffett && W.trend && bs.cape_15y && bs.buffett_15y && bs.trend);
       const sgn = v => (v >= 0 ? '+' : '');
       const wPct = w => Math.round(w * 100);
 
@@ -438,7 +448,12 @@
 
       // 1) 수식 — 일반어. 5-comp 활성 시 PER + 추세 추가, 아니면 기존 3-comp.
       const _plus = '<span style="color:#6b7280;">+</span>';
-      if (has5Comp) {
+      if (has6Comp) {
+        fEl.innerHTML = `5/15년 분포와 비교한 <b>종합 점수</b> = `
+          + `Shiller CAPE(${wPct(W.cape)}%) ${_plus} Buffett 비율(${wPct(W.buffett)}%) ${_plus} `
+          + `추세 위치(${wPct(W.trend)}%) ${_plus} 주식 매력도(${wPct(W.erp)}%) ${_plus} `
+          + `공포(${wPct(W.vix)}%) ${_plus} 하락충격(${wPct(W.dd)}%)`;
+      } else if (has5Comp) {
         fEl.innerHTML = `5/15년 분포와 비교한 <b>종합 점수</b> = `
           + `PER 레벨(${wPct(W.per_15y)}%) ${_plus} 추세 위치(${wPct(W.trend)}%) ${_plus} `
           + `주식 매력도(${wPct(W.erp)}%) ${_plus} 공포(${wPct(W.vix)}%) ${_plus} 하락충격(${wPct(W.dd)}%)`;
@@ -481,13 +496,37 @@
           <span class="mv-val" style="color:${(t.price_vs_ma200 ?? 0) >= 0 ? '#10b981' : '#ef4444'};">${sgn(t.price_vs_ma200 ?? 0)}${trendPct}%</span>
         </div>
         ` : ''}
+        ${has6Comp ? `
+        <div class="mv-row" style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.05);padding-top:10px;">
+          <span class="mv-key"><span class="mv-op"></span>Shiller CAPE (15년 평균 ${bs.cape_15y.mean ? bs.cape_15y.mean.toFixed(1) : '?'}배 대비)</span>
+          <span class="mv-val" style="color:#a855f7;">${capeVal}배</span>
+        </div>
+        <div class="mv-row">
+          <span class="mv-key"><span class="mv-op"></span>Buffett 비율 (시총÷GDP, 15년 평균 ${bs.buffett_15y.mean != null ? (bs.buffett_15y.mean*100).toFixed(0) + '%' : '?'} 대비)</span>
+          <span class="mv-val" style="color:${buffettPct == null ? '#6b7280' : '#a855f7'};">${buffettPct == null ? '데이터 없음' : buffettPct + '%'}</span>
+        </div>
+        <div class="mv-row">
+          <span class="mv-key"><span class="mv-op"></span>가격 vs 200일 평균 (5년 평균 ${bs.trend.mean != null ? (bs.trend.mean * 100).toFixed(1) + '%' : '?'} 대비)</span>
+          <span class="mv-val" style="color:${(t.price_vs_ma200 ?? 0) >= 0 ? '#10b981' : '#ef4444'};">${sgn(t.price_vs_ma200 ?? 0)}${trendPct}%</span>
+        </div>
+        ` : ''}
         <div class="mv-row" style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.05);padding-top:10px;">
           ${has5Comp ? `
           <span class="mv-key"><span class="mv-op">${wPct(W.per_15y)}%</span><span>PER 레벨 점수 <small style="color:#6b7280;font-weight:400;">(평균 대비 ${zPer < 0 ? '비쌈' : zPer > 0 ? '쌈' : '평소'})</small></span></span>
           <span class="mv-val" style="color:${zPer >= 0 ? '#10b981' : '#ef4444'};">${sgn(zPer)}${zPer.toFixed(2)}σ</span>
           ` : ''}
+          ${has6Comp ? `
+          <span class="mv-key"><span class="mv-op">${wPct(W.cape)}%</span><span>CAPE 점수 <small style="color:#6b7280;font-weight:400;">(15년 평균 대비 ${zCape < 0 ? '비쌈' : zCape > 0 ? '쌈' : '평소'})</small></span></span>
+          <span class="mv-val" style="color:${zCape >= 0 ? '#10b981' : '#ef4444'};">${sgn(zCape)}${zCape.toFixed(2)}σ</span>
+          ` : ''}
         </div>
-        ${has5Comp ? `
+        ${has6Comp ? `
+        <div class="mv-row">
+          <span class="mv-key"><span class="mv-op">${wPct(W.buffett)}%</span><span>Buffett 점수 <small style="color:#6b7280;font-weight:400;">(15년 평균 대비 ${zBuffett < 0 ? '비쌈' : zBuffett > 0 ? '쌈' : '평소'})</small></span></span>
+          <span class="mv-val" style="color:${zBuffett >= 0 ? '#10b981' : '#ef4444'};">${sgn(zBuffett)}${zBuffett.toFixed(2)}σ</span>
+        </div>
+        ` : ''}
+        ${(has5Comp || has6Comp) ? `
         <div class="mv-row">
           <span class="mv-key"><span class="mv-op">${wPct(W.trend)}%</span><span>추세 위치 점수 <small style="color:#6b7280;font-weight:400;">(평균 대비 ${zTrend < 0 ? '추세 위' : zTrend > 0 ? '추세 아래' : '평소'})</small></span></span>
           <span class="mv-val" style="color:${zTrend >= 0 ? '#10b981' : '#ef4444'};">${sgn(zTrend)}${zTrend.toFixed(2)}σ</span>
@@ -538,7 +577,10 @@
   // 반원 게이지 — z-score 기반 (±2σ 를 반원에 매핑)
   // 180° = z=-2σ (왼쪽 끝, 가장 고평가), 0° = z=+2σ (오른쪽 끝, 가장 저평가)
   function renderGauge(z, label) {
-    const minZ = -2, maxZ = 2;
+    // 게이지 범위 ±3σ — 사용자 보고 "z=-2.02 가 게이지 끝박힘". 5-comp 가
+    // 절대 valuation 신호 강해 |z|>2 흔히 도달, ±2σ 클램프면 끝박힘 빈번.
+    // ±3σ 로 늘려 -2.02 → 좌측 1/3 위치, 시각 여유 확보.
+    const minZ = -3, maxZ = 3;
     const clamped = Math.max(minZ, Math.min(maxZ, z));
     const ratio = (clamped - minZ) / (maxZ - minZ);    // 0 ~ 1
     const angle = 180 - ratio * 180;                     // 180 → 0
@@ -547,12 +589,16 @@
     const x = cx + r * Math.cos(rad);
     const y = cy - r * Math.sin(rad);
 
-    // ±1σ 경계 색상 — 4 segment (z=-2~-1 빨강, -1~0 주황, 0~+1 초록, +1~+2 파랑)
+    // 색 segment 경계도 ±3σ 매핑에 맞춰 조정 (label_from_z_comp 임계 ±1.0 기준):
+    //   180° (z=-3) ~ 150° (z=-1) 빨강 = 명확한 고평가
+    //   150° (z=-1) ~ 90°  (z=0)  주황 = 다소 고평가
+    //   90°  (z=0)  ~ 30°  (z=+1) 초록 = 다소 저평가
+    //   30°  (z=+1) ~ 0°   (z=+3) 파랑 = 명확한 저평가
     const segs = [
-      { from: 180, to: 135, color: '#ef4444' },  // z < -1 명확한 고평가
-      { from: 135, to: 90,  color: '#f59e0b' },  // -1 < z < 0 다소 고평가
-      { from: 90,  to: 45,  color: '#10b981' },  // 0 < z < +1 다소 저평가
-      { from: 45,  to: 0,   color: '#3b82f6' },  // z > +1 명확한 저평가
+      { from: 180, to: 150, color: '#ef4444' },
+      { from: 150, to: 90,  color: '#f59e0b' },
+      { from: 90,  to: 30,  color: '#10b981' },
+      { from: 30,  to: 0,   color: '#3b82f6' },
     ];
     const arcs = segs.map(s => arcPath(cx, cy, r, s.from, s.to, s.color)).join('');
 
@@ -615,9 +661,23 @@
         <path d="M${areaPts}" fill="${fillColor}" stroke="none"/>
         <path d="M${linePts}" fill="none" stroke="${lineColor}" stroke-width="1.5" stroke-linejoin="round"/>
         <circle cx="${lastX}" cy="${lastY}" r="3" fill="${lineColor}"/>
-        <text x="${pad.l}" y="${H - 3}" font-size="9" fill="#6b7280">3개월 전</text>
+        <text x="${pad.l}" y="${H - 3}" font-size="9" fill="#6b7280">${_xLeftLabel(history)}</text>
         <text x="${pad.l + innerW}" y="${H - 3}" text-anchor="end" font-size="9" fill="#6b7280">오늘</text>
       </svg>`;
+  }
+
+  // history 첫 row 의 date 와 오늘 차이로 가변 라벨 ("10년 전" / "5년 전" / "3개월 전" 등)
+  function _xLeftLabel(history) {
+    if (!history || !history.length) return '';
+    const first = history[0].date;
+    if (!first) return '';
+    const d0 = new Date(first), now = new Date();
+    const days = Math.floor((now - d0) / 86400000);
+    if (days >= 365 * 8)  return `${Math.round(days / 365)}년 전`;
+    if (days >= 365 * 2)  return `${Math.round(days / 365)}년 전`;
+    if (days >= 365)      return '1년 전';
+    if (days >= 60)       return `${Math.round(days / 30)}개월 전`;
+    return `${days}일 전`;
   }
 
   // main.js popstate 가 호출할 수 있도록 window 에 노출
