@@ -2768,6 +2768,8 @@ html[lang="en"] .card-tappable::after {
 }
 .menu-btn-bar { pointer-events: none; }        /* 자식 span 이 클릭 가로채지 못하게 */
 .menu-btn:hover { background: var(--sep); }
+/* 탭 뷰 진입 시 햄버거 메뉴 숨김 — 좌측의 "← 홈" 버튼과 겹쳐서. 홈 화면에서만 표시. */
+body.with-back .menu-btn { display: none; }
 .menu-btn-bar {
   display: block;
   width: 18px;
