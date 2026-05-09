@@ -950,7 +950,7 @@ async function toggleSimilarPatterns() {
   _similarVisible = true;
   btn.classList.add('active');
   btn.disabled = true;
-  btn.textContent = t('chart.similarLoading') || '⌛ 유사 패턴 검색 중...';
+  btn.textContent = t('chart.similarLoading') || '유사 패턴 검색 중...';
   try {
     // shape: 60일 + 후속 30일 + top 3 / magnitude: 126일 (6개월) + 후속 126일 + top 5
     const params = _similarMode === 'magnitude'

@@ -238,12 +238,16 @@ body {
   background-clip: text;
 }
 .settings-btn {
-  font-size: 20px;
   cursor: pointer;
   padding: 6px;
   border-radius: 12px;
   transition: background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-sub);
 }
+.settings-btn svg { display: block; }
 .settings-btn:active {
   background: var(--sep);
 }
