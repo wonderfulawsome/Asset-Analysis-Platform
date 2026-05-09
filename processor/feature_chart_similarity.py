@@ -17,6 +17,7 @@ DEFAULT_FOLLOWUP = 30              # 매칭 직후 후속 구간 길이
 DEFAULT_TOP_K = 3                  # 반환할 top-K 매칭 수
 EXCLUDE_RECENT_DAYS = 90           # today 와 겹치는 자기-매칭 차단 (오늘 ± 90일)
 DIVERSIFY_GAP_DAYS = 90            # top-K 사이 최소 간격 — 같은 시기 클러스터 차단
+DIRECTION_NEUTRAL_TOL = 0.02       # 윈도 누적 수익률 |x| < 2% 면 중립 — 방향 필터 통과
 
 
 def _is_kr_ticker(ticker: str) -> bool:
@@ -64,20 +65,29 @@ def _fetch_close(ticker: str) -> pd.Series:
         return pd.Series(dtype=float)
 
 
-def _zscore_log_returns(close_window: pd.Series) -> np.ndarray:
-    """log-return → z-score 정규화 array. 길이 = window-1.
+def _cumulative_log_returns(close_window: pd.Series) -> np.ndarray:
+    """log(close_t / close_0) — 시작점 0 기준 누적 로그수익률 path.
 
-    절대 가격에 무관한 "모양" 매칭이 목적.
-    표준편차 0 (가격 변동 없음) 인 경우 mean centering 만.
+    이전엔 z-score 정규화 log-return 의 Pearson 상관을 썼는데, 그러면 *변동 패턴*
+    만 보고 *추세 방향* 은 무시되어 강세장 today 가 약세장 candidate 와도
+    높은 상관이 나오는 문제 발생 (사용자 보고 2026-05-09).
+    누적 path 를 비교하면 path 모양 자체가 매칭되어 추세 방향이 자연 보존됨.
+    Pearson 자체가 mean·scale invariant 이므로 절대 가격은 여전히 무관.
     """
-    ret = np.log(close_window / close_window.shift(1)).dropna().values
-    if len(ret) == 0:
-        return ret
-    mu = ret.mean()
-    sd = ret.std()
-    if sd < 1e-9:
-        return ret - mu
-    return (ret - mu) / sd
+    if len(close_window) < 2:
+        return np.array([])
+    log_close = np.log(close_window.values.astype(float))
+    return log_close - log_close[0]
+
+
+def _total_log_return(close_window: pd.Series) -> float:
+    """윈도 시작 → 끝 누적 로그수익률. 방향 필터 sign 판정용."""
+    if len(close_window) < 2:
+        return 0.0
+    try:
+        return float(np.log(close_window.iloc[-1] / close_window.iloc[0]))
+    except Exception:
+        return 0.0
 
 
 def find_similar_patterns(
@@ -113,31 +123,52 @@ def find_similar_patterns(
             'debug': {'n_close': n_close, 'needed': needed},
         }
 
-    # 오늘 패턴: 마지막 window 일
+    # 오늘 패턴: 마지막 window 일 — 누적 path + 총 로그수익률
     today_close = close.iloc[-window:]
-    today_zret = _zscore_log_returns(today_close)
-    if len(today_zret) == 0:
+    today_path = _cumulative_log_returns(today_close)
+    today_total = _total_log_return(today_close)
+    if len(today_path) == 0:
         return {'ticker': ticker, 'matches': [], 'error': 'no returns',
-                'debug': {'n_close': n_close, 'today_zret_len': 0}}
+                'debug': {'n_close': n_close, 'today_path_len': 0}}
 
-    # 후보 슬라이드: end_idx 가 [window-1, n - EXCLUDE_RECENT_DAYS - 1] 범위
+    # 후보 슬라이드 + 방향 필터: today 가 강세(>+2%)면 강세 후보만, 약세(<-2%)면 약세만.
+    # 중립(|total| ≤ 2%) 일 땐 sign 무시.
     n = len(close)
     cutoff_end = n - EXCLUDE_RECENT_DAYS
+    today_dir = 0
+    if today_total > DIRECTION_NEUTRAL_TOL:
+        today_dir = 1
+    elif today_total < -DIRECTION_NEUTRAL_TOL:
+        today_dir = -1
+
     candidates = []
     n_skipped_len = 0
     n_skipped_nan = 0
+    n_skipped_dir = 0
     for end_idx in range(window - 1, cutoff_end):
         start_idx = end_idx - window + 1
         c_window = close.iloc[start_idx:end_idx + 1]
         if len(c_window) != window:
             n_skipped_len += 1
             continue
-        c_zret = _zscore_log_returns(c_window)
-        if len(c_zret) != len(today_zret):
+        c_path = _cumulative_log_returns(c_window)
+        if len(c_path) != len(today_path):
             n_skipped_len += 1
             continue
+        # 방향 필터: today 가 명확한 방향이면 같은 방향 후보만 통과.
+        # 후보가 중립이면 통과 (today 와 같은 정적 구간이면 매치 가능).
+        if today_dir != 0:
+            c_total = _total_log_return(c_window)
+            c_dir = 0
+            if c_total > DIRECTION_NEUTRAL_TOL:
+                c_dir = 1
+            elif c_total < -DIRECTION_NEUTRAL_TOL:
+                c_dir = -1
+            if c_dir != 0 and c_dir != today_dir:
+                n_skipped_dir += 1
+                continue
         with np.errstate(invalid='ignore'):
-            corr = float(np.corrcoef(today_zret, c_zret)[0, 1])
+            corr = float(np.corrcoef(today_path, c_path)[0, 1])
         if not np.isfinite(corr):
             n_skipped_nan += 1
             continue
@@ -196,10 +227,13 @@ def find_similar_patterns(
         'disclaimer': '과거 관찰 사실일 뿐 미래 가격을 예측하지 않습니다.',
         'debug': {
             'n_close': n_close,
-            'today_zret_len': len(today_zret),
+            'today_path_len': len(today_path),
+            'today_total_logret': round(today_total, 4),
+            'today_dir': today_dir,
             'cutoff_end': cutoff_end,
             'n_candidates': len(candidates),
             'n_skipped_len': n_skipped_len,
+            'n_skipped_dir': n_skipped_dir,
             'n_skipped_nan': n_skipped_nan,
             'n_selected': len(matches),
         },
