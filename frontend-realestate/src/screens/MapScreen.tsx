@@ -214,8 +214,10 @@ export default function MapScreen() {
 
       {/* 플로팅 상단 — 터미널 스타일 검색 + MARKET BRIEF + CHOROPLETH 캡션 */}
       {/* outer wrapper pointer-events:none → 패널 사이 빈 공간 클릭이 지도(폴리곤)로 통과.
-          inner 패널들만 pointer-events:auto 로 클릭 받음 */}
-      <div className="absolute top-2 left-2 right-2 z-10 space-y-1.5 pointer-events-none">
+          inner 패널들만 pointer-events:auto 로 클릭 받음.
+          z-[1000]: Leaflet 의 내장 panes (tilePane=200/overlayPane=400/markerPane=600/popupPane=700)
+          위로 강제 — 기존 z-10 은 Leaflet 콘텐츠에 덮여 모바일에서 카드가 안 보였음. */}
+      <div className="absolute top-2 left-2 right-2 z-[1000] space-y-1.5 pointer-events-none">
         {/* 검색 줄 — 모노 + 검정 패널 + 모노크롬 SVG */}
         <div className="bg-term-panel border border-term-border flex items-center gap-2 px-3 py-2 pointer-events-auto">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-term-dim">
