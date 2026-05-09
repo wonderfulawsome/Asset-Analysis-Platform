@@ -175,11 +175,9 @@ export default function KakaoMap({
         created.push(kpoly);
       });
 
+      // 시군구명만 노출 (사용자 요청 — 동명 보조 라벨 제거).
       if (largestRing) {
         const c = ringCentroid(largestRing);
-        const subPart = poly.subName
-          ? `<span style="color:#888;font-weight:500;letter-spacing:-0.1px;"> · ${poly.subName}</span>`
-          : "";
         const overlay = new kakao.maps.CustomOverlay({
           position: new kakao.maps.LatLng(c.lat, c.lng),
           content: `<div style="
@@ -195,7 +193,8 @@ export default function KakaoMap({
             text-shadow: 0 1px 2px rgba(0,0,0,0.9);
             user-select: none;
             pointer-events: none;
-          "><span style="color:#ffaa44;">${poly.name}</span>${subPart}</div>`,
+            color: #ffaa44;
+          ">${poly.name}</div>`,
           xAnchor: 0.5,
           yAnchor: 0.5,
           clickable: false,

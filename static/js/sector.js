@@ -475,6 +475,9 @@ function renderSectorDetail(body) {
 
 // ── SVG 스파크라인 렌더링 ──
 function _renderSparkline(container, values, color, opts = {}) {
+  // 내부 좌표계는 그대로 W×H 유지하고 SVG 자체는 컨테이너 폭에 맞게 stretch.
+  // preserveAspectRatio="none" + vector-effect="non-scaling-stroke" 로 모바일 좁은
+  // 그리드(예: 360px 폭의 2-col)에서 우측 칼럼 잘림 방지 (사용자 보고).
   const W = 160, H = 48;
   const pad = 4;
   // logScale=true 이면 symlog (sign-preserving log1p) 압축 — 0/음수 안전, 극단치 압축
@@ -489,9 +492,10 @@ function _renderSparkline(container, values, color, opts = {}) {
   const y = v => pad + (1 - (transform(v) - yMin) / yRange) * (H - pad * 2);
   const path = filtered.map((d, i) => `${i === 0 ? 'M' : 'L'}${x(d.i).toFixed(1)},${y(d.v).toFixed(1)}`).join(' ');
   const last = filtered[filtered.length - 1];
-  container.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-    <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round"/>
-    <circle cx="${x(last.i).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="2.5" fill="${color}"/>
+  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none"
+       style="display:block;width:100%;height:${H}px;max-width:100%">
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+    <circle cx="${x(last.i).toFixed(1)}" cy="${y(last.v).toFixed(1)}" r="2.5" fill="${color}" vector-effect="non-scaling-stroke"/>
   </svg>`;
 }
 

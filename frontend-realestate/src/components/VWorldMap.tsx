@@ -178,11 +178,9 @@ export default function VWorldMap({
       });
 
       // 라벨 — 가장 큰 ring 의 centroid 위에 배치 (다중 ring 시 본체 폴리곤 위로).
+      // 시군구명만 노출 (사용자 요청 — 동명 보조 라벨 제거).
       if (largestRing) {
         const c = ringCentroid(largestRing);
-        const subPart = poly.subName
-          ? `<span style="color:#888;font-weight:500;letter-spacing:-0.1px;"> · ${poly.subName}</span>`
-          : "";
         const html = `
           <div style="
             font-family: 'JetBrains Mono', 'Pretendard Variable', monospace;
@@ -197,9 +195,8 @@ export default function VWorldMap({
             text-shadow: 0 1px 2px rgba(0,0,0,0.9);
             transform: translate(-50%, -50%);
             user-select: none;
-          ">
-            <span style="color:#ffaa44;">${poly.name}</span>${subPart}
-          </div>`;
+            color: #ffaa44;
+          ">${poly.name}</div>`;
         const marker = L.marker([c.lat, c.lng], {
           icon: L.divIcon({ className: "polygon-label", html, iconSize: [0, 0] }),
           interactive: false,                 // 클릭은 아래 폴리곤이 받도록
