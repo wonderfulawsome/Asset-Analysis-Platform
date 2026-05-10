@@ -79,11 +79,52 @@
     { from: '2025-08-01', to: '2025-08-15', label: '미국 상호관세 발효일' },
   ];
 
-  // YYYY-MM-DD 문자열 비교로 충분 (lex 정렬 = 시간 정렬)
+  // KR 시장 이벤트 — 한국 시장 관점 사실 기록 (해석·평가 X).
+  // 마할라노비스 거리 큰 시점 위주. 새 이벤트 추가 시 동일 형식.
+  const MARKET_EVENTS_KR = [
+    { from: '2014-04-16', to: '2014-04-25', label: '세월호 침몰' },
+    { from: '2015-06-01', to: '2015-07-15', label: '메르스 확산·소비 위축' },
+    { from: '2015-08-11', to: '2015-09-04', label: '중국 위안화 평가절하·KOSPI 약세' },
+    { from: '2016-02-10', to: '2016-02-20', label: '개성공단 가동 중단' },
+    { from: '2016-06-23', to: '2016-07-08', label: '브렉시트 가결·국제 증시 충격' },
+    { from: '2016-07-08', to: '2016-09-30', label: '사드 배치 결정·중국 보복 시작' },
+    { from: '2016-12-09', to: '2017-03-10', label: '박근혜 탄핵소추 가결·헌재 인용' },
+    { from: '2017-09-03', to: '2017-09-15', label: '북한 6차 핵실험·한반도 긴장' },
+    { from: '2018-02-05', to: '2018-02-15', label: 'VIX 폭등·KOSPI 급락' },
+    { from: '2018-04-27', to: '2018-05-31', label: '판문점 남북정상회담' },
+    { from: '2018-10-01', to: '2018-12-26', label: '미·중 무역갈등 격화·KOSPI 하락' },
+    { from: '2019-07-01', to: '2019-08-15', label: '일본 화이트리스트 제외·한일 갈등' },
+    { from: '2020-02-24', to: '2020-04-30', label: '코로나19 팬데믹·KOSPI 1457 저점' },
+    { from: '2020-08-12', to: '2020-08-25', label: '코로나 2차 대유행·재택 명령' },
+    { from: '2020-11-09', to: '2020-11-13', label: '화이자 백신 임상 성공' },
+    { from: '2021-01-04', to: '2021-01-15', label: 'KOSPI 3000 첫 돌파·동학개미 절정' },
+    { from: '2021-08-09', to: '2021-08-31', label: '외국인 KOSPI 대규모 순매도' },
+    { from: '2022-02-24', to: '2022-03-25', label: '러시아 우크라이나 침공' },
+    { from: '2022-06-10', to: '2022-07-15', label: '美 CPI 9.1%·달러원 1300원 돌파' },
+    { from: '2022-09-15', to: '2022-10-25', label: '레고랜드 사태·달러원 1444원' },
+    { from: '2023-03-08', to: '2023-03-24', label: 'SVB 파산·은행권 위기 전이' },
+    { from: '2023-07-25', to: '2023-08-05', label: '에코프로 그룹·2차전지 광기' },
+    { from: '2023-10-07', to: '2023-10-31', label: '이스라엘-하마스 전쟁' },
+    { from: '2024-04-02', to: '2024-04-30', label: '제22대 총선·美 4월 CPI 부진' },
+    { from: '2024-08-02', to: '2024-08-09', label: '일본 캐리트레이드 청산·KOSPI 8.77% 폭락' },
+    { from: '2024-11-05', to: '2024-11-15', label: '美 트럼프 재선·달러 강세' },
+    { from: '2024-12-03', to: '2024-12-14', label: '비상계엄 선포·탄핵소추안 가결' },
+    { from: '2025-04-02', to: '2025-04-08', label: '美 상호관세 발표 ("Liberation Day")' },
+    { from: '2025-04-09', to: '2025-04-15', label: '관세 90일 유예·KOSPI 반등' },
+    { from: '2025-06-13', to: '2025-06-24', label: '이스라엘-이란 12일 전쟁' },
+    { from: '2025-08-01', to: '2025-08-15', label: '美 상호관세 발효일' },
+  ];
+
+  function _isKrMode() {
+    return (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+  }
+
+  // YYYY-MM-DD 문자열 비교로 충분 (lex 정렬 = 시간 정렬). region 별 사전 분기.
   function findEvent(dateStr) {
     if (!dateStr) return null;
     const d = dateStr.slice(0, 10);
-    for (const ev of MARKET_EVENTS_US) {
+    const events = _isKrMode() ? MARKET_EVENTS_KR : MARKET_EVENTS_US;
+    for (const ev of events) {
       if (d >= ev.from && d <= ev.to) return ev.label;
     }
     return null;
@@ -107,15 +148,19 @@
     const knnEl = document.getElementById('an-knn');
 
     try {
+      const _wr = (typeof window.withRegion === 'function') ? window.withRegion : (u => u);
       const [curRes, histRes] = await Promise.all([
-        fetch('/api/anomaly/current?region=us'),
-        fetch('/api/anomaly/history?days=2520&region=us'),
+        fetch(_wr('/api/anomaly/current')),
+        fetch(_wr('/api/anomaly/history?days=2520')),
       ]);
       const cur = await curRes.json();
       const hist = await histRes.json();
 
       if (cur.empty || !cur.d2) {
-        const msg = '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px">데이터 미수집. 다음 스케줄 사이클 후 표시됩니다.</div>';
+        const isKrTab = (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+        const msg = isKrTab
+          ? '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px;line-height:1.6">국내 시장 데이터를 누적 중입니다.<br>10년 rolling 모델 특성상 약 1년 분량(252거래일) 누적 후 표시됩니다.</div>'
+          : '<div style="color:#9ca3af;font-size:13px;text-align:center;padding:20px">데이터 미수집. 다음 스케줄 사이클 후 표시됩니다.</div>';
         if (chartEl) chartEl.innerHTML = msg;
         return;
       }
