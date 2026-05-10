@@ -47,8 +47,12 @@ def _norm_region(region: str) -> str:
     return region if region in ('us', 'kr') else 'us'
 
 
-@router.get('/today')                                        # GET /api/market-summary/today
-def get_market_summary_today(region: str = Query('us')):
+def _market_summary_today_cache_key(region: str) -> str:
+    return f'market_summary_today_{region}'
+
+
+def _compute_market_summary_today_payload(region: str) -> dict:
+    """4개 fetch_* 합본. precompute + endpoint fallback 양쪽에서 공용."""
     region = _norm_region(region)
     fg = fetch_fear_greed_latest(region=region)              # 공포탐욕지수 조회
     prices = fetch_index_prices_latest(region=region)        # ETF 가격 조회
@@ -79,8 +83,7 @@ def get_market_summary_today(region: str = Query('us')):
                 'surge': round(float(surge_s), 1),
                 'gap': round(float(surge_s) - float(crash_s), 1),  # 양수=상승 우위
             }
-    return {                                                 # 응답 반환
-        # KR 처럼 미적재 region 은 fear_greed=null → 프론트가 "준비 중" 처리
+    return {
         'fear_greed': ({'score': round(score), 'rating': rating}
                         if has_fg else None),
         'market_return': {'value': round(avg_return, 2)},
@@ -88,6 +91,27 @@ def get_market_summary_today(region: str = Query('us')):
         'crash_surge': crash_surge,
         'region': region,
     }
+
+
+def precompute_market_summary_today(region: str) -> bool:
+    """스케줄러용 — 시장 요약 4개 fetch 합본을 app_cache 에 적재.
+    endpoint 호출 시 4 RTT (~3s) → 1 RTT (~2s) 로 단축."""
+    payload = _compute_market_summary_today_payload(region)
+    if not payload:
+        return False
+    upsert_app_cache(_market_summary_today_cache_key(region), payload)
+    return True
+
+
+@router.get('/today')                                        # GET /api/market-summary/today
+def get_market_summary_today(region: str = Query('us')):
+    """app_cache 우선 (1 RTT). miss 시 live 4-RTT compute 폴백."""
+    region = _norm_region(region)
+    cached = fetch_app_cache(_market_summary_today_cache_key(region))
+    if cached and isinstance(cached, dict):
+        return {**cached, 'cached': True}
+    # 폴백: 4 fetch 직렬 (스케줄러 미실행 환경)
+    return _compute_market_summary_today_payload(region)
 
 
 # ═══════════════════════════════════════════════════════════════

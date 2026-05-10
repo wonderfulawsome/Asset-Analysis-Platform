@@ -874,6 +874,25 @@ def run_pipeline(light: bool = False) -> None:
         print(f'[Step 13] chart_close_cache precompute 실패, 건너뜀: {e}')
         traceback.print_exc()
 
+    # Step 14: 시장 요약 (4 fetch 합본) + 이상도 10년 시계열 (페이지네이션 3 RTT 합본).
+    # endpoint 의 multiple round-trip 을 1 RTT cache hit 으로 단축.
+    try:
+        print('\n[Step 14] market-summary today + anomaly history app_cache 적재...')
+        from api.routers.market_summary import precompute_market_summary_today
+        ok_ms = precompute_market_summary_today('us')
+        print(f"[Step 14] market-summary today us {'OK' if ok_ms else 'FAIL'}")
+    except Exception as e:
+        print(f'[Step 14] market-summary today precompute 실패: {e}')
+        traceback.print_exc()
+
+    try:
+        from api.routers.anomaly import precompute_anomaly_history
+        ok_an = precompute_anomaly_history(region='us', days=2520)
+        print(f"[Step 14] anomaly history us/2520 {'OK' if ok_an else 'FAIL/EMPTY'}")
+    except Exception as e:
+        print(f'[Step 14] anomaly history precompute 실패: {e}')
+        traceback.print_exc()
+
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')
     print(f'[Pipeline-{mode}] 완료 (소요: {elapsed}초)')

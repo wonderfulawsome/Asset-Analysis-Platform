@@ -9,7 +9,10 @@
 from datetime import date as _date, timedelta
 from functools import lru_cache
 from fastapi import APIRouter, Query
-from database.repositories import fetch_anomaly_current, fetch_anomaly_history
+from database.repositories import (
+    fetch_anomaly_current, fetch_anomaly_history,
+    fetch_app_cache, upsert_app_cache,
+)
 
 router = APIRouter()
 
@@ -66,12 +69,12 @@ def get_current(region: str = Query('us')):
     return {**row, 'region': region}
 
 
-@router.get('/history')
-def get_history(days: int = Query(2520, ge=30, le=4000), region: str = Query('us')):
-    """이상도 D² 시계열 (차트용). default 2520 ≈ 10년 거래일.
+def _anomaly_history_cache_key(days: int, region: str) -> str:
+    return f'anomaly_history_{region}_{days}'
 
-    응답: {region, days_requested, count, series: [{date, d2, percentile_10y, percentile_90d}, ...]}
-    """
+
+def _compute_anomaly_history_payload(days: int, region: str) -> dict:
+    """페이지네이션 3 RTT + 50d SMA 합본. precompute / fallback 공용."""
     region = _norm_region(region)
     rows = fetch_anomaly_history(days=days, region=region)
     regime_dict = _regime_50_dict(region, _date.today().isoformat())
@@ -91,3 +94,28 @@ def get_history(days: int = Query(2520, ge=30, le=4000), region: str = Query('us
         'count': len(series),
         'series': series,
     }
+
+
+def precompute_anomaly_history(region: str, days: int = 2520) -> bool:
+    """스케줄러용 — 10년 anomaly D² 시계열 + 50d SMA regime 합본을 app_cache 에 적재.
+    페이지네이션 3 RTT (~6.5s) → cache hit 1 RTT (~2s) 로 단축."""
+    payload = _compute_anomaly_history_payload(days=days, region=region)
+    if payload.get('count', 0) == 0:
+        return False
+    upsert_app_cache(_anomaly_history_cache_key(days, region), payload)
+    return True
+
+
+@router.get('/history')
+def get_history(days: int = Query(2520, ge=30, le=4000), region: str = Query('us')):
+    """이상도 D² 시계열 (차트용). default 2520 ≈ 10년 거래일.
+
+    app_cache 우선 (1 RTT). miss 시 페이지네이션 라이브 폴백.
+
+    응답: {region, days_requested, count, series: [{date, d2, percentile_10y, percentile_90d}, ...]}
+    """
+    region = _norm_region(region)
+    cached = fetch_app_cache(_anomaly_history_cache_key(days, region))
+    if cached and isinstance(cached, dict) and cached.get('count', 0) > 0:
+        return {**cached, 'cached': True}
+    return _compute_anomaly_history_payload(days=days, region=region)

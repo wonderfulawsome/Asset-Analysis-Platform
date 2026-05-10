@@ -265,6 +265,24 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] chart_close_cache precompute 실패: {e}')
             traceback.print_exc()
 
+        # 13) 시장 요약 (4 fetch 합본) + 이상도 10년 시계열 (페이지네이션 3 RTT 합본)
+        # — endpoint 의 multiple round-trip 을 1 RTT cache hit 으로 단축.
+        try:
+            from api.routers.market_summary import precompute_market_summary_today
+            ok = precompute_market_summary_today('kr')
+            print(f"[KR-Pipeline] market-summary today kr {'OK' if ok else 'FAIL'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] market-summary today precompute 실패: {e}')
+            traceback.print_exc()
+
+        try:
+            from api.routers.anomaly import precompute_anomaly_history
+            ok = precompute_anomaly_history(region='kr', days=2520)
+            print(f"[KR-Pipeline] anomaly history kr/2520 {'OK' if ok else 'FAIL/EMPTY'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] anomaly history precompute 실패: {e}')
+            traceback.print_exc()
+
     except Exception as e:
         print(f'[KR-Pipeline] 전체 실패: {e}')
         traceback.print_exc()
