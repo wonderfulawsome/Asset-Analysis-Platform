@@ -866,22 +866,22 @@ function renderChartSummary(el, candles) {
       <div class="chart-price-name">${_chartTicker} · ${name}</div>`;
   }
 
-  // ② 상단 3카드
+  // ② 상단 stat strip (3개 셀 — 1개 컨테이너 + hairline 분리)
   const statsEl = document.getElementById('chart-top-stats');
   if (statsEl) {
     statsEl.innerHTML = `
-      <div class="chart-stats-grid">
-        <div class="chart-stat-card">
-          <div class="chart-stat-label">${periodLabel}</div>
-          <div class="chart-stat-val" style="color:${pChgColor}">${pChgSign}${periodChg.toFixed(1)}%</div>
+      <div class="stat-strip">
+        <div class="stat-cell">
+          <div class="stat-label">${periodLabel}</div>
+          <div class="stat-value" style="color:${pChgColor};font-size:15px;">${pChgSign}${periodChg.toFixed(1)}%</div>
         </div>
-        <div class="chart-stat-card">
-          <div class="chart-stat-label">${t('chart.high')}</div>
-          <div class="chart-stat-val">${_fmtPrice(high, 1)}</div>
+        <div class="stat-cell">
+          <div class="stat-label">${t('chart.high')}</div>
+          <div class="stat-value" style="font-size:15px;">${_fmtPrice(high, 1)}</div>
         </div>
-        <div class="chart-stat-card">
-          <div class="chart-stat-label">${t('chart.low')}</div>
-          <div class="chart-stat-val">${_fmtPrice(low, 1)}</div>
+        <div class="stat-cell">
+          <div class="stat-label">${t('chart.low')}</div>
+          <div class="stat-value" style="font-size:15px;">${_fmtPrice(low, 1)}</div>
         </div>
       </div>`;
   }
