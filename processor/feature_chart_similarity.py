@@ -282,11 +282,43 @@ def find_similar_patterns(
         {'date': str(idx.date()), 'close': round(float(val), 4)}
         for idx, val in today_close.items()
     ]
+    today_total_pct = float((np.exp(today_total) - 1) * 100)
     today_window = {
         'start_date': str(today_close.index[0].date()),
         'end_date': str(today_close.index[-1].date()),
+        'total_pct': round(today_total_pct, 2),
         'data': today_data,
     }
+
+    # 후속 분포 요약 — 유사도 ≥ SHAPE_SUMMARY_SIM_THRESHOLD 인 모든 candidate 기준
+    # (top-K 가 아니라 임계 통과 모든 시점). 후속 데이터 전체가 있는 candidate 만 카운트.
+    summary_post_pcts: list[float] = []
+    summary_n_profit = 0
+    for c in candidates:
+        if c['similarity'] < SHAPE_SUMMARY_SIM_THRESHOLD:
+            continue
+        end_idx = c['end_idx']
+        followup_end_idx = end_idx + followup
+        if followup_end_idx >= n:
+            continue
+        post_close = close.iloc[end_idx:followup_end_idx + 1]
+        post_logret = _total_log_return(post_close)
+        post_pct = float((np.exp(post_logret) - 1) * 100)
+        summary_post_pcts.append(post_pct)
+        if post_pct > 0:
+            summary_n_profit += 1
+
+    summary = None
+    if summary_post_pcts:
+        summary = {
+            'n_matches': len(summary_post_pcts),
+            'post_mean_pct': round(float(np.mean(summary_post_pcts)), 2),
+            'post_median_pct': round(float(np.median(summary_post_pcts)), 2),
+            'post_min_pct': round(float(np.min(summary_post_pcts)), 2),
+            'post_max_pct': round(float(np.max(summary_post_pcts)), 2),
+            'n_profit_after': summary_n_profit,
+            'sim_threshold': SHAPE_SUMMARY_SIM_THRESHOLD,
+        }
 
     matches = []
     for rank, sel in enumerate(selected, 1):
@@ -313,10 +345,12 @@ def find_similar_patterns(
 
     return {
         'ticker': ticker,
+        'mode': 'shape',
         'window_days': window,
         'followup_days': followup,
         'today_window': today_window,
         'matches': matches,
+        'summary': summary,
         'disclaimer': '과거 관찰 사실일 뿐 미래 가격을 예측하지 않습니다.',
         'debug': {
             'n_close': n_close,
@@ -342,7 +376,12 @@ def find_similar_patterns(
 DEFAULT_MAGNITUDE_WINDOW = 126     # 6개월 ≈ 영업일 126
 DEFAULT_MAGNITUDE_FOLLOWUP = 126   # 후속 6개월
 DEFAULT_MAGNITUDE_TOP_K = 5
-DEFAULT_MAGNITUDE_DRAWDOWN_PCT = 0.10   # 후속 -10% 이상 하락 카운트 임계
+# 통계 박스에 포함할 후보 폭: today 누적 수익률 ±MAGNITUDE_SUMMARY_TOL_PCT 이내인
+# 모든 candidate. 카드는 여전히 top-K 만 보여주지만 summary 의 분포·n_matches·
+# n_profit_after 카운트는 이 범주 전체 기준으로 계산.
+MAGNITUDE_SUMMARY_TOL_PCT = 2.0
+# shape 모드에서 통계 박스에 포함할 유사도 임계 (Pearson corr).
+SHAPE_SUMMARY_SIM_THRESHOLD = 0.85
 
 
 def find_magnitude_matches(
@@ -481,18 +520,37 @@ def find_magnitude_matches(
             'data': data,
         })
 
-    # 후속 분포 요약
+    # 후속 분포 요약 — top-K 가 아닌 ±MAGNITUDE_SUMMARY_TOL_PCT 범주의 모든 candidate.
+    # 카드는 top-K 만 보여주지만 통계 분모는 "비슷한 강도 시점 N건" 의 N 이 ±2% 이내
+    # 모든 시점의 카운트가 되도록.
+    summary_post_pcts: list[float] = []
+    summary_n_profit = 0
+    for c in candidates:
+        c_total_pct = float((np.exp(c['c_total']) - 1) * 100)
+        if abs(c_total_pct - today_total_pct) > MAGNITUDE_SUMMARY_TOL_PCT:
+            continue
+        end_idx = c['end_idx']
+        followup_end_idx = end_idx + followup
+        if followup_end_idx >= n:
+            # cutoff_end 가 이미 보장하지만 안전 가드
+            continue
+        post_close = close.iloc[end_idx:followup_end_idx + 1]
+        post_logret = _total_log_return(post_close)
+        post_pct = float((np.exp(post_logret) - 1) * 100)
+        summary_post_pcts.append(post_pct)
+        if post_pct > 0:
+            summary_n_profit += 1
+
     summary = None
-    if post_logrets:
-        post_pcts = [(np.exp(x) - 1) * 100 for x in post_logrets]
+    if summary_post_pcts:
         summary = {
-            'n_matches': len(post_pcts),
-            'post_mean_pct': round(float(np.mean(post_pcts)), 2),
-            'post_median_pct': round(float(np.median(post_pcts)), 2),
-            'post_min_pct': round(float(np.min(post_pcts)), 2),
-            'post_max_pct': round(float(np.max(post_pcts)), 2),
-            'n_drawdown_10pct': sum(1 for m in matches
-                                    if m['post_max_dd_pct'] <= -DEFAULT_MAGNITUDE_DRAWDOWN_PCT * 100),
+            'n_matches': len(summary_post_pcts),
+            'post_mean_pct': round(float(np.mean(summary_post_pcts)), 2),
+            'post_median_pct': round(float(np.median(summary_post_pcts)), 2),
+            'post_min_pct': round(float(np.min(summary_post_pcts)), 2),
+            'post_max_pct': round(float(np.max(summary_post_pcts)), 2),
+            'n_profit_after': summary_n_profit,
+            'tol_pct': MAGNITUDE_SUMMARY_TOL_PCT,
         }
 
     return {

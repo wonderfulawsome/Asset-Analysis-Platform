@@ -1001,11 +1001,11 @@ function _renderSimilarHost(data) {
     host.innerHTML = `<div style="color:var(--sub);font-size:12px;padding:8px 4px;">유사 패턴이 충분히 발견되지 않았습니다.${dbgTxt}</div>`;
     return;
   }
-  // 강도 매칭 모드: 상단에 후속 분포 통계 박스 추가
+  // 상단 후속 분포 통계 박스 — magnitude 와 shape 양쪽 모두.
   let summaryHtml = '';
-  if (data.mode === 'magnitude' && data.summary && data.today_window) {
-    summaryHtml = _buildMagnitudeSummaryHtml(data.today_window, data.summary,
-                                             data.window_days, data.followup_days);
+  if (data.summary && data.today_window) {
+    summaryHtml = _buildSummaryHtml(data.mode, data.today_window, data.summary,
+                                    data.window_days, data.followup_days);
   }
   const cards = data.matches
     .map(m => (data.mode === 'magnitude'
@@ -1018,23 +1018,26 @@ function _renderSimilarHost(data) {
   host.innerHTML = summaryHtml + cards + disc;
 }
 
-// ── 강도 매칭: 후속 분포 요약 박스 ──────────────────────────────────
-// 사실 진술만 (자문 가드): "유사 강도 N건 · 후속 평균/중앙값/최저/최고 · 후속 -10% 이상 하락 M건"
-function _buildMagnitudeSummaryHtml(todayWindow, summary, windowDays, followupDays) {
-  const todayPct = todayWindow.total_pct;
+// ── 후속 분포 요약 박스 (magnitude + shape 공용) ──────────────────────
+// 사실 진술만 (자문 가드): "유사 N건 · 후속 평균/중앙값/최저/최고 · 후속 N일 후 수익권 M건"
+//   - magnitude: 카드는 top-K(5) 만, summary 는 ±2% 범주 모든 candidate
+//   - shape: 카드는 top-K(3) 만, summary 는 유사도 ≥85% 모든 candidate
+function _buildSummaryHtml(mode, todayWindow, summary, windowDays, followupDays) {
+  const todayPct = todayWindow.total_pct != null ? todayWindow.total_pct : 0;
   const todaySign = todayPct >= 0 ? '+' : '';
+  const subjectLabel = mode === 'magnitude' ? '비슷한 강도 시점' : '비슷한 모양 시점';
   return `
     <div style="background:var(--bg2);border-radius:10px;padding:12px 14px;display:grid;grid-template-columns:repeat(2,1fr);gap:8px 12px;">
       <div style="grid-column:1/-1;font-size:12px;color:var(--sub);margin-bottom:2px;">
         <strong style="color:var(--text);">오늘 ${windowDays}일 누적 ${todaySign}${todayPct.toFixed(1)}%</strong>
-        와 비슷한 강도 시점 <strong style="color:var(--text);">${summary.n_matches}건</strong> 의 후속 ${followupDays}일 분포
+        와 ${subjectLabel} <strong style="color:var(--text);">${summary.n_matches}건</strong> 의 후속 ${followupDays}일 분포
       </div>
-      <div style="font-size:11px;"><span style="color:var(--sub);">후속 중앙값</span> <strong style="color:${summary.post_median_pct >= 0 ? 'var(--green)' : 'var(--red)'};">${summary.post_median_pct >= 0 ? '+' : ''}${summary.post_median_pct.toFixed(1)}%</strong></div>
-      <div style="font-size:11px;"><span style="color:var(--sub);">후속 평균</span> <strong style="color:${summary.post_mean_pct >= 0 ? 'var(--green)' : 'var(--red)'};">${summary.post_mean_pct >= 0 ? '+' : ''}${summary.post_mean_pct.toFixed(1)}%</strong></div>
-      <div style="font-size:11px;"><span style="color:var(--sub);">후속 최저</span> <strong style="color:var(--red);">${summary.post_min_pct.toFixed(1)}%</strong></div>
-      <div style="font-size:11px;"><span style="color:var(--sub);">후속 최고</span> <strong style="color:var(--green);">+${summary.post_max_pct.toFixed(1)}%</strong></div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 중앙값</span> <strong class="num" style="color:${summary.post_median_pct >= 0 ? 'var(--green)' : 'var(--red)'};">${summary.post_median_pct >= 0 ? '+' : ''}${summary.post_median_pct.toFixed(1)}%</strong></div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 평균</span> <strong class="num" style="color:${summary.post_mean_pct >= 0 ? 'var(--green)' : 'var(--red)'};">${summary.post_mean_pct >= 0 ? '+' : ''}${summary.post_mean_pct.toFixed(1)}%</strong></div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 최저</span> <strong class="num" style="color:var(--red);">${summary.post_min_pct.toFixed(1)}%</strong></div>
+      <div style="font-size:11px;"><span style="color:var(--sub);">후속 최고</span> <strong class="num" style="color:var(--green);">+${summary.post_max_pct.toFixed(1)}%</strong></div>
       <div style="grid-column:1/-1;font-size:11px;color:var(--sub);">
-        후속 기간 중 ‑10% 이상 낙폭 발생: <strong style="color:var(--text);">${summary.n_drawdown_10pct}건</strong> / ${summary.n_matches}건
+        후속 ${followupDays}일 후 수익권: <strong style="color:var(--text);">${summary.n_profit_after}건</strong> / ${summary.n_matches}건
       </div>
     </div>`;
 }
