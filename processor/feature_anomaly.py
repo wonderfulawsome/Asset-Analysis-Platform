@@ -167,14 +167,24 @@ def _filter_pool_by_regime(knn_pool: pd.DataFrame, today_regime: float,
 
 
 def build_feature_panel(region: str = 'us') -> pd.DataFrame:
-    """8 noise 피처 + 2 추가 피처 = 10 피처 일별 패널 (forward-fill 없음, 결측 그대로)."""
+    """8 noise 피처 + 2 추가 피처 = 10 피처 일별 패널 (forward-fill 없음, 결측 그대로).
+
+    region 별 가용 피처가 다를 수 있음 (KR 의 경우 fundamental_gap / vix_term 미산출 →
+    100% NaN). 이런 컬럼은 자동 제거해 region 별 동적 피처 차원으로 D² 계산.
+    """
     noise = _load_noise_features(region)
     if noise.empty:
         return pd.DataFrame(columns=ALL_FEATURES)
     start = noise.index.min().strftime('%Y-%m-%d')
     extras = _load_extras_yfinance(start)
     panel = noise.join(extras, how='left')
-    return panel[ALL_FEATURES]
+    panel = panel[ALL_FEATURES]
+    # region 별 모두-NaN 컬럼 자동 제거 — KR 은 ~8 피처로 차원 축소.
+    all_nan_cols = panel.columns[panel.isna().all()].tolist()
+    if all_nan_cols:
+        print(f'[Anomaly] region={region} all-NaN 피처 제거: {all_nan_cols}')
+        panel = panel.drop(columns=all_nan_cols)
+    return panel
 
 
 # ── Mahalanobis 계산 ──────────────────────────────────────────────────────────
@@ -347,7 +357,7 @@ def compute_anomaly_timeseries(
             continue
 
         # contributors (D² 분해)
-        contribs = _decompose_d2(x, mu, sig_inv, ALL_FEATURES)
+        contribs = _decompose_d2(x, mu, sig_inv, panel.columns.tolist())
         top = sorted(contribs, key=lambda c: abs(c['contribution']), reverse=True)[:TOP_CONTRIBUTORS_K]
 
         # percentile_10y: D²(t) 가 hist 윈도우 내 D² 분포에서 차지하는 위치
@@ -379,7 +389,7 @@ def compute_anomaly_timeseries(
             knn_pool = _filter_pool_by_regime(knn_pool, today_regime, regime_series)
         knn = _knn_diversified(knn_pool, x, sig_inv, mu=mu, cov=cov) if len(knn_pool) > 0 else []
 
-        feature_vector = {n: round(float(v), 4) for n, v in zip(ALL_FEATURES, x)}
+        feature_vector = {n: round(float(v), 4) for n, v in zip(panel.columns.tolist(), x)}
         rows.append({
             'date': str(dt.date()),
             'd2': round(d2, 3),
@@ -420,7 +430,7 @@ def compute_today_anomaly(region: str = 'us') -> Optional[dict]:
     if not np.isfinite(d2) or d2 < 0:
         return None
 
-    contribs = _decompose_d2(x, mu, sig_inv, ALL_FEATURES)
+    contribs = _decompose_d2(x, mu, sig_inv, panel.columns.tolist())
     top = sorted(contribs, key=lambda c: abs(c['contribution']), reverse=True)[:TOP_CONTRIBUTORS_K]
     diff_h = hist.values - mu
     d2_hist = np.einsum('ij,jk,ik->i', diff_h, sig_inv, diff_h)
@@ -453,7 +463,7 @@ def compute_today_anomaly(region: str = 'us') -> Optional[dict]:
         'd2': round(d2, 3),
         'percentile_10y': round(pct_10y, 2) if pct_10y is not None else None,
         'percentile_90d': round(pct_90d, 2) if pct_90d is not None else None,
-        'feature_vector': {n: round(float(v), 4) for n, v in zip(ALL_FEATURES, x)},
+        'feature_vector': {n: round(float(v), 4) for n, v in zip(panel.columns.tolist(), x)},
         'top_contributors': [{'name': c['name'], 'contribution': round(c['contribution'], 3)}
                              for c in top],
         'knn_dates': knn,
