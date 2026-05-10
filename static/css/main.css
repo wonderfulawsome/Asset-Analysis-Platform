@@ -2612,34 +2612,40 @@ html[lang="en"] .card-tappable::after {
 }
 
 /* ═══ Wide Predict Button ═══
-   톤다운: 블루-시안 그라디언트 + 그림자 → 아웃라인 (AI 디자인 신호 회피).
-   액센트는 텍스트 색상으로만. */
+   주요 액션 — 주황색 솔리드 채움 (그라디언트/글로우 없음, 평면 강조).
+   다크/라이트 모두 #FF8C00 (브랜드 오렌지) 고정. */
 .predict-btn-wide {
   display: block;
   width: 100%;
-  padding: 12px 0;
+  padding: 14px 0;
   border-radius: 10px;
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 800;
   cursor: pointer;
-  border: 1px solid var(--sep);
-  background: transparent;
-  color: var(--text);
+  border: 1px solid #FF8C00;
+  background: #FF8C00;
+  color: #000;
   font-family: inherit;
   letter-spacing: 0.2px;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
 }
 .predict-btn-wide:hover {
-  background: rgba(255,140,0,0.06);
-  border-color: rgba(255,140,0,0.4);
+  background: #FFA533;
+  border-color: #FFA533;
 }
 .predict-btn-wide:active {
   transform: scale(0.98);
+  background: #E67E00;
 }
+/* 매칭 결과가 펼쳐진 상태 — 강조 톤 다운 (아웃라인). 다시 누르면 닫힘. */
 .predict-btn-wide.active {
-  background: rgba(255,140,0,0.10);
+  background: transparent;
   border-color: rgba(255,140,0,0.6);
-  color: var(--accent);
+  color: #FF8C00;
+}
+.predict-btn-wide.active:hover {
+  background: rgba(255,140,0,0.06);
+  border-color: #FF8C00;
 }
 .predict-btn-wide:disabled {
   opacity: 0.6;
