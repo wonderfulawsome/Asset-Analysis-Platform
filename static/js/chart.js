@@ -23,6 +23,16 @@ function _chartTickers() {
   return _currentRegion() === 'kr' ? CHART_MAIN_TICKERS_KR : CHART_MAIN_TICKERS_US;
 }
 
+// 가격 포맷터 — KR 은 ₩ + 정수(천단위 콤마), US 는 $ + 소수점 2자리.
+function _fmtPrice(v, decimals) {
+  if (v == null || isNaN(v)) return '--';
+  if (_currentRegion() === 'kr') {
+    return '₩' + Math.round(v).toLocaleString('ko-KR');
+  }
+  const d = (decimals == null) ? 2 : decimals;
+  return '$' + Number(v).toFixed(d);
+}
+
 // 이동평균선 설정 (기간, 색상)
 const MA_CONFIG = [
   { period: 5,   color: '#FF6B6B', label: 'MA5' },
@@ -695,8 +705,8 @@ function renderCandlestickChart(el, allCandles, scrollRatio) {
     // 예측 포인트인 경우 별도 툴팁
     if (c._pred) {
       tip.innerHTML = `<div class="ct-date">${c.d}</div>
-        <div style="color:#3B82F6;font-weight:700">${t('chart.predictForecast')}: $${c._pred.yhat.toFixed(2)}</div>
-        <div style="color:var(--sub);font-size:10px">$${c._pred.lower.toFixed(2)} ~ $${c._pred.upper.toFixed(2)}</div>`;
+        <div style="color:#3B82F6;font-weight:700">${t('chart.predictForecast')}: ${_fmtPrice(c._pred.yhat)}</div>
+        <div style="color:var(--sub);font-size:10px">${_fmtPrice(c._pred.lower)} ~ ${_fmtPrice(c._pred.upper)}</div>`;
       const candleX = xPos(idx);
       const visibleX = candleX - scrollEl.scrollLeft;
       const tipW = 150;
@@ -850,7 +860,7 @@ function renderChartSummary(el, candles) {
   if (headerEl) {
     headerEl.innerHTML = `
       <div class="chart-price-row">
-        <span class="chart-price-val">$${latest.c.toFixed(2)}</span>
+        <span class="chart-price-val">${_fmtPrice(latest.c)}</span>
         <span class="chart-price-chg" style="color:${chgColor}">${chgSign}${dayChg.toFixed(2)}%</span>
       </div>
       <div class="chart-price-name">${_chartTicker} · ${name}</div>`;
@@ -867,11 +877,11 @@ function renderChartSummary(el, candles) {
         </div>
         <div class="chart-stat-card">
           <div class="chart-stat-label">${t('chart.high')}</div>
-          <div class="chart-stat-val">$${high.toFixed(1)}</div>
+          <div class="chart-stat-val">${_fmtPrice(high, 1)}</div>
         </div>
         <div class="chart-stat-card">
           <div class="chart-stat-label">${t('chart.low')}</div>
-          <div class="chart-stat-val">$${low.toFixed(1)}</div>
+          <div class="chart-stat-val">${_fmtPrice(low, 1)}</div>
         </div>
       </div>`;
   }
@@ -890,8 +900,8 @@ function renderChartSummary(el, candles) {
           <div class="chart-range-dot" style="left:${Math.min(Math.max(pos, 3), 97)}%;border-color:${periodChg >= 0 ? '#10B981' : '#EF4444'}"></div>
         </div>
         <div class="chart-range-minmax">
-          <span>$${low.toFixed(1)}</span>
-          <span>$${high.toFixed(1)}</span>
+          <span>${_fmtPrice(low, 1)}</span>
+          <span>${_fmtPrice(high, 1)}</span>
         </div>
       </div>`;
   }
