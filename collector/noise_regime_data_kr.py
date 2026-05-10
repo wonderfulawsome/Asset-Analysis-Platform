@@ -134,7 +134,32 @@ def fetch_kr_10y_monthly(years: int = 7) -> pd.Series:
             return _strip_tz(s)
     except Exception as e:
         print(f'[KR-Noise] FDR KR 10Y 실패: {e}')
-    # 3차 Supabase macro_raw (region='kr', tnx 컬럼이 KR 10Y 를 % 단위로 보유)
+    # 3차 FRED CSV 직접 (IRLTLT01KRM156N — OECD/IMF 제공 KR 10Y monthly, 1990s ~).
+    # pandas_datareader 의존 없이 fredgraph.csv 직접 fetch.
+    try:
+        import io as _io
+        import requests as _req
+        url = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id=IRLTLT01KRM156N'
+        resp = _req.get(url, timeout=20)
+        resp.raise_for_status()
+        df = pd.read_csv(_io.StringIO(resp.text))
+        # 컬럼: observation_date / IRLTLT01KRM156N (% 단위, 결측은 '.')
+        date_col = df.columns[0]
+        val_col = df.columns[1]
+        df[date_col] = pd.to_datetime(df[date_col])
+        df = df.set_index(date_col).sort_index()
+        s = pd.to_numeric(df[val_col], errors='coerce').dropna()
+        if not s.empty:
+            end = _dt.date.today()
+            start = end - _dt.timedelta(days=years * 365 + 30)
+            s = s[s.index >= pd.Timestamp(start)]
+            s = (s / 100.0)
+            s.index = s.index.to_period('M').to_timestamp()  # MS aligned
+            print(f'[KR-Noise] FRED KR 10Y 사용: {len(s)} 월 ({s.index[0].date()} ~ {s.index[-1].date()})')
+            return _strip_tz(s)
+    except Exception as e:
+        print(f'[KR-Noise] FRED KR 10Y 실패: {e}')
+    # 4차 Supabase macro_raw (region='kr', tnx 컬럼이 KR 10Y 를 % 단위로 보유)
     try:
         from database.repositories import fetch_macro
         rows = fetch_macro(days=years * 365 + 30, region='kr')
@@ -262,7 +287,7 @@ def fetch_kr_amihud_stocks(tickers: list[str], years: int = 7) -> dict:
 
 
 def fetch_kospi_close_daily(years: int = 7) -> pd.Series:
-    """KOSPI 일별 종가 — pykrx → FDR (KS11) 폴백."""
+    """KOSPI 일별 종가 — pykrx → FDR (KS11) → yfinance (^KS11) 3단 폴백."""
     end = _dt.date.today()
     start = end - _dt.timedelta(days=years * 365 + 30)
     # 1차 pykrx
@@ -278,12 +303,24 @@ def fetch_kospi_close_daily(years: int = 7) -> pd.Series:
     try:
         import FinanceDataReader as fdr
         df = fdr.DataReader('KS11', start, end)
-        if df is None or df.empty or 'Close' not in df.columns:
-            return pd.Series(dtype=float)
-        return _strip_tz(df['Close'].dropna())
+        if df is not None and not df.empty and 'Close' in df.columns:
+            return _strip_tz(df['Close'].dropna())
     except Exception as e:
         print(f'[KR-Noise] KOSPI FDR 폴백 실패: {e}')
-        return pd.Series(dtype=float)
+    # 3차 yfinance ^KS11 (KOSPI Composite Index)
+    try:
+        import yfinance as yf
+        df = yf.download('^KS11', start=start.isoformat(), end=end.isoformat(),
+                         progress=False, auto_adjust=False)
+        if df is not None and not df.empty:
+            close = df['Close']
+            if isinstance(close, pd.DataFrame):
+                close = close.iloc[:, 0]
+            print(f'[KR-Noise] KOSPI yfinance(^KS11) 폴백 사용: {len(close)} 일')
+            return _strip_tz(close.dropna())
+    except Exception as e:
+        print(f'[KR-Noise] KOSPI yfinance 폴백 실패: {e}')
+    return pd.Series(dtype=float)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -319,8 +356,12 @@ def compute_monthly_features_kr(
     if len(kr_10y_monthly) > 0:
         erp_df = pd.DataFrame({'ey': real_ey, 'tnx': kr_10y_monthly}).dropna()
         erp = erp_df['ey'] - erp_df['tnx']
-        erp_rm = erp.rolling(120, min_periods=24).mean()    # 10년 (KR 데이터 짧으면 24개월 min)
-        erp_rs = erp.rolling(120, min_periods=24).std()
+        # 가용 데이터 길이에 따라 min_periods 적응 — macro_raw 폴백(6개월) 도 z-score 산출 가능.
+        # 이상적: 24개월 / 데이터 짧으면 max(3, len/2) 로 완화 (제한된 표본이라도 raw 신호 유지).
+        n_erp = len(erp)
+        min_p = min(24, max(3, n_erp // 2)) if n_erp > 0 else 24
+        erp_rm = erp.rolling(120, min_periods=min_p).mean()
+        erp_rs = erp.rolling(120, min_periods=min_p).std()
         erp_zscore = ((erp - erp_rm) / erp_rs).abs().dropna()
     else:
         print('  [KR-Noise warn] KR 10Y 없음 → erp_zscore=0')
@@ -431,6 +472,20 @@ def compute_monthly_features_kr(
         'realized_vol': realized_vol_monthly,
     }
     features = pd.DataFrame({k: _strip_tz(v) for k, v in all_series.items()})
+    # 100% NaN 컬럼 자동 제거 — 외부 API (ECOS/yfinance VKOSPI 등) 실패한 피처는 차원에서 빠짐.
+    # downstream (HMM 학습 / D² 계산) 도 panel.columns 동적 사용하므로 차원 변동 안전.
+    all_nan_cols = features.columns[features.isna().all()].tolist()
+    if all_nan_cols:
+        print(f'[KR-Noise] all-NaN 피처 제거: {all_nan_cols}')
+        features = features.drop(columns=all_nan_cols)
+    # 유효 행 수 부족 피처 제거 — 다른 피처가 보유한 긴 시계열이 dropna 로 잘리는 것 방지.
+    # 임계값은 HMM 최소 24 (월) 기준 보수적으로 12 — 1년치 미만 시계열은 노이즈 시그널로 부적합.
+    MIN_VALID_ROWS = 12
+    short_cols = [c for c in features.columns if features[c].notna().sum() < MIN_VALID_ROWS]
+    if short_cols:
+        valid_counts = {c: int(features[c].notna().sum()) for c in short_cols}
+        print(f'[KR-Noise] 유효 행 부족 피처 제거: {valid_counts} (< {MIN_VALID_ROWS})')
+        features = features.drop(columns=short_cols)
     features = features.dropna()
     if len(features) == 0:
         print('[KR-Noise] 피처 병합 결과 0행 — 데이터 정렬 실패 가능')

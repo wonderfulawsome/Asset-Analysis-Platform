@@ -140,9 +140,18 @@ def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> d
         dict with model, scaler, state_to_phase, phase_order, train_month, region,
              feature_names, last_monthly_values, winsor_bounds, amihud_q01, amihud_q99
     """
-    feat_names = _feature_names(region)
+    expected_names = _feature_names(region)
     # KR 은 fundamental_gap·vix_term 제외 6피처. compute_monthly_features_kr 가
     # 8 컬럼을 만들어도 여기서 region 의 subset 만 학습에 사용.
+    # 외부 API 일시 장애로 expected 중 일부 (예: KR erp_zscore — KR 10Y 데이터 부족) 가
+    # 누락된 경우, 사용 가능한 교집합만으로 학습 (차원 동적). 하한 3 피처.
+    available = [n for n in expected_names if n in features_df.columns]
+    if len(available) < 3:
+        raise ValueError(f'학습 가능한 피처 부족: {available} (region={region}, expected={expected_names})')
+    if len(available) < len(expected_names):
+        missing = [n for n in expected_names if n not in features_df.columns]
+        print(f'[NoiseHMM-{region}] 누락 피처 무시: {missing} → {len(available)}개 피처로 학습')
+    feat_names = available
     X = features_df[feat_names].values
     scaler = RobustScaler()
     X_scaled = scaler.fit_transform(X)
@@ -162,6 +171,18 @@ def train_hmm(features_df, monthly_bundle: dict = None, region: str = 'us') -> d
         except (ValueError, np.linalg.LinAlgError):
             if cov_type == 'diag':
                 raise
+
+    # Transmat 행 sum=1 보정 (Laplace smoothing) — 학습 데이터가 작아 일부 state 가
+    # 미활용일 경우 transmat 의 그 row 가 [0,0,0,0] 으로 남아 hmmlearn predict 시
+    # ValueError ('rows must sum to 1') 발생. 모든 row 에 작은 값(eps=1e-3) 추가 후 정규화.
+    if hasattr(model, 'transmat_'):
+        eps = 1e-3
+        tm = model.transmat_ + eps
+        row_sums = tm.sum(axis=1, keepdims=True)
+        model.transmat_ = tm / row_sums
+        # startprob_ 도 동일하게 보정
+        sp = model.startprob_ + eps
+        model.startprob_ = sp / sp.sum()
 
     # noise_score 기반 상태 → 국면 매핑
     noise_scores = compute_noise_score(model.means_, region=region)
