@@ -302,6 +302,14 @@ def _regenerate_in_background(ticker: str):
         _predict_running.discard(ticker)
 
 
+# 프론트가 실제 사용하는 고정 파라미터 — scheduler 가 이 값으로만 precompute.
+# 다른 파라미터 조합은 라이브 폴백 (numpy 슬라이딩 윈도우).
+_SIMILAR_DEFAULT_PARAMS = {
+    'shape':     {'window': 60,  'top_k': 3, 'followup': 30},
+    'magnitude': {'window': 126, 'top_k': 5, 'followup': 126},
+}
+
+
 @router.get('/similar')
 def get_similar_patterns(
     ticker: str = Query('SPY', description='ETF 티커 (US 심볼 또는 KR 6자리)'),
@@ -315,6 +323,10 @@ def get_similar_patterns(
     mode='shape' (default): 누적 path Pearson 상관 + 방향 필터. 패턴 모양 매칭.
     mode='magnitude': 누적 수익률 |diff| 기준 + 후속 분포 통계. 강도 매칭.
 
+    응답 우선순위 (3-tier):
+      1. chart_similarity_cache (DB select, 매일 cron 적재) — 기본 파라미터 + cache hit
+      2. find_*_matches 라이브 (numpy 슬라이딩) — 비기본 파라미터 또는 cache miss
+
     KR/US 모두 지원. 응답에 disclaimer 포함.
     """
     if not _is_kr_ticker(ticker):
@@ -323,6 +335,23 @@ def get_similar_patterns(
         return {'error': 'unsupported ticker'}
     if mode not in ('shape', 'magnitude'):
         return {'error': f'unsupported mode: {mode}'}
+
+    # 1차: 기본 파라미터면 chart_similarity_cache 우선 (서버 CPU 0)
+    defaults = _SIMILAR_DEFAULT_PARAMS[mode]
+    is_default_params = (window == defaults['window']
+                         and top_k == defaults['top_k']
+                         and followup == defaults['followup'])
+    if is_default_params:
+        try:
+            from database.repositories import fetch_chart_similarity
+            cached = fetch_chart_similarity(ticker, mode)
+            if cached:
+                return {**cached, 'cached': True, 'source': 'chart_similarity_cache'}
+        except Exception as e:
+            print(f'[Chart] similarity_cache 조회 실패 ({ticker}/{mode}): {e}')
+            # 폴백 진행
+
+    # 2차: 라이브 컴퓨트 (cache miss 또는 비기본 파라미터)
     try:
         if mode == 'magnitude':
             from processor.feature_chart_similarity import find_magnitude_matches

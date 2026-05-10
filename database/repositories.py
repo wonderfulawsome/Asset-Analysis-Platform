@@ -746,6 +746,59 @@ def fetch_chart_closes(ticker: str, days: int = 2520) -> list[dict]:
         return []
 
 
+# ── chart_similarity_cache ─────────────────────────────────────
+# AI 차트 유사 패턴 매칭 결과 통째 적재. scheduler 가 매일 1회 28종 × 2 모드 = 56 entry
+# precompute → upsert. 사용자 클릭 시 numpy 슬라이딩 윈도우 CPU 0회, DB select 1회.
+# 마이그레이션: migrations/2026_05_10_add_chart_similarity_cache.sql
+
+def upsert_chart_similarity(ticker: str, mode: str, payload: dict) -> bool:
+    """ticker × mode 매칭 결과 dict 를 JSONB 통째 upsert."""
+    if not payload:
+        return False
+    record = {
+        'ticker': ticker,
+        'mode': mode,
+        'payload': payload,
+    }
+    try:
+        client = get_client()
+        client.table('chart_similarity_cache').upsert(
+            record, on_conflict='ticker,mode'
+        ).execute()
+        return True
+    except Exception as e:
+        print(f'[DB] chart_similarity_cache upsert 실패 ({ticker}/{mode}): {e}')
+        return False
+
+
+def fetch_chart_similarity(ticker: str, mode: str) -> Optional[dict]:
+    """ticker × mode 의 미리 계산된 매칭 결과 payload 1건 select.
+    miss 시 None — 호출측 (endpoint) 이 라이브 폴백 책임."""
+    try:
+        client = get_client()
+        resp = (
+            client.table('chart_similarity_cache')
+            .select('payload, updated_at')
+            .eq('ticker', ticker)
+            .eq('mode', mode)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return None
+        row = rows[0]
+        payload = row.get('payload')
+        if not isinstance(payload, dict):
+            return None
+        # updated_at 도 포함해 frontend 가 신선도 표시 가능
+        payload = {**payload, 'cache_updated_at': row.get('updated_at')}
+        return payload
+    except Exception as e:
+        print(f'[DB] chart_similarity_cache 조회 실패 ({ticker}/{mode}): {e}')
+        return None
+
+
 # ── page_view ──────────────────────────────────────────
 # 사용자 페이지·탭 단위 조회 추적. user_visit 와는 별개 (user_visit 는 일자별 1행, 본 테이블은
 # 페이지 진입/탭 전환/이탈마다 1행 누적). 마이그레이션: 2026_05_09_add_page_view.sql

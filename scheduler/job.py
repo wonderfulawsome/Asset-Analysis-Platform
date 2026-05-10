@@ -893,6 +893,20 @@ def run_pipeline(light: bool = False) -> None:
         print(f'[Step 14] anomaly history precompute 실패: {e}')
         traceback.print_exc()
 
+    # Step 15: AI 차트 유사 패턴 매칭 *결과 통째* 적재 (chart_similarity_cache).
+    # 16 ticker × 2 mode = 32 entry. 사용자 클릭 시 numpy 슬라이딩 CPU 0 → DB select 1회.
+    try:
+        print('\n[Step 15] AI 차트 유사 패턴 매칭 결과 적재 (US 16 × 2 mode)...')
+        from processor.feature_chart_similarity import precompute_chart_similarity
+        from api.routers.chart import CHART_TICKERS as _CHART_US
+        result = precompute_chart_similarity(list(_CHART_US))
+        print(f"[Step 15] OK={len(result['ok'])} FAIL={len(result['fail'])}")
+        if result['fail']:
+            print(f"[Step 15] 실패: {result['fail']}")
+    except Exception as e:
+        print(f'[Step 15] chart_similarity_cache precompute 실패: {e}')
+        traceback.print_exc()
+
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')
     print(f'[Pipeline-{mode}] 완료 (소요: {elapsed}초)')

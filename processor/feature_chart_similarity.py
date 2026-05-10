@@ -25,6 +25,45 @@ _close_cache: dict = {}
 _close_cache_lock = threading.Lock()
 _CLOSE_CACHE_TTL_SEC = 6 * 60 * 60
 
+def precompute_chart_similarity(tickers: list[str]) -> dict:
+    """scheduler 용 — ticker × (shape, magnitude) 매칭 결과를 chart_similarity_cache 에 적재.
+    프론트가 사용하는 고정 파라미터로만 계산:
+      shape:     window=60, top_k=3, followup=30
+      magnitude: window=126, top_k=5, followup=126
+    사용자 클릭 시 numpy 슬라이딩 윈도우 CPU 연산 0회 — DB select 1회로 즉시 응답.
+    """
+    from database.repositories import upsert_chart_similarity
+    ok, fail = [], []
+    for t in tickers:
+        for mode in ('shape', 'magnitude'):
+            try:
+                if mode == 'magnitude':
+                    payload = find_magnitude_matches(
+                        t, window=DEFAULT_MAGNITUDE_WINDOW,
+                        followup=DEFAULT_MAGNITUDE_FOLLOWUP,
+                        top_k=DEFAULT_MAGNITUDE_TOP_K,
+                    )
+                else:
+                    payload = find_similar_patterns(
+                        t, window=DEFAULT_WINDOW,
+                        followup=DEFAULT_FOLLOWUP,
+                        top_k=DEFAULT_TOP_K,
+                    )
+                if payload.get('error') or not payload.get('matches'):
+                    print(f'[similarity precompute] {t}/{mode} 빈 결과 — 스킵')
+                    fail.append(f'{t}/{mode}')
+                    continue
+                if upsert_chart_similarity(t, mode, payload):
+                    ok.append(f'{t}/{mode}')
+                    print(f'[similarity precompute] {t}/{mode} 적재 (matches={len(payload.get("matches", []))})')
+                else:
+                    fail.append(f'{t}/{mode}')
+            except Exception as e:
+                print(f'[similarity precompute] {t}/{mode} 실패: {e}')
+                fail.append(f'{t}/{mode}')
+    return {'ok': ok, 'fail': fail}
+
+
 def precompute_chart_closes(tickers: list[str]) -> dict:
     """scheduler 용 — 주어진 ticker 목록의 close 시계열을 외부 API 로 fetch 후
     chart_close_cache 테이블에 upsert. in-memory 캐시도 함께 채움.

@@ -283,6 +283,20 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] anomaly history precompute 실패: {e}')
             traceback.print_exc()
 
+        # 14) AI 차트 유사 패턴 매칭 *결과 통째* 적재 (chart_similarity_cache).
+        # 12 ticker × 2 mode = 24 entry. 사용자 클릭 시 numpy 슬라이딩 CPU 0 → DB select 1회.
+        try:
+            print('[KR-Pipeline] AI 차트 유사 패턴 매칭 결과 적재 (KR 12 × 2 mode)...')
+            from processor.feature_chart_similarity import precompute_chart_similarity
+            from api.routers.chart import CHART_TICKERS_KR as _CHART_KR
+            result = precompute_chart_similarity(list(_CHART_KR))
+            print(f"[KR-Pipeline] chart_similarity_cache OK={len(result['ok'])} FAIL={len(result['fail'])}")
+            if result['fail']:
+                print(f"[KR-Pipeline] 실패: {result['fail']}")
+        except Exception as e:
+            print(f'[KR-Pipeline] chart_similarity_cache precompute 실패: {e}')
+            traceback.print_exc()
+
     except Exception as e:
         print(f'[KR-Pipeline] 전체 실패: {e}')
         traceback.print_exc()
