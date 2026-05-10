@@ -292,6 +292,7 @@ def find_similar_patterns(
 
     # 후속 분포 요약 — 유사도 ≥ SHAPE_SUMMARY_SIM_THRESHOLD 인 모든 candidate 기준
     # (top-K 가 아니라 임계 통과 모든 시점). 후속 데이터 전체가 있는 candidate 만 카운트.
+    # 폴백: 임계 통과 0건 → top-K 매칭(=화면 카드)으로 폴백 → 텍스트는 항상 노출.
     summary_post_pcts: list[float] = []
     summary_n_profit = 0
     for c in candidates:
@@ -308,6 +309,22 @@ def find_similar_patterns(
         if post_pct > 0:
             summary_n_profit += 1
 
+    summary_fallback = False
+    if not summary_post_pcts and selected:
+        # 임계 0건 → top-K 매칭의 후속 분포로 폴백
+        summary_fallback = True
+        for sel in selected:
+            end_idx = sel['end_idx']
+            followup_end_idx = min(end_idx + followup, n - 1)
+            if followup_end_idx <= end_idx:
+                continue
+            post_close = close.iloc[end_idx:followup_end_idx + 1]
+            post_logret = _total_log_return(post_close)
+            post_pct = float((np.exp(post_logret) - 1) * 100)
+            summary_post_pcts.append(post_pct)
+            if post_pct > 0:
+                summary_n_profit += 1
+
     summary = None
     if summary_post_pcts:
         summary = {
@@ -318,6 +335,7 @@ def find_similar_patterns(
             'post_max_pct': round(float(np.max(summary_post_pcts)), 2),
             'n_profit_after': summary_n_profit,
             'sim_threshold': SHAPE_SUMMARY_SIM_THRESHOLD,
+            'fallback_topk': summary_fallback,
         }
 
     matches = []
@@ -523,6 +541,8 @@ def find_magnitude_matches(
     # 후속 분포 요약 — top-K 가 아닌 ±MAGNITUDE_SUMMARY_TOL_PCT 범주의 모든 candidate.
     # 카드는 top-K 만 보여주지만 통계 분모는 "비슷한 강도 시점 N건" 의 N 이 ±2% 이내
     # 모든 시점의 카운트가 되도록.
+    # 폴백: ±2% 범주가 비면 (예: KR 강세장 today +93% 인데 과거에 그런 시점 없음)
+    # top-K 매칭(=화면 카드) 5건의 분포로 폴백 → 텍스트는 항상 노출.
     summary_post_pcts: list[float] = []
     summary_n_profit = 0
     for c in candidates:
@@ -541,6 +561,16 @@ def find_magnitude_matches(
         if post_pct > 0:
             summary_n_profit += 1
 
+    summary_fallback = False
+    if not summary_post_pcts and matches:
+        # ±2% 범주 0건 → top-K 매칭으로 폴백
+        summary_fallback = True
+        for m in matches:
+            post_pct = float(m['post_total_pct'])
+            summary_post_pcts.append(post_pct)
+            if post_pct > 0:
+                summary_n_profit += 1
+
     summary = None
     if summary_post_pcts:
         summary = {
@@ -551,6 +581,7 @@ def find_magnitude_matches(
             'post_max_pct': round(float(np.max(summary_post_pcts)), 2),
             'n_profit_after': summary_n_profit,
             'tol_pct': MAGNITUDE_SUMMARY_TOL_PCT,
+            'fallback_topk': summary_fallback,
         }
 
     return {
