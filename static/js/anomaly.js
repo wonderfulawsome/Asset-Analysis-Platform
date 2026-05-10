@@ -105,7 +105,10 @@
     { from: '2023-03-08', to: '2023-03-24', label: 'SVB 파산·은행권 위기 전이' },
     { from: '2023-07-25', to: '2023-08-05', label: '에코프로 그룹·2차전지 광기' },
     { from: '2023-10-07', to: '2023-10-31', label: '이스라엘-하마스 전쟁' },
+    { from: '2024-02-01', to: '2024-02-29', label: '美 1월 CPI 3.1% 상회·인플레 우려 재부상' },
     { from: '2024-04-02', to: '2024-04-30', label: '제22대 총선·美 4월 CPI 부진' },
+    { from: '2024-06-10', to: '2024-06-15', label: '美 5월 CPI + FOMC 동결' },
+    { from: '2024-09-18', to: '2024-09-30', label: '美 FOMC 50bp 인하·연준 금리정책 전환' },
     { from: '2024-08-02', to: '2024-08-09', label: '일본 캐리트레이드 청산·KOSPI 8.77% 폭락' },
     { from: '2024-11-05', to: '2024-11-15', label: '美 트럼프 재선·달러 강세' },
     { from: '2024-12-03', to: '2024-12-14', label: '비상계엄 선포·탄핵소추안 가결' },
@@ -350,7 +353,7 @@
       const event = findEvent(k.date);
       const eventHtml = event
         ? `<div style="font-size:12px;color:var(--text);margin-top:4px;line-height:1.45">📌 ${event}</div>`
-        : `<div style="font-size:11px;color:var(--sub2,#6b7280);margin-top:4px;line-height:1.45;font-style:italic">기록된 시장 이벤트 없음</div>`;
+        : `<div style="font-size:11px;color:var(--sub2,#6b7280);margin-top:4px;line-height:1.45;font-style:italic">특별한 시장 이벤트 없던 평소 시점</div>`;
       return `
         <div style="padding:12px 14px;background:var(--card-bg-alt,rgba(255,255,255,0.02));border-radius:10px;margin-bottom:8px">
           <div style="display:flex;justify-content:space-between;align-items:center">
