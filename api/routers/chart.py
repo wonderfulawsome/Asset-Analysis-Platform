@@ -181,12 +181,64 @@ def _download_with_fallback(ticker, interval, max_retries=2):
     return None
 
 
+def _compute_ohlc_payload(ticker: str, interval: str) -> dict:
+    """OHLC 응답 페이로드 빌드 (외부 API 호출). precompute / fallback 공용.
+    호출 전 ticker / interval 검증 책임은 호출측."""
+    df = _download_with_fallback(ticker, interval)
+    if df is None or df.empty:
+        return {'error': 'no data'}
+    candles = []
+    for idx, row in df.iterrows():
+        o, h, l, c = float(row['Open']), float(row['High']), float(row['Low']), float(row['Close'])
+        if any(math.isnan(v) or math.isinf(v) for v in (o, h, l, c)):
+            continue
+        if o <= 0 or h <= 0 or l <= 0 or c <= 0:
+            continue
+        vol = row.get('Volume', 0) if 'Volume' in row else 0
+        candles.append({
+            'd': idx.strftime('%Y-%m-%d'),
+            'o': round(o, 2),
+            'h': round(h, 2),
+            'l': round(l, 2),
+            'c': round(c, 2),
+            'v': int(vol) if vol == vol and not math.isinf(float(vol)) else 0,
+        })
+    return {'ticker': ticker, 'interval': interval, 'candles': candles}
+
+
+def precompute_chart_ohlc(tickers: list[str]) -> dict:
+    """scheduler 용 — ticker × (1d, 1wk, 1mo) OHLC 를 chart_ohlc_cache 에 적재.
+    매일 1회 yfinance/pykrx fetch → DB upsert. endpoint 클릭 시 외부 API 0회.
+    """
+    from database.repositories import upsert_chart_ohlc
+    ok, fail = [], []
+    for t in tickers:
+        for iv in ('1d', '1wk', '1mo'):
+            try:
+                payload = _compute_ohlc_payload(t, iv)
+                if payload.get('error') or not payload.get('candles'):
+                    fail.append(f'{t}/{iv}')
+                    continue
+                if upsert_chart_ohlc(t, iv, payload):
+                    ok.append(f'{t}/{iv}')
+                else:
+                    fail.append(f'{t}/{iv}')
+            except Exception as e:
+                print(f'[chart-ohlc precompute] {t}/{iv} 실패: {e}')
+                fail.append(f'{t}/{iv}')
+    return {'ok': ok, 'fail': fail}
+
+
 @router.get('/ohlc')
 def get_ohlc(
     ticker: str = Query('SPY', description='ETF 티커 (US: SPY 등 / KR: 069500 등 6자리)'),
     interval: str = Query('1d', description='봉 간격: 1d, 1wk, 1mo'),
 ):
-    """캔들스틱 OHLC 데이터 반환 — US (yfinance) / KR (pykrx) 자동 분기."""
+    """캔들스틱 OHLC 데이터 반환 — chart_ohlc_cache (DB) 우선, miss 시 라이브 폴백.
+
+    스케줄러가 매일 1회 28 ticker × 3 interval = 84 entry 를 적재 →
+    사용자 클릭 시 외부 API 호출 0회, DB select 1회.
+    """
     # KR 6자리 숫자면 그대로, US 는 대문자 변환
     if not _is_kr_ticker(ticker):
         ticker = ticker.upper()
@@ -199,41 +251,30 @@ def get_ohlc(
     cache_key = f'{ticker}_{interval}'
     now_ts = datetime.now().timestamp()
 
+    # 1차: 인메모리 (프로세스 hot path)
     with _lock:
         cached = _cache.get(cache_key)
         if cached and now_ts < cached['expires']:
             return cached['data']
 
+    # 2차: chart_ohlc_cache (DB hit) — 스케줄러 적재
     try:
-        df = _download_with_fallback(ticker, interval)
-        if df is None or df.empty:
-            return {'error': 'no data'}
+        from database.repositories import fetch_chart_ohlc
+        db_cached = fetch_chart_ohlc(ticker, interval)
+        if db_cached and db_cached.get('candles'):
+            # 인메모리 캐시도 채움 (다음 동일 프로세스 호출 가속)
+            with _lock:
+                _cache[cache_key] = {'data': db_cached, 'expires': now_ts + _CACHE_SEC}
+            return {**db_cached, 'cached': True, 'source': 'chart_ohlc_cache'}
+    except Exception as e:
+        print(f'[Chart] chart_ohlc_cache 조회 실패 ({ticker}/{interval}): {e}')
 
-        candles = []
-        for idx, row in df.iterrows():
-            o, h, l, c = float(row['Open']), float(row['High']), float(row['Low']), float(row['Close'])
-            # NaN/Infinity 행 건너뛰기 — JSON 직렬화 오류 방지
-            if any(math.isnan(v) or math.isinf(v) for v in (o, h, l, c)):
-                continue
-            # 부분 데이터 행 (yfinance 장중/마감 직후 Open=0 또는 OHL 한쪽이 0) 제외
-            # — KR ETF 의 마지막 캔들이 거대한 양/음봉으로 그려지는 문제 방지
-            if o <= 0 or h <= 0 or l <= 0 or c <= 0:
-                continue
-            vol = row.get('Volume', 0) if 'Volume' in row else 0
-            candles.append({
-                'd': idx.strftime('%Y-%m-%d'),
-                'o': round(o, 2),
-                'h': round(h, 2),
-                'l': round(l, 2),
-                'c': round(c, 2),
-                'v': int(vol) if vol == vol and not math.isinf(float(vol)) else 0,
-            })
-
-        result = {'ticker': ticker, 'interval': interval, 'candles': candles}
-
-        with _lock:
-            _cache[cache_key] = {'data': result, 'expires': now_ts + _CACHE_SEC}
-
+    # 3차: 라이브 폴백 (외부 API 호출). _compute_ohlc_payload 가 candles 정제까지 처리.
+    try:
+        result = _compute_ohlc_payload(ticker, interval)
+        if not result.get('error'):
+            with _lock:
+                _cache[cache_key] = {'data': result, 'expires': now_ts + _CACHE_SEC}
         return result
     except Exception as e:
         return {'error': str(e)}

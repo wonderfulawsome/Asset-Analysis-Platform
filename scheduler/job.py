@@ -907,6 +907,28 @@ def run_pipeline(light: bool = False) -> None:
         print(f'[Step 15] chart_similarity_cache precompute 실패: {e}')
         traceback.print_exc()
 
+    # Step 16: AI 차트 OHLC (캔들) 적재 — 16 ticker × 3 interval = 48 entry.
+    # endpoint 매 클릭 시 외부 yfinance 호출 → DB select 1회로 단축.
+    try:
+        print('\n[Step 16] AI 차트 OHLC 캔들 적재 (US 16 × 3 interval)...')
+        from api.routers.chart import precompute_chart_ohlc, CHART_TICKERS as _CHART_US
+        result = precompute_chart_ohlc(list(_CHART_US))
+        print(f"[Step 16] chart_ohlc_cache OK={len(result['ok'])} FAIL={len(result['fail'])}")
+        if result['fail']:
+            print(f"[Step 16] 실패: {result['fail']}")
+    except Exception as e:
+        print(f'[Step 16] chart_ohlc_cache precompute 실패: {e}')
+        traceback.print_exc()
+
+    # Step 17: crash-surge direction 통째 적재 (app_cache).
+    try:
+        from api.routers.crash_surge import precompute_direction
+        ok = precompute_direction('us')
+        print(f"[Step 17] crash_surge direction us {'OK' if ok else 'FAIL/EMPTY'}")
+    except Exception as e:
+        print(f'[Step 17] crash_surge direction precompute 실패: {e}')
+        traceback.print_exc()
+
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')
     print(f'[Pipeline-{mode}] 완료 (소요: {elapsed}초)')

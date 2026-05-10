@@ -746,6 +746,54 @@ def fetch_chart_closes(ticker: str, days: int = 2520) -> list[dict]:
         return []
 
 
+# ── chart_ohlc_cache ───────────────────────────────────────────
+# AI 차트 캔들스틱 OHLC 시계열. 28 ticker × 3 interval = 84 entry, 매일 cron 적재.
+# /api/chart/ohlc 는 DB select 1회로 응답 (외부 yfinance/pykrx 0회).
+# 마이그레이션: migrations/2026_05_10_add_chart_ohlc_cache.sql
+
+def upsert_chart_ohlc(ticker: str, interval: str, payload: dict) -> bool:
+    """ticker × interval OHLC 결과 dict 를 JSONB 통째 upsert."""
+    if not payload:
+        return False
+    record = {'ticker': ticker, 'interval': interval, 'payload': payload}
+    try:
+        client = get_client()
+        client.table('chart_ohlc_cache').upsert(
+            record, on_conflict='ticker,interval'
+        ).execute()
+        return True
+    except Exception as e:
+        print(f'[DB] chart_ohlc_cache upsert 실패 ({ticker}/{interval}): {e}')
+        return False
+
+
+def fetch_chart_ohlc(ticker: str, interval: str) -> Optional[dict]:
+    """ticker × interval 의 미리 계산된 OHLC payload 1건 select.
+    miss 시 None — 호출측이 라이브 폴백."""
+    try:
+        client = get_client()
+        resp = (
+            client.table('chart_ohlc_cache')
+            .select('payload, updated_at')
+            .eq('ticker', ticker)
+            .eq('interval', interval)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        if not rows:
+            return None
+        row = rows[0]
+        payload = row.get('payload')
+        if not isinstance(payload, dict):
+            return None
+        payload = {**payload, 'cache_updated_at': row.get('updated_at')}
+        return payload
+    except Exception as e:
+        print(f'[DB] chart_ohlc_cache 조회 실패 ({ticker}/{interval}): {e}')
+        return None
+
+
 # ── chart_similarity_cache ─────────────────────────────────────
 # AI 차트 유사 패턴 매칭 결과 통째 적재. scheduler 가 매일 1회 28종 × 2 모드 = 56 entry
 # precompute → upsert. 사용자 클릭 시 numpy 슬라이딩 윈도우 CPU 0회, DB select 1회.

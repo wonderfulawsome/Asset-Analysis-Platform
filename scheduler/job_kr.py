@@ -275,6 +275,21 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] market-summary today precompute 실패: {e}')
             traceback.print_exc()
 
+        # KR anomaly_daily 1행 적재 — KR noise_regime 가 252거래일(약 1년) 이상 누적되면
+        # compute_today_anomaly 가 d2/percentile 산출. 그전엔 None 반환 → DB 무변경(자연 noop).
+        try:
+            from processor.feature_anomaly import compute_today_anomaly
+            from database.repositories import upsert_anomaly_daily
+            out = compute_today_anomaly(region='kr')
+            if out:
+                upsert_anomaly_daily(out, region='kr')
+                print(f"[KR-Pipeline] anomaly_daily kr today OK (d2={out.get('d2'):.2f})")
+            else:
+                print('[KR-Pipeline] anomaly_daily kr today: 데이터 누적 부족(252거래일 미만) — skip')
+        except Exception as e:
+            print(f'[KR-Pipeline] anomaly today 실패: {e}')
+            traceback.print_exc()
+
         try:
             from api.routers.anomaly import precompute_anomaly_history
             ok = precompute_anomaly_history(region='kr', days=2520)
@@ -295,6 +310,29 @@ def run_kr_pipeline() -> None:
                 print(f"[KR-Pipeline] 실패: {result['fail']}")
         except Exception as e:
             print(f'[KR-Pipeline] chart_similarity_cache precompute 실패: {e}')
+            traceback.print_exc()
+
+        # 15) AI 차트 OHLC (캔들) 적재 — 12 ticker × 3 interval (1d/1wk/1mo) = 36 entry.
+        # endpoint 매 클릭 시 외부 pykrx/yfinance 호출 1~3s → DB select 1회로 단축.
+        try:
+            print('[KR-Pipeline] AI 차트 OHLC 캔들 적재 (KR 12 × 3 interval)...')
+            from api.routers.chart import precompute_chart_ohlc, CHART_TICKERS_KR as _CHART_KR
+            result = precompute_chart_ohlc(list(_CHART_KR))
+            print(f"[KR-Pipeline] chart_ohlc_cache OK={len(result['ok'])} FAIL={len(result['fail'])}")
+            if result['fail']:
+                print(f"[KR-Pipeline] 실패: {result['fail']}")
+        except Exception as e:
+            print(f'[KR-Pipeline] chart_ohlc_cache precompute 실패: {e}')
+            traceback.print_exc()
+
+        # 16) crash-surge direction 분석 통째 적재 (app_cache).
+        # endpoint 매번 numpy 루프 (전 시계열 × 5/10/20 horizon) → cache select 1회.
+        try:
+            from api.routers.crash_surge import precompute_direction
+            ok = precompute_direction('kr')
+            print(f"[KR-Pipeline] crash_surge direction kr {'OK' if ok else 'FAIL/EMPTY'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] crash_surge direction precompute 실패: {e}')
             traceback.print_exc()
 
     except Exception as e:
