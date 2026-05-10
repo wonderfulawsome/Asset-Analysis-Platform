@@ -171,15 +171,26 @@ def build_feature_panel(region: str = 'us') -> pd.DataFrame:
 
     region 별 가용 피처가 다를 수 있음 (KR 의 경우 fundamental_gap / vix_term 미산출 →
     100% NaN). 이런 컬럼은 자동 제거해 region 별 동적 피처 차원으로 D² 계산.
+
+    yfinance 외부 데이터 (^TNX, ^IRX, ^VIX) 는 US 시장 매크로 — region='kr' 에선
+    KR 시장 신호 왜곡하므로 가져오지 않음.
     """
     noise = _load_noise_features(region)
     if noise.empty:
         return pd.DataFrame(columns=ALL_FEATURES)
     start = noise.index.min().strftime('%Y-%m-%d')
-    extras = _load_extras_yfinance(start)
-    panel = noise.join(extras, how='left')
-    panel = panel[ALL_FEATURES]
-    # region 별 모두-NaN 컬럼 자동 제거 — KR 은 ~8 피처로 차원 축소.
+    if region == 'us':
+        extras = _load_extras_yfinance(start)
+        panel = noise.join(extras, how='left')
+        panel = panel[ALL_FEATURES]
+    else:
+        # KR 등 비-US: noise 피처만. ALL_FEATURES 의 EXTRA_FEATURES 컬럼은 NaN 으로 채워 둬
+        # 다음 all-NaN 자동 제거 단계에서 함께 빠짐.
+        panel = noise.copy()
+        for ef in EXTRA_FEATURES:
+            panel[ef] = np.nan
+        panel = panel[ALL_FEATURES]
+    # region 별 모두-NaN 컬럼 자동 제거 — KR 은 ~6 피처로 차원 축소.
     all_nan_cols = panel.columns[panel.isna().all()].tolist()
     if all_nan_cols:
         print(f'[Anomaly] region={region} all-NaN 피처 제거: {all_nan_cols}')

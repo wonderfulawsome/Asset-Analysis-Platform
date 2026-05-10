@@ -113,7 +113,7 @@ def fetch_kospi_shiller_like(years: int = 7) -> pd.DataFrame:
 
 
 def fetch_kr_10y_monthly(years: int = 7) -> pd.Series:
-    """KR 10Y KTB monthly. ECOS 1차, FDR 2차 폴백 — 결과는 소수(0.035 등) 단위."""
+    """KR 10Y KTB monthly. ECOS 1차, FDR 2차, macro_raw 3차 폴백 — 결과는 소수(0.035 등) 단위."""
     # 1차 ECOS
     try:
         from collector.ecos_macro import fetch_kr_treasury_yields
@@ -134,6 +134,21 @@ def fetch_kr_10y_monthly(years: int = 7) -> pd.Series:
             return _strip_tz(s)
     except Exception as e:
         print(f'[KR-Noise] FDR KR 10Y 실패: {e}')
+    # 3차 Supabase macro_raw (region='kr', tnx 컬럼이 KR 10Y 를 % 단위로 보유)
+    try:
+        from database.repositories import fetch_macro
+        rows = fetch_macro(days=years * 365 + 30, region='kr')
+        if rows:
+            df = pd.DataFrame(rows)
+            df['date'] = pd.to_datetime(df['date'])
+            df = df.set_index('date').sort_index()
+            tnx = df['tnx'].dropna() if 'tnx' in df.columns else pd.Series(dtype=float)
+            if not tnx.empty:
+                s = (tnx / 100.0).resample('MS').last().dropna()
+                print(f'[KR-Noise] macro_raw KR 10Y 사용: {len(s)} 월 ({s.index[0].date()} ~ {s.index[-1].date()})')
+                return _strip_tz(s)
+    except Exception as e:
+        print(f'[KR-Noise] macro_raw KR 10Y 실패: {e}')
     return pd.Series(dtype=float)
 
 
