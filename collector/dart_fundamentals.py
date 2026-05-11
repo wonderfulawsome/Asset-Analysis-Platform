@@ -444,9 +444,154 @@ def compute_kospi_market_per_dart(stock_codes: list[str] | None = None,
     return result
 
 
-# ── KOSPI 47사 연간 net_income 시계열 (fundamental_gap 산출용) ─────
+# ── KOSPI 47사 net_income 시계열 (fundamental_gap 산출용) ─────
 _EPS_HISTORY_PATH = os.path.join(_CACHE_DIR, 'kospi200_eps_history.json')
+_TTM_HISTORY_PATH = os.path.join(_CACHE_DIR, 'kospi200_ttm_quarterly.json')
 _EPS_HISTORY_TTL_DAYS = 30
+_TTM_TTL_DAYS = 30
+
+
+def _quarter_end_date(year: int, reprt_code: str) -> date:
+    """분기 보고서 코드 → 해당 분기 종료일."""
+    return {
+        _REPRT_Q1: date(year, 3, 31),
+        _REPRT_H1: date(year, 6, 30),
+        _REPRT_Q3: date(year, 9, 30),
+        _REPRT_FY: date(year, 12, 31),
+    }[reprt_code]
+
+
+def fetch_kospi200_ttm_quarterly(years: int = 5, force_refresh: bool = False) -> dict:
+    """KOSPI 47사 분기별 TTM (Trailing Twelve Months) net_income 합산.
+
+    DART 분기 보고서는 회계연도 누적 (Q1=Jan-Mar, H1=Jan-Jun, Q3=Jan-Sep, FY=Jan-Dec).
+    단일 분기 NI = 누적 - 이전 누적. TTM = 최근 4개 단일 분기 합.
+
+    47 corps × ~4분기 × N년 = ~940 호출 (5년 기준). ~3~5분.
+    Returns: {'YYYY-MM-DD': ttm_net_income, ...} (분기 종료일 기준)
+    """
+    if not force_refresh and os.path.exists(_TTM_HISTORY_PATH):
+        try:
+            with open(_TTM_HISTORY_PATH) as f:
+                cached = json.load(f)
+            updated = datetime.fromisoformat(cached.get('updated_at', '2000-01-01'))
+            if (datetime.now() - updated).days < _TTM_TTL_DAYS:
+                return {k: float(v) for k, v in cached.get('ttm_by_quarter', {}).items()}
+        except Exception:
+            pass
+
+    if not _api_key():
+        print('[DART] DART_API_KEY 미설정 — TTM 시계열 fetch 불가')
+        return {}
+
+    cache = _load_metrics_cache()
+    corps = list(cache.get('metrics', {}).keys())
+    if not corps:
+        print('[DART] dart_kr_metrics.json metrics 비어있음')
+        return {}
+
+    mapping = _load_corp_codes()
+    today = date.today()
+    year_range = list(range(today.year - years - 1, today.year + 1))
+    quarter_codes = [_REPRT_Q1, _REPRT_H1, _REPRT_Q3, _REPRT_FY]
+
+    print(f'[DART] KOSPI {len(corps)}사 × {len(year_range)}년 × 4분기 TTM fetch...')
+
+    # corp 별 분기 누적 NI 수집
+    corp_cumul: dict[str, dict[date, float]] = {}     # {corp: {quarter_end_date: cumul_ni}}
+    api_calls = 0
+    for cc in corps:
+        corp_code = mapping.get(cc)
+        if not corp_code:
+            continue
+        corp_cumul[cc] = {}
+        for y in year_range:
+            for rep in quarter_codes:
+                qend = _quarter_end_date(y, rep)
+                if qend > today:
+                    continue
+                try:
+                    items = _fetch_acnt(corp_code, y, rep, fs_div='CFS')
+                    if not items:
+                        items = _fetch_acnt(corp_code, y, rep, fs_div='OFS')
+                    api_calls += 1
+                    if not items:
+                        continue
+                    ni = _extract_amount(items, _NI_NAMES, 'IS')
+                    if ni is None:
+                        ni = _extract_amount(items, _NI_NAMES, 'CIS')
+                    if ni is not None:
+                        corp_cumul[cc][qend] = ni
+                except Exception:
+                    continue
+
+    print(f'[DART] {api_calls} DART API 호출 완료')
+
+    # 각 corp 의 단일 분기 NI 도출 (Q1=Q1cumul; Q2=H1-Q1; Q3=Q3cumul-H1; Q4=FY-Q3cumul)
+    # 같은 연도 내 분기 순서: Q1 < H1 < Q3 < FY
+    corp_single_q: dict[str, dict[date, float]] = {}   # {corp: {qend: single_q_ni}}
+    for cc, cumul in corp_cumul.items():
+        single = {}
+        for y in year_range:
+            q1_end, h1_end, q3_end, fy_end = (_quarter_end_date(y, c) for c in quarter_codes)
+            q1 = cumul.get(q1_end)
+            h1 = cumul.get(h1_end)
+            q3 = cumul.get(q3_end)
+            fy = cumul.get(fy_end)
+            if q1 is not None:
+                single[q1_end] = q1
+            if h1 is not None and q1 is not None:
+                single[h1_end] = h1 - q1
+            if q3 is not None and h1 is not None:
+                single[q3_end] = q3 - h1
+            if fy is not None and q3 is not None:
+                single[fy_end] = fy - q3
+        corp_single_q[cc] = single
+
+    # 모든 corp 의 단일분기 NI 를 quarter_end 별로 합산
+    all_qends = sorted({q for d in corp_single_q.values() for q in d.keys()})
+    agg_single: dict[date, float] = {}
+    n_corps_per_q: dict[date, int] = {}
+    for q in all_qends:
+        total = 0.0
+        n = 0
+        for cc, single in corp_single_q.items():
+            v = single.get(q)
+            if v is not None:
+                total += v
+                n += 1
+        agg_single[q] = total
+        n_corps_per_q[q] = n
+
+    # 각 quarter end 시점의 TTM = 최근 4개 단일분기 합 (해당 분기 포함)
+    sorted_q = sorted(agg_single.keys())
+    ttm_by_quarter: dict[str, float] = {}
+    for i, q in enumerate(sorted_q):
+        if i < 3:
+            continue   # 최소 4개 분기 필요
+        last4 = sorted_q[i - 3: i + 1]
+        ttm = sum(agg_single[x] for x in last4)
+        ttm_by_quarter[q.strftime('%Y-%m-%d')] = ttm
+
+    # 캐시 저장
+    try:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        with open(_TTM_HISTORY_PATH, 'w') as f:
+            json.dump({
+                'updated_at': datetime.now().isoformat(),
+                'ttm_by_quarter': ttm_by_quarter,
+                'n_corps_per_q': {q.strftime('%Y-%m-%d'): n for q, n in n_corps_per_q.items()},
+                'n_corps_total': len(corps),
+            }, f, indent=2)
+    except Exception as e:
+        print(f'[DART] TTM 캐시 저장 실패: {e}')
+
+    if ttm_by_quarter:
+        last_q = sorted(ttm_by_quarter)[-1]
+        first_q = sorted(ttm_by_quarter)[0]
+        print(f'[DART] TTM: {len(ttm_by_quarter)} 분기 ({first_q} ~ {last_q}) '
+              f'/ 최신 {ttm_by_quarter[last_q]/1e12:.2f}조')
+    return ttm_by_quarter
 
 
 def fetch_kospi200_annual_ni(years: int = 5, force_refresh: bool = False) -> dict[int, float]:

@@ -84,37 +84,54 @@ def fetch_kospi_shiller_like(years: int = 7) -> pd.DataFrame:
 
     df = None
     if per_monthly is None or per_monthly.empty:
-        # 2차: DART 47사 연간 net_income 합산 → 매월 net_income (연 단위 step) → E_monthly
-        # E_monthly 는 KOSPI 200 지수 단위가 아니라 47사 합산 NI 자체 — scale 무관.
-        # fundamental_gap = log(P_t/P_{t-12}) - log(E_t/E_{t-12}) 는 비율이라 scale 영향 없음.
+        # 2차: DART 47사 분기별 TTM net_income (가장 부드러운 분기 step) → E_monthly.
+        # 보고서 공시 시점 가드: Q1 보고서는 ~5월, H1 은 ~8월, Q3 은 ~11월, FY 는 ~4월.
+        # 안전마진 75일 후에야 사용 가능 (실적 시즌 후반 공시 대비).
         try:
-            from collector.dart_fundamentals import fetch_kospi200_annual_ni
-            annual_ni = fetch_kospi200_annual_ni(years=years + 1)
-            if annual_ni:
-                # close_monthly 의 각 월에 그 해의 NI 값을 매핑 (forward-fill style)
-                # 보고서 공시 시점 안전망: 연도 y 의 NI 는 다음해 4월 (사업보고서) 이후 사용 가능.
-                # → close_monthly[t] 에 대해, 최근 공시된 연도의 NI 사용.
-                ni_by_month = []
-                today = _dt.date.today()
+            from collector.dart_fundamentals import fetch_kospi200_ttm_quarterly
+            ttm_by_q = fetch_kospi200_ttm_quarterly(years=years + 1)
+            if ttm_by_q:
+                # 분기 종료일 별 TTM 값 → close_monthly 의 각 월에 forward-fill
+                ttm_dates = sorted(_dt.date.fromisoformat(d) for d in ttm_by_q.keys())
+                ttm_series = pd.Series(
+                    {pd.Timestamp(d): ttm_by_q[d.strftime('%Y-%m-%d')] for d in ttm_dates}
+                ).sort_index()
+                # 매월 t 에 대해: t-75일 이전에 공시된 가장 최근 분기 TTM 사용
+                e_by_month = []
                 for ts in close_monthly.index:
-                    y = ts.year
-                    m = ts.month
-                    # m <= 3: 작년 사업보고서 아직 미공시 → 2년 전 NI
-                    # m >= 4: 작년 사업보고서 공시됨 → 작년 NI
-                    use_year = y - 2 if m <= 3 else y - 1
-                    if today.year == y and today.month <= 3:
-                        use_year = y - 2
-                    ni = annual_ni.get(use_year)
-                    if ni is None:
-                        ni = annual_ni.get(use_year - 1)  # 한 해 더 이전 fallback
-                    ni_by_month.append(ni)
-                e_series = pd.Series(ni_by_month, index=close_monthly.index)
-                e_series = e_series.dropna()
+                    cutoff = ts - pd.Timedelta(days=75)
+                    eligible = ttm_series[ttm_series.index <= cutoff]
+                    e_by_month.append(eligible.iloc[-1] if not eligible.empty else None)
+                e_series = pd.Series(e_by_month, index=close_monthly.index).dropna()
                 if len(e_series) >= 24:
                     df = pd.DataFrame({'P': close_monthly, 'E': e_series}).dropna()
-                    print(f'[KR-Noise] DART annual_ni 사용: {len(e_series)} 월 적용')
+                    print(f'[KR-Noise] DART TTM quarterly 사용: {len(e_series)} 월, '
+                          f'{len(ttm_by_q)} 분기 데이터')
         except Exception as e:
-            print(f'[KR-Noise] DART annual_ni 폴백 실패: {e}')
+            print(f'[KR-Noise] DART TTM 폴백 실패: {e}')
+
+        # 3차: DART annual_ni 폴백 (TTM 분기 데이터 부족 시)
+        if df is None:
+            try:
+                from collector.dart_fundamentals import fetch_kospi200_annual_ni
+                annual_ni = fetch_kospi200_annual_ni(years=years + 1)
+                if annual_ni:
+                    ni_by_month = []
+                    today = _dt.date.today()
+                    for ts in close_monthly.index:
+                        y = ts.year
+                        m = ts.month
+                        use_year = y - 2 if m <= 3 else y - 1
+                        if today.year == y and today.month <= 3:
+                            use_year = y - 2
+                        ni = annual_ni.get(use_year) or annual_ni.get(use_year - 1)
+                        ni_by_month.append(ni)
+                    e_series = pd.Series(ni_by_month, index=close_monthly.index).dropna()
+                    if len(e_series) >= 24:
+                        df = pd.DataFrame({'P': close_monthly, 'E': e_series}).dropna()
+                        print(f'[KR-Noise] DART annual_ni 폴백 사용: {len(e_series)} 월')
+            except Exception as e:
+                print(f'[KR-Noise] DART annual_ni 폴백 실패: {e}')
 
     if df is None:
         # 3차: 평탄 PER fallback (옛 동작 유지)
