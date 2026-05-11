@@ -81,13 +81,6 @@
     injectKrComingSoon();
     const btn = document.getElementById('btn-region');
     if (btn) {
-      // 로컬 개발에선 토글 노출 (production 의 inline display:none 무력화).
-      // wrapper(.region-toggle-bar) 가 별도 row 로 분리됐으므로 wrapper 까지 같이 풀어야 함.
-      if (_IS_LOCAL_DEV) {
-        btn.style.display = '';
-        const bar = document.querySelector('.region-toggle-bar');
-        if (bar) bar.style.display = '';
-      }
       btn.addEventListener('click', function () {
         const next = getRegion() === 'us' ? 'kr' : 'us';
         setRegion(next);
