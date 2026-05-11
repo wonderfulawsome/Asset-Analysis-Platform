@@ -1365,56 +1365,66 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
     """
     try:
         if tab == 'fundamental':
-            regime = fetch_noise_regime_current(region=region) or {}
-            score = regime.get('noise_score')
-            regime_name = regime.get('regime_name') or '-'
-            fc = regime.get('feature_contributions') or []
-            if isinstance(fc, str):
-                try:
-                    fc = json.loads(fc)
-                except Exception:
-                    fc = []
-            fv = regime.get('feature_values') or {}
-            if isinstance(fv, str):
-                try:
-                    fv = json.loads(fv)
-                except Exception:
-                    fv = {}
-            top = sorted(fc, key=lambda x: abs(x.get('contribution', 0)), reverse=True)[:2]
-            top_names = top[0].get('name') if top else None
-            second_name = top[1].get('name') if len(top) > 1 else None
-            contrib_str = ', '.join(
-                f"{_ko_feature(x.get('name', '?'), lang)} {_fmt_signed(x.get('contribution', 0), 2)}"
-                for x in top
-            ) or '-'
-            why_lines = "\n".join(
-                f"  - {_ko_feature_why(x.get('name', '?'), lang)}"
-                for x in top
-            ) or '-'
+            # fundamental_gap (가격 12개월 변화율 − 이익 12개월 변화율) 중심 폴백 텍스트.
+            # noise_score / 이성·감정 점수 / 거품 단어 사용 X.
+            try:
+                from api.routers.regime import get_fundamental_gap as _get_fg
+                fg = _get_fg(region=region, days=2520)
+            except Exception:
+                fg = None
+            cur = (fg or {}).get('current') or {}
+            stats = (fg or {}).get('stats') or {}
+            value = cur.get('value')
+            top_pct = cur.get('top_pct')
+            sign = cur.get('sign', 'neutral')
+            try:
+                outpace = (pow(2.718281828, value) - 1) * 100 if value is not None else None
+            except Exception:
+                outpace = None
 
             if lang == 'en':
+                zone = ('outpace (price > earnings)' if sign == 'bubble' else
+                        'compression (price < earnings)' if sign == 'compress' else
+                        'balanced')
                 block1 = (
-                    f"[Data] Regime: {regime_name}. Market Rationality Score: {_fmt_signed(score, 2)}"
-                    f" (positive=rational, negative=emotional).\n"
-                    f"Top contributors: {contrib_str}.\n"
-                    f"Summary: today's rationality reading sits at {_fmt_signed(score, 2)}."
+                    f"[Data] fundamental_gap: {_fmt_signed(value, 4)}.\n"
+                    f"Position: top {top_pct}% of {stats.get('count')}-sample distribution ({zone}).\n"
+                    f"1-year price-vs-earnings outpace: {_fmt_signed(outpace, 1) if outpace is not None else '-'}%.\n"
+                    f"Distribution stats — mean {stats.get('mean')}, median {stats.get('median')}, "
+                    f"min {stats.get('min')}, max {stats.get('max')}."
                 )
-                block2 = f"[Why these variables matter]\n{why_lines}"
+                block2 = (
+                    "[Why these variables matter]\n"
+                    "  - 1-year price log return (P) and 1-year earnings log return (E) — their difference "
+                    "isolates how much price moved relative to earnings.\n"
+                    "  - When P moves far ahead of E (positive gap), the P/E multiple expanded; "
+                    "when E moves ahead (negative gap), the multiple compressed."
+                )
                 block3 = (
-                    "[Insight] Variables together describe how aligned or detached price action is from "
-                    "fundamentals — a textbook divergence/alignment readout, no direction inferred."
+                    "[Insight] Today's reading sits where price-earnings expansion vs compression "
+                    "places the market in the historical distribution — a factual position readout, "
+                    "no direction inferred."
                 )
             else:
+                zone = ('추월 영역 (가격 > 이익)' if sign == 'bubble' else
+                        '압축 영역 (가격 < 이익)' if sign == 'compress' else
+                        '균형 (펀더멘털 반영)')
                 block1 = (
-                    f"[데이터 요약] 레짐: {regime_name}. 시장 이성 점수: {_fmt_signed(score, 2)}"
-                    f" (양수=이성 우위, 음수=감정 우위).\n"
-                    f"상위 기여 지표: {contrib_str}.\n"
-                    f"요약: 오늘 이성 점수는 {_fmt_signed(score, 2)} 위치입니다."
+                    f"[데이터 요약] 펀더멘털 갭: {_fmt_signed(value, 4)}.\n"
+                    f"분포 위치: 상위 {top_pct}% (표본 {stats.get('count')}개, {zone}).\n"
+                    f"1년 가격이 이익을 추월한 정도: {_fmt_signed(outpace, 1) if outpace is not None else '-'}%.\n"
+                    f"분포 통계 — 평균 {stats.get('mean')}, 중앙값 {stats.get('median')}, "
+                    f"최저 {stats.get('min')}, 최고 {stats.get('max')}."
                 )
-                block2 = f"[주요 변수 설명 — 왜 모델에 영향을 주는지]\n{why_lines}"
+                block2 = (
+                    "[주요 변수 설명]\n"
+                    "  - 가격(P) 1년 log 수익률과 이익(E) 1년 log 수익률 — 두 변화율 차이가 "
+                    "가격이 이익 대비 얼마나 빠르게 움직였는지 분리해서 보여줍니다.\n"
+                    "  - P 가 E 보다 빠르면(양수 갭) P/E 배수가 확장, E 가 P 보다 빠르면(음수 갭) 압축됩니다."
+                )
                 block3 = (
-                    "[인사이트] 위 지표들이 함께 가리키는 *교과서적* 패턴은 심리·펀더멘털의 정렬 또는 괴리 정도이며, "
-                    "이는 가격 흐름이 펀더멘털과 얼마나 맞물리고 있는지에 대한 사실 기록입니다 (방향 예측 X)."
+                    "[인사이트] 오늘 값은 가격-이익 추월 또는 압축이 과거 분포의 어느 위치에 있는지 "
+                    "사실 기록일 뿐이며, 방향 예측은 포함하지 않습니다."
                 )
             return f"{block1}\n\n{block2}\n\n{block3}"
 
