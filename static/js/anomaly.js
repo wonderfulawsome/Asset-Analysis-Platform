@@ -268,14 +268,14 @@
     const lblColor = percentileLabel(current.percentile_10y).color;
 
     // 오늘의 "상위 N%" — percentile_10y 는 누적분포 위치 (0~100), 상위% = 100 - pct
-    // 0% 는 직관적이지 않아 "최상위" 로 변경. < 1% 는 "상위 1% 이내" 로 안전하게.
+    // < 0.1 은 floor 0.1 로 (정확히 0% 표시 회피), ≥ 1 은 정수.
     const pctRaw = current.percentile_10y;
     const hasPct = pctRaw !== null && pctRaw !== undefined && Number.isFinite(pctRaw);
     const topPctRaw = hasPct ? Math.max(0, Math.min(100, 100 - pctRaw)) : null;
     let topPctText = '';
     if (hasPct) {
-      if (topPctRaw <= 0.5) topPctText = '최상위 (10년 1위)';
-      else if (topPctRaw < 1) topPctText = '상위 1% 이내';
+      if (topPctRaw < 0.1) topPctText = '상위 0.1%';
+      else if (topPctRaw < 1) topPctText = `상위 ${topPctRaw.toFixed(1)}%`;
       else topPctText = `상위 ${Math.round(topPctRaw)}%`;
     }
 
