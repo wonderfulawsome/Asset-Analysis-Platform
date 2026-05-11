@@ -38,21 +38,6 @@
     el.classList.add('region-mode-' + r);
   }
 
-  // KR 모드일 때 안내 배너 삽입 (Stage 2 까지 노출용)
-  function injectKrComingSoon() {
-    if (getRegion() !== 'kr') return;
-    if (document.querySelector('.kr-coming-soon')) return;
-    const banner = document.createElement('div');
-    banner.className = 'kr-coming-soon';
-    banner.innerHTML = '국내 주식 탭 준비 중';
-    const home = document.getElementById('home-view');
-    if (home) {
-      home.insertBefore(banner, home.firstChild);
-    } else {
-      document.body.insertBefore(banner, document.body.firstChild);
-    }
-  }
-
   // ── window.fetch 몽키패치 — /api/* 호출에 자동 region 파라미터 부착 ──
   // (URL 에 이미 region= 있으면 덮어쓰지 않음. 외부 도메인 호출은 영향 없음.)
   const _origFetch = window.fetch.bind(window);
@@ -78,7 +63,6 @@
   // 초기 적용
   document.addEventListener('DOMContentLoaded', function () {
     applyToggleClass();
-    injectKrComingSoon();
     const btn = document.getElementById('btn-region');
     if (btn) {
       btn.addEventListener('click', function () {
