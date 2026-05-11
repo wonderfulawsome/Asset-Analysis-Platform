@@ -29,7 +29,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=135">
+  <link rel="stylesheet" href="/static/css/main.css?v=136">
   <!-- Tailwind CDN 제거: preflight 가 body 의 margin:0 auto 를 덮어써 홈 뷰가 좌측 정렬됨.
        홈 뷰는 home.css 자체 grid 로 처리하므로 Tailwind 없이도 동작 -->
   <link rel="stylesheet" href="/static/css/home.css?v=18">
@@ -348,26 +348,24 @@
     <!-- ═══ 펀더멘털 탭 ═══ -->
     <main class="content" id="tab-fundamental" style="display:none;">
 
-      <!-- Noise vs Signal + 3개월 차트 통합 카드 (시황/차트 탭의 stat-strip / chart-combined 패턴 재사용) -->
-      <div class="card fade-target fundamental-combined">
-        <!-- 상단: Noise vs Signal (이 영역만 탭 → 상세보기) -->
-        <section class="fc-regime">
-          <div class="card-head">
-            <span class="card-label" id="nr-card-title">Noise vs Signal</span>
-            <span id="nr-badge" class="badge badge-yellow"></span>
-          </div>
-          <div id="regime-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-        </section>
-        <!-- hairline 분리 -->
-        <div class="fc-divider"></div>
-        <!-- 하단: 펀더멘털·주가 3개월 추이 -->
-        <section class="fc-chart">
-          <div class="fc-section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (3개월)</div>
-          <div id="nr-chart"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-        </section>
-      </div>
+      <!-- ① 헤로 — Noise vs Signal 스코어 (chromeless, 큰 위계) -->
+      <section class="fc-regime fade-target fundamental-hero">
+        <div class="fundamental-hero-head">
+          <span class="fundamental-hero-overline" id="nr-card-title">Noise vs Signal</span>
+          <span id="nr-badge" class="badge badge-yellow"></span>
+        </div>
+        <div id="regime-card"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </section>
 
-      <!-- 분석 노트 (구 AI 해설) — 카드 chrome 제거, 좌측 quote line 본문 -->
+      <!-- ② 차트 카드 — 펀더멘털·주가 3개월 추이 (chrome 1개) -->
+      <section class="card fade-target fundamental-chart-card">
+        <div class="fundamental-chart-head">
+          <span class="fc-section-label" data-i18n="section.nrChart">펀더멘털·주가 추이 (3개월)</span>
+        </div>
+        <div id="nr-chart"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </section>
+
+      <!-- ③ 분석 노트 — 카드 chrome 없는 quote 본문 -->
       <div id="ai-explain-fundamental" class="fade-target ai-explain-plain">
         <div class="ai-explain-overline" data-i18n="ai.explainLabel">분석 노트</div>
         <div id="ai-explain-fundamental-text" class="ai-explain-body">
@@ -641,7 +639,7 @@
     try { if (localStorage.getItem('lang') !== 'ko') localStorage.setItem('lang', 'ko'); } catch (e) {}
   </script>
   <script src="/static/js/chart.js?v=35"></script>
-  <script src="/static/js/main.js?v=138"></script>
+  <script src="/static/js/main.js?v=140"></script>
   <script src="/static/js/sector.js?v=9"></script>
   <script src="/static/js/home.js?v=49"></script>
   <script src="/static/js/anomaly.js?v=16"></script>
