@@ -54,9 +54,14 @@ def get_fundamental_gap(region: str = Query('us'), days: int = Query(2520, ge=30
         if v is None:
             continue
         try:
-            series.append({'date': r['date'], 'value': float(v)})
+            vf = float(v)
         except (TypeError, ValueError):
             continue
+        # 옛 PER 평탄 fallback 산물 (E ∝ P → log diff = exact 0) 필터.
+        # 부동소수 정밀도로 ±1e-6 까지는 fallback 판정. 실데이터는 보통 ±0.001 이상.
+        if abs(vf) < 1e-6:
+            continue
+        series.append({'date': r['date'], 'value': vf})
 
     if not series:
         return {'region': region, 'current': None, 'series': [], 'stats': None}
