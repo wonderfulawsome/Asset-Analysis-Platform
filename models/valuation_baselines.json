@@ -1,26 +1,47 @@
 {
   "erp": {
-    "mean": 0.004159,
-    "std": 0.013326,
-    "n": 64,
+    "mean": 0.003873,
+    "std": 0.013421,
+    "n": 65,
     "source": "shiller+yfinance(5Y)"
   },
   "vix": {
-    "mean": 19.2508,
-    "std": 5.2639,
+    "mean": 19.2458,
+    "std": 5.265,
     "n": 1256,
     "source": "yfinance(^VIX,5Y)"
   },
   "dd": {
-    "mean": -0.032435,
-    "std": 0.041742,
-    "n": 1255,
+    "mean": -0.032277,
+    "std": 0.041802,
+    "n": 1256,
     "source": "yfinance(SPY,5Y)"
   },
-  "weights": {
-    "erp": 0.4,
-    "vix": 0.3,
-    "dd": 0.3
+  "cape_15y": {
+    "mean": 27.7451,
+    "std": 4.5063,
+    "n": 150,
+    "source": "shiller(CAPE,15Y)"
   },
-  "computed_at": "2026-04-29T18:47:07.301155"
+  "buffett_15y": {
+    "mean": 1.4407,
+    "std": 0.3989,
+    "n": 3761,
+    "source": "yfinance(^W5000)/wb(GDP)(15Y)"
+  },
+  "trend": {
+    "mean": 0.047665,
+    "std": 0.068876,
+    "n": 1254,
+    "source": "yfinance(^GSPC_MA200,5Y)"
+  },
+  "weights": {
+    "cape": 0.25,
+    "buffett": 0.25,
+    "trend": 0.2,
+    "erp": 0.1,
+    "vix": 0.1,
+    "dd": 0.1
+  },
+  "computed_at": "2026-05-10T03:32:02.346239"
 }

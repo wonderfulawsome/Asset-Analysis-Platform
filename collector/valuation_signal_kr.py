@@ -29,18 +29,18 @@ _BASELINE_PATH = os.path.join(
 )
 _BASELINE_TTL_DAYS = 90
 
-# 가중치 — 구조 valuation(per+trend) 0.6, 단기 sentiment(erp+vix+dd) 0.4
-# 사용자 요청 "급등 후 평온 시점이 저평가로 잘못 측정됨" 해결 — 절대 가격 수준
-# 신호(PER vs 15Y, 가격 vs MA200) 를 composite 의 주축으로 승격.
-W_PER, W_TREND = 0.35, 0.25       # 구조 valuation (CAPE-like + trend gap)
-W_ERP, W_VIX, W_DD = 0.15, 0.10, 0.15  # 기존 단기 sentiment
+# 가중치 — 구조 valuation(per+trend) 0.75, 단기 sentiment(erp+vix+dd) 0.25
+# 사용자 요청 "급등 후 평온 시점이 저평가로 잘못 측정됨" 해결 + chart spike 회피.
+# VKOSPI proxy(RV) / DD60 의 noise 가 시계열 spike 만들어 sentiment 가중치 축소.
+W_PER, W_TREND = 0.45, 0.30       # 구조 valuation (CAPE-like + trend gap) — 0.75
+W_ERP, W_VIX, W_DD = 0.10, 0.05, 0.10  # 단기 sentiment — 0.25 (이전 0.40 → 0.25)
 
 # 베이스라인 산출 실패 시 fallback (대략적 historical 값 — 첫 실행 보호용)
 _FALLBACK_ERP = {'mean': 0.02, 'std': 0.015, 'n': 0, 'source': 'fallback'}
 _FALLBACK_VKOSPI = {'mean': 18.0, 'std': 5.0, 'n': 0, 'source': 'fallback'}
 _FALLBACK_DD = {'mean': -0.04, 'std': 0.05, 'n': 0, 'source': 'fallback'}
-_FALLBACK_PER_LT = {'mean': 14.0, 'std': 4.0, 'n': 0, 'source': 'fallback'}     # KOSPI 장기 PER ~14
-_FALLBACK_TREND = {'mean': 0.02, 'std': 0.10, 'n': 0, 'source': 'fallback'}     # 평균 +2% 이격, std 10%
+_FALLBACK_PER_LT = {'mean': 14.0, 'std': 8.0, 'n': 0, 'source': 'fallback'}     # KOSPI 장기 PER ~14, 실측 std 5~10 추정
+_FALLBACK_TREND = {'mean': 0.02, 'std': 0.16, 'n': 0, 'source': 'fallback'}     # 평균 +2% 이격, 실측 std 0.16
 
 # PER hard fallback (캐시도 없는 첫 실행 보호용 — KOSPI 장기 평균 ~14)
 _HARD_FALLBACK_PER = 14.0
@@ -491,8 +491,10 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
     end = date.today()
     start = end - timedelta(days=period_days)
 
-    # KOSPI 종가 — pykrx → FDR → yfinance 폴백
-    years_for_close = max(1, (period_days // 365) + 1)
+    # KOSPI 종가 — pykrx → FDR → yfinance 폴백.
+    # 200d MA warmup 위해 최소 2년 — 기존 1년은 첫 ~150일 trend NaN → z_trend=0 기여 →
+    # 그 날만 z_comp 양수 spike. tail(days) 추출 전에 충분한 warmup 확보.
+    years_for_close = max(2, (period_days // 365) + 2)
     close = _kospi_close_dual(years=years_for_close)
     if close.empty:
         print('[valuation_kr] KOSPI close 비어있음 — backfill 중단')
@@ -576,15 +578,32 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
     ma200 = close.rolling(200).mean()
     trend = (close / ma200 - 1.0)
 
-    # PER 시계열 — pykrx fundamental 의 일별 PER (close 와 같은 인덱스로 ffill)
-    per_series = None
+    # 5-comp 용 PER 시계열 — pykrx fundamental 의 일별 PER (실패 시 평탄 fallback).
+    # spike 방지: PER 미산출일은 z_per=0 으로 빠지면 그 날만 z_comp 양수로 솟구침.
+    # → DART 단발 평탄값 또는 캐시된 last-known PER 로 close.index 평탄 시리즈 강제.
+    kospi_per_series = None
     try:
         from pykrx import stock
         fund = stock.get_index_fundamental(start.strftime('%Y%m%d'), end.strftime('%Y%m%d'), '1001')
-        if fund is not None and not fund.empty:
-            per_series = fund['PER'].replace(0, np.nan)
+        if fund is not None and not fund.empty and 'PER' in fund.columns:
+            kospi_per_series = fund['PER'].replace(0, np.nan)
+            kospi_per_series = kospi_per_series.reindex(close.index).ffill().bfill()
     except Exception as e:
-        print(f'[valuation_kr] backfill PER 시계열 실패: {e}')
+        print(f'[valuation_kr] backfill PER 시계열(pykrx) 실패: {e}')
+    if kospi_per_series is None or kospi_per_series.dropna().empty:
+        flat_per = None
+        try:
+            from collector.dart_fundamentals import compute_kospi_market_per_dart
+            dart_result = compute_kospi_market_per_dart()
+            if dart_result and dart_result.get('per') and dart_result['per'] > 0:
+                flat_per = float(dart_result['per'])
+                print(f"[valuation_kr] backfill PER fallback (DART KOSPI200 시총가중 {flat_per:.2f}, 평탄) 사용")
+        except Exception as e:
+            print(f'[valuation_kr] backfill DART PER fallback 실패: {e}')
+        if flat_per is None:
+            flat_per = _load_last_known_per() or _HARD_FALLBACK_PER
+            print(f'[valuation_kr] backfill PER fallback (last_known/hard {flat_per}, 평탄) 사용')
+        kospi_per_series = pd.Series(flat_per, index=close.index)
 
     # 시계열 결합 (날짜 인덱스 정렬, forward-fill 으로 비거래일 보간)
     components = [
@@ -594,10 +613,9 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
         vix_series.rename('vix'),
         dd.rename('dd'),
         trend.rename('trend'),
+        kospi_per_series.rename('kospi_per'),     # 항상 채워진 PER 시리즈 (위에서 fallback 보장)
     ]
-    if per_series is not None:
-        components.append(per_series.rename('kospi_per'))
-    df = pd.concat(components, axis=1).ffill().dropna(subset=['close', 'ey', 'tnx', 'vix', 'dd'])
+    df = pd.concat(components, axis=1).ffill().bfill().dropna(subset=['close', 'ey', 'tnx', 'vix', 'dd'])
 
     df['erp'] = df['ey'] - df['tnx']
 
@@ -618,15 +636,28 @@ def backfill_valuation_signal_kr(days: int = 90) -> list[dict]:
                                  float(r['dd']), baselines,
                                  kospi_per=float(per_val) if per_val is not None else None,
                                  price_vs_ma200=float(trend_val) if trend_val is not None else None)
+        # spy_per — kospi_per_series 가 항상 채워져 있어 row.kospi_per 그대로 사용
+        spy_per_val = round(float(per_val), 2) if per_val is not None else 0.0
         rows.append({
             'date': idx.strftime('%Y-%m-%d'),
-            'spy_per': round(float(per_series.loc[:idx].iloc[-1]), 2),
+            'spy_per': spy_per_val,
             'earnings_yield': round(float(r['ey']), 4),
             'tnx_yield': round(float(r['tnx']), 4),
             'erp': round(float(r['erp']), 4),
             'vix': round(float(r['vix']), 2),
             'dd_60d': round(float(r['dd']), 4),
+            'price_vs_ma200': round(float(trend_val), 4) if trend_val is not None else None,
             **z,
             'label': label_from_z_comp(z['z_comp']),
         })
+
+    # z_comp history 5일 rolling smoothing — 잔존 sentiment noise spike 제거.
+    # raw z_per/z_trend/z_erp/z_vix/z_dd 는 그대로 유지, 합산 z_comp + label 만 평탄화.
+    # fetch_today (single point) 는 smoothing 안 함 — 차트 끝 1점 약간의 차이는 허용.
+    if rows:
+        zc_series = pd.Series([r['z_comp'] for r in rows])
+        zc_smoothed = zc_series.rolling(5, min_periods=1).mean().round(4)
+        for i, r in enumerate(rows):
+            r['z_comp'] = float(zc_smoothed.iloc[i])
+            r['label'] = label_from_z_comp(r['z_comp'])
     return rows

@@ -165,10 +165,11 @@
 
     // 메타라인: 심리 / 이상도 (anomaly percentile) / 국면 — 3 endpoint 병렬
     try {
+      const _wr = (typeof window.withRegion === 'function') ? window.withRegion : (u => u);
       const [fg, cycle, anomaly] = await Promise.all([
         fetch('/api/macro/fear-greed').then(r => r.json()).catch(() => null),
         fetch('/api/sector-cycle/current').then(r => r.json()).catch(() => null),
-        fetch('/api/anomaly/current?region=us').then(r => r.json()).catch(() => null),
+        fetch(_wr('/api/anomaly/current')).then(r => r.json()).catch(() => null),
       ]);
       const meta = document.getElementById('home-ai-meta');
       const parts = [];

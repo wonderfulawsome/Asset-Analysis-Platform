@@ -12,31 +12,31 @@
     "source": "fallback"
   },
   "dd": {
-    "mean": -0.04,
-    "std": 0.05,
-    "n": 0,
-    "source": "fallback"
+    "mean": -0.04668953969145418,
+    "std": 0.04015627105668613,
+    "n": 1223,
+    "source": "kospi_dual"
   },
   "per_15y": {
     "mean": 14.0,
-    "std": 4.0,
+    "std": 8.0,
     "n": 0,
     "source": "fallback"
   },
   "trend": {
-    "mean": 0.02,
-    "std": 0.1,
-    "n": 0,
-    "source": "fallback"
+    "mean": 0.05109998987355051,
+    "std": 0.1585954512011862,
+    "n": 1223,
+    "source": "kospi_ma200_5y"
   },
-  "updated_at": "2026-05-09T22:04:28.538153",
+  "updated_at": "2026-05-10T00:49:42.300159",
   "weights": {
-    "per_15y": 0.35,
-    "trend": 0.25,
-    "erp": 0.15,
-    "vix": 0.1,
-    "dd": 0.15
+    "per_15y": 0.45,
+    "trend": 0.3,
+    "erp": 0.1,
+    "vix": 0.05,
+    "dd": 0.1
   },
   "last_known_per": 26.99,
-  "last_known_per_updated_at": "2026-05-09T22:05:29.915629"
+  "last_known_per_updated_at": "2026-05-11T00:29:06.517195"
 }
