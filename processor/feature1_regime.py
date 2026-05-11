@@ -50,11 +50,10 @@ FEATURE_NAMES = [
     'realized_vol',
 ]
 
-# KR 6-feature: PER 시계열 부재(fundamental_gap=0 평탄) + VKOSPI 단일값(vix_term=1.0 평탄)
-# 으로 두 피처가 학습 데이터에서 정보 없는 평탄 시리즈가 됨 → 제외.
-# vix_term 가중치 2.0 → realized_vol 흡수, fundamental_gap 0.5 → erp_zscore(abs) 흡수.
+# KR 7-feature: DART annual_ni 통합으로 fundamental_gap 정상 산출 → 학습에 포함.
+# vix_term 만 여전히 평탄 (VKOSPI 단일값) → 제외.
 FEATURE_NAMES_KR = [
-    'erp_zscore', 'residual_corr', 'dispersion',
+    'fundamental_gap', 'erp_zscore', 'residual_corr', 'dispersion',
     'amihud', 'hy_spread', 'realized_vol',
 ]
 
@@ -72,7 +71,8 @@ NOISE_WEIGHTS_US = [
     ('realized_vol',    2.0, False),
 ]
 NOISE_WEIGHTS_KR = [
-    ('erp_zscore',      0.5, True),   # 0.3 → 0.5 (fundamental_gap 0.5 흡수)
+    ('fundamental_gap', 0.5, True),   # abs — DART annual_ni 시계열 통합 후 활성화
+    ('erp_zscore',      0.3, True),   # abs — US 와 동일 (fundamental_gap 활성 후 원복)
     ('residual_corr',   1.0, False),
     ('dispersion',      0.0, False),
     ('amihud',          0.5, False),

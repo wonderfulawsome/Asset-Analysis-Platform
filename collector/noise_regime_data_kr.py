@@ -68,7 +68,7 @@ def fetch_kospi_shiller_like(years: int = 7) -> pd.DataFrame:
         return pd.DataFrame()
     close_monthly = daily_close.resample('MS').last().dropna()
 
-    # PER — pykrx 만 지원. 실패시 캐싱된 last_known_per → 없으면 14.0 평탄
+    # PER — pykrx 1차 → DART annual_ni 2차 (KOSPI 47사 합산 연간 이익) → 평탄 fallback 3차
     per_monthly = None
     try:
         from pykrx import stock
@@ -80,31 +80,67 @@ def fetch_kospi_shiller_like(years: int = 7) -> pd.DataFrame:
             per_monthly = (fund['PER'].replace(0, np.nan)
                             .resample('MS').last().dropna())
     except Exception as e:
-        print(f'[KR-Noise] PER pykrx 실패 → fallback 사용: {e}')
-    if per_monthly is None or per_monthly.empty:
-        try:
-            from collector.valuation_signal_kr import _load_last_known_per, _HARD_FALLBACK_PER
-            cached = _load_last_known_per()
-        except Exception:
-            cached, _HARD_FALLBACK_PER = None, 14.0
-        fallback_per = cached if cached else _HARD_FALLBACK_PER
-        per_monthly = pd.Series(fallback_per, index=close_monthly.index)
-        src = '캐싱된 마지막 정상값' if cached else f'하드 fallback {_HARD_FALLBACK_PER}'
-        print(f'[KR-Noise] PER fallback ({src}, {fallback_per:.2f} 평탄) 사용')
-    else:
-        # 정상 PER 마지막 값 → 공용 캐시 갱신 (valuation_signal_kr 와 공유)
-        try:
-            from collector.valuation_signal_kr import _save_last_known_per
-            last_valid = per_monthly.dropna()
-            if not last_valid.empty:
-                _save_last_known_per(float(last_valid.iloc[-1]))
-        except Exception:
-            pass
+        print(f'[KR-Noise] PER pykrx 실패 → DART/fallback 시도: {e}')
 
-    df = pd.DataFrame({'P': close_monthly, 'PER': per_monthly}).dropna()
-    if df.empty:
-        return pd.DataFrame()
-    df['E'] = df['P'] / df['PER']
+    df = None
+    if per_monthly is None or per_monthly.empty:
+        # 2차: DART 47사 연간 net_income 합산 → 매월 net_income (연 단위 step) → E_monthly
+        # E_monthly 는 KOSPI 200 지수 단위가 아니라 47사 합산 NI 자체 — scale 무관.
+        # fundamental_gap = log(P_t/P_{t-12}) - log(E_t/E_{t-12}) 는 비율이라 scale 영향 없음.
+        try:
+            from collector.dart_fundamentals import fetch_kospi200_annual_ni
+            annual_ni = fetch_kospi200_annual_ni(years=years + 1)
+            if annual_ni:
+                # close_monthly 의 각 월에 그 해의 NI 값을 매핑 (forward-fill style)
+                # 보고서 공시 시점 안전망: 연도 y 의 NI 는 다음해 4월 (사업보고서) 이후 사용 가능.
+                # → close_monthly[t] 에 대해, 최근 공시된 연도의 NI 사용.
+                ni_by_month = []
+                today = _dt.date.today()
+                for ts in close_monthly.index:
+                    y = ts.year
+                    m = ts.month
+                    # m <= 3: 작년 사업보고서 아직 미공시 → 2년 전 NI
+                    # m >= 4: 작년 사업보고서 공시됨 → 작년 NI
+                    use_year = y - 2 if m <= 3 else y - 1
+                    if today.year == y and today.month <= 3:
+                        use_year = y - 2
+                    ni = annual_ni.get(use_year)
+                    if ni is None:
+                        ni = annual_ni.get(use_year - 1)  # 한 해 더 이전 fallback
+                    ni_by_month.append(ni)
+                e_series = pd.Series(ni_by_month, index=close_monthly.index)
+                e_series = e_series.dropna()
+                if len(e_series) >= 24:
+                    df = pd.DataFrame({'P': close_monthly, 'E': e_series}).dropna()
+                    print(f'[KR-Noise] DART annual_ni 사용: {len(e_series)} 월 적용')
+        except Exception as e:
+            print(f'[KR-Noise] DART annual_ni 폴백 실패: {e}')
+
+    if df is None:
+        # 3차: 평탄 PER fallback (옛 동작 유지)
+        if per_monthly is None or per_monthly.empty:
+            try:
+                from collector.valuation_signal_kr import _load_last_known_per, _HARD_FALLBACK_PER
+                cached = _load_last_known_per()
+            except Exception:
+                cached, _HARD_FALLBACK_PER = None, 14.0
+            fallback_per = cached if cached else _HARD_FALLBACK_PER
+            per_monthly = pd.Series(fallback_per, index=close_monthly.index)
+            src = '캐싱된 마지막 정상값' if cached else f'하드 fallback {_HARD_FALLBACK_PER}'
+            print(f'[KR-Noise] PER fallback ({src}, {fallback_per:.2f} 평탄) 사용')
+        else:
+            # pykrx 정상 작동 — last value 공용 캐시 갱신
+            try:
+                from collector.valuation_signal_kr import _save_last_known_per
+                last_valid = per_monthly.dropna()
+                if not last_valid.empty:
+                    _save_last_known_per(float(last_valid.iloc[-1]))
+            except Exception:
+                pass
+        df = pd.DataFrame({'P': close_monthly, 'PER': per_monthly}).dropna()
+        if df.empty:
+            return pd.DataFrame()
+        df['E'] = df['P'] / df['PER']
 
     # CAPE 등가 — 최근 N년 E 평균
     df['E_smooth'] = df['E'].rolling(min(60, len(df)), min_periods=12).mean()

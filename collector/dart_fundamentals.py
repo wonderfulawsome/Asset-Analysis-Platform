@@ -442,3 +442,91 @@ def compute_kospi_market_per_dart(stock_codes: list[str] | None = None,
     print(f"[DART] KOSPI 시장 PER {result['per']} / PBR {result['pbr']} "
           f"(cov {coverage*100:.0f}%, n={n_per}/{len(stock_codes)})")
     return result
+
+
+# ── KOSPI 47사 연간 net_income 시계열 (fundamental_gap 산출용) ─────
+_EPS_HISTORY_PATH = os.path.join(_CACHE_DIR, 'kospi200_eps_history.json')
+_EPS_HISTORY_TTL_DAYS = 30
+
+
+def fetch_kospi200_annual_ni(years: int = 5, force_refresh: bool = False) -> dict[int, float]:
+    """KOSPI 200 (DART 47사) 의 연간 net_income 합산 시계열.
+
+    각 corp 의 사업보고서(연간) 를 years 년치 fetch → 합산.
+    Returns: {year(int): total_net_income(float)}
+
+    47 corps × years 호출. 5년이면 235 호출 ~2분.
+    30일 캐시 (kospi200_eps_history.json).
+    """
+    # 캐시 확인
+    if not force_refresh and os.path.exists(_EPS_HISTORY_PATH):
+        try:
+            with open(_EPS_HISTORY_PATH) as f:
+                cached = json.load(f)
+            updated = datetime.fromisoformat(cached.get('updated_at', '2000-01-01'))
+            if (datetime.now() - updated).days < _EPS_HISTORY_TTL_DAYS:
+                return {int(k): float(v) for k, v in cached.get('annual_ni', {}).items()}
+        except Exception:
+            pass
+
+    if not _api_key():
+        print('[DART] DART_API_KEY 미설정 — annual_ni 시계열 fetch 불가')
+        return {}
+
+    # 기존 metrics 캐시에서 47 corps 가져옴
+    cache = _load_metrics_cache()
+    corps = list(cache.get('metrics', {}).keys())
+    if not corps:
+        print('[DART] dart_kr_metrics.json metrics 비어있음 — fetch_per_pbr_dart 먼저 호출 필요')
+        return {}
+
+    mapping = _load_corp_codes()
+    today = date.today()
+    annual_ni: dict[int, float] = {}
+    n_corps_per_year: dict[int, int] = {}
+
+    # years 년치 + 추가 1년 (12개월 diff 산출용)
+    year_range = list(range(today.year - years - 1, today.year))
+
+    print(f'[DART] KOSPI {len(corps)}사 × {len(year_range)}년 annual_ni fetch...')
+    for cc in corps:
+        corp_code = mapping.get(cc)
+        if not corp_code:
+            continue
+        for y in year_range:
+            try:
+                items = _fetch_acnt(corp_code, y, _REPRT_FY, fs_div='CFS')
+                if not items:
+                    items = _fetch_acnt(corp_code, y, _REPRT_FY, fs_div='OFS')
+                if not items:
+                    continue
+                ni = _extract_amount(items, _NI_NAMES, 'IS')
+                if ni is None:
+                    ni = _extract_amount(items, _NI_NAMES, 'CIS')
+                if ni is None:
+                    continue
+                annual_ni[y] = annual_ni.get(y, 0.0) + ni
+                n_corps_per_year[y] = n_corps_per_year.get(y, 0) + 1
+            except Exception:
+                continue
+
+    if not annual_ni:
+        print('[DART] annual_ni 모든 corp 실패')
+        return {}
+
+    # 캐시 저장
+    try:
+        os.makedirs(_CACHE_DIR, exist_ok=True)
+        with open(_EPS_HISTORY_PATH, 'w') as f:
+            json.dump({
+                'updated_at': datetime.now().isoformat(),
+                'annual_ni': {str(k): v for k, v in annual_ni.items()},
+                'n_corps_per_year': {str(k): v for k, v in n_corps_per_year.items()},
+                'n_corps_total': len(corps),
+            }, f, indent=2)
+    except Exception as e:
+        print(f'[DART] annual_ni 캐시 저장 실패: {e}')
+
+    summary = ' / '.join(f"{y}={annual_ni[y]/1e12:.1f}T" for y in sorted(annual_ni))
+    print(f'[DART] annual_ni: {summary}')
+    return annual_ni
