@@ -68,6 +68,17 @@
 }
 .home-section-label:first-of-type { margin-top: 8px; }
 
+/* 2열 그리드 — 카드형 home-tile 들을 격자로 배치 */
+.home-tiles {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+@media (max-width: 360px) {
+  .home-tiles { gap: 8px; }
+}
+
 /* 행 리스트 — 한 섹션에 여러 행이 들어감. 행 간 1px hairline. */
 .home-rows {
   display: flex;

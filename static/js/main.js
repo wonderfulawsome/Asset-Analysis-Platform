@@ -799,8 +799,8 @@ async function loadRegime() {
     </div>
     ${_buildFgNoiseInsight(ns)}`;
 
-  // 카드 터치 → 상세페이지
-  const card = container.closest('.card');
+  // 카드 터치 → 상세페이지 (펀더멘털 탭의 통합 카드에서는 .fc-regime 영역만 탭)
+  const card = container.closest('.fc-regime') || container.closest('.card');
   if (card && !card.classList.contains('card-tappable')) {
     card.classList.add('card-tappable');
     card.addEventListener('click', () => openDetail('Noise vs Signal', renderNoiseDetail)); // 제목은 영문 고정

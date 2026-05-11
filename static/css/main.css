@@ -3130,3 +3130,285 @@ html.splash-skip .splash { display: none !important; }
 .about-disclaimer-list b { color: var(--text); font-weight: 700; }
 .about-section em { font-style: italic; color: var(--accent); }
 
+/* ═══════════════════════════════════════════════════════════════════════
+   펀더멘털 탭 — 에디토리얼 미니멀 리디자인
+   토스 풍 미니멀 (글래스 카드 chrome 제거) + Koyfin 풍 overline 라벨
+   목적: AI 자동 생성 디자인 인상 제거
+   스코프: #tab-fundamental 내부에만 적용 (다른 탭은 영향 없음)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 1. 카드 chrome 최소화 — 글래스/그림자/큰 라운드 제거 */
+#tab-fundamental .card {
+  background: var(--card);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 1px solid var(--sep);
+  border-radius: 12px;
+  padding: 16px 16px 14px;
+  margin-bottom: 12px;
+  box-shadow: none;
+}
+#tab-fundamental .card-head {
+  margin-bottom: 12px;
+}
+
+/* 2. 섹션 라벨 → 작은 uppercase overline (Koyfin 풍) */
+#tab-fundamental .section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sub);
+  padding: 14px 0 8px;
+}
+#tab-fundamental .card-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--sub);
+}
+
+/* 3. 배지 톤 다운 — glow/shadow 제거, 사각 모서리 */
+#tab-fundamental .badge {
+  font-weight: 600;
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  box-shadow: none !important;
+}
+
+/* 4. Noise vs Signal 게이지 — 글로우/애니메이션 톤 다운 */
+#tab-fundamental .nr-name {
+  font-size: 18px;
+  font-weight: 700;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  letter-spacing: -0.01em;
+}
+#tab-fundamental .nr-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+#tab-fundamental .nr-sub {
+  font-size: 12px;
+  margin-bottom: 18px;
+}
+#tab-fundamental .nr-gap-track {
+  height: 4px;
+  box-shadow: none;
+}
+#tab-fundamental .nr-gap-fill {
+  background: rgba(255,255,255,0.55) !important;
+}
+#tab-fundamental .nr-gap-dot {
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.18);
+  animation: none;
+}
+#tab-fundamental .nr-gap-labels {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+#tab-fundamental .nr-gap-ticks {
+  font-size: 10px;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* 5. 통합 카드: Noise vs Signal + 3개월 차트 (chart-combined 패턴 재사용) */
+#tab-fundamental .fundamental-combined {
+  padding: 16px 16px 14px;
+}
+#tab-fundamental .fc-regime {
+  position: relative;
+  /* card-tappable 으로 JS 가 동적 부착 — padding-bottom 은 .card-tappable 룰이 처리 */
+}
+#tab-fundamental .fc-divider {
+  height: 1px;
+  background: var(--sep);
+  margin: 14px -16px;     /* 카드 좌우 padding 을 가로지르는 풀폭 hairline */
+}
+#tab-fundamental .fc-chart {
+  padding-top: 2px;
+}
+#tab-fundamental .fc-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sub);
+  margin-bottom: 10px;
+}
+
+/* 6. 분석 노트 — 카드 chrome 완전 제거 + 좌측 quote line 풀폭 텍스트 */
+#tab-fundamental .ai-explain-plain {
+  position: relative;
+  margin-top: 18px;
+  padding: 4px 4px 0 16px;
+}
+#tab-fundamental .ai-explain-plain::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 6px;
+  bottom: 14px;
+  width: 2px;
+  background: var(--sub2);
+  opacity: 0.45;
+  border-radius: 2px;
+}
+#tab-fundamental .ai-explain-overline {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--sub);
+  margin-bottom: 8px;
+}
+#tab-fundamental .ai-explain-plain .ai-explain-body {
+  padding: 0;
+  font-size: 14px;
+  line-height: 1.78;
+  color: var(--text);
+  min-height: 32px;
+}
+#tab-fundamental .ai-explain-plain .ai-explain-footer {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--sep);
+  font-size: 10.5px;
+  letter-spacing: 0.04em;
+  color: var(--sub2);
+}
+
+/* 6. 면책 문구 — 더 잔잔하게 */
+#tab-fundamental .disclaimer {
+  font-size: 11px;
+  line-height: 1.65;
+  color: var(--sub2);
+  padding: 18px 4px 10px;
+}
+
+/* 7. 카드 탭 힌트 — accent (보라/오렌지) → 중성 톤 */
+#tab-fundamental .card-tappable {
+  padding-bottom: 32px;
+}
+#tab-fundamental .card-tappable::after {
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--sub);
+  opacity: 0.7;
+}
+
+/* 8. 다크 모드 (Bloomberg 톤) 미세 조정 */
+[data-theme="dark"] #tab-fundamental .card {
+  background: #0B0B0E;
+  border-color: rgba(255,255,255,0.07);
+}
+[data-theme="dark"] #tab-fundamental .ai-explain-card::before {
+  background: rgba(255,255,255,0.18);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AI 차트 탭 — 시각 블록 추가 정리 (카드 chrome 2 → 1, 컨트롤 압축)
+   목적: stat-strip 카드 chrome 제거 + wide 주황 CTA → 인라인 토글 + MA 범례 차트 카드로 흡수
+   스코프: #tab-chart 내부에만 적용
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* 1. stat-strip 카드 chrome 제거 — 글래스/border/radius 모두 off, hairline cell 만 유지 */
+#tab-chart .stat-strip {
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  margin-bottom: 8px;
+  border-top: 1px solid var(--sep);
+  border-bottom: 1px solid var(--sep);
+}
+#tab-chart .stat-cell {
+  padding: 10px 8px;
+}
+#tab-chart .stat-label {
+  font-size: 9.5px;
+  letter-spacing: 0.06em;
+}
+
+/* 2. 매칭 컨트롤 한 줄 — 가운데 정렬 (모드 세그 + 토글 둘 다 중앙) */
+#tab-chart .chart-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+#tab-chart .predict-legend {
+  justify-content: center;
+}
+
+/* 3. similar-mode-seg — 가운데 정렬 컨테이너 안에서 자체 폭만 차지 */
+#tab-chart .similar-mode-seg {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+/* 4. 유사 패턴 토글 — 기본 상태부터 주황 포인트 (primary action 강조) */
+.predict-toggle-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  background: rgba(255,140,0,0.08);
+  border: 1px solid #FF8C00;
+  border-radius: 8px;
+  color: #FF8C00;
+  font-size: 12.5px;
+  font-weight: 700;
+  font-family: inherit;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+.predict-toggle-link:hover {
+  background: rgba(255,140,0,0.16);
+  border-color: #FFA533;
+}
+.predict-toggle-link.active {
+  background: #FF8C00;
+  border-color: #FF8C00;
+  color: #000;
+}
+.predict-toggle-link.active:hover {
+  background: #FFA533;
+  border-color: #FFA533;
+}
+.predict-toggle-link:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* 5. MA 범례 — 차트 카드 안 상단 첫 줄로 흡수, 좌측 정렬 */
+#tab-chart .chart-combined > .ma-legend {
+  margin: 0 0 8px;
+  padding: 4px 8px 6px;
+  justify-content: flex-start;
+  border-bottom: 1px solid var(--sep);
+}
+#tab-chart .chart-combined > .ma-legend:empty {
+  display: none;          /* 빈 범례일 때 hairline 도 안 보이게 */
+}
+
+/* 6. chart-hint 위치 — ma-legend 가 위로 옮겨졌으니 hint 도 살짝 안쪽 */
+#tab-chart .chart-combined > .chart-hint {
+  padding: 0 0 4px;
+}
+

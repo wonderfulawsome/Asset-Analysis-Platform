@@ -181,10 +181,10 @@ const I18N = {
     'chart.periodLabel': '6개월',                 // 기간 라벨
     'chart.priceRange': '가격 범위',              // 가격 범위
     'chart.pctChange': '변동',                    // % 변동
-    'chart.predictBtn': '↗ 유사 과거 패턴 보기 →',
-    'chart.similarBtn': '↗ 유사 과거 패턴 보기 →',
+    'chart.predictBtn': '유사 패턴 보기 ▾',
+    'chart.similarBtn': '유사 패턴 보기 ▾',
     'chart.similarLoading': '유사 패턴 검색 중...',
-    'chart.similarClose': '유사 패턴 닫기',
+    'chart.similarClose': '유사 패턴 닫기 ▴',
     'chart.predictTitle': '유사 과거 패턴 (60일 + 후속 30일)',
     'chart.predictActual': '실제 종가',
     'chart.predictForecast': '후속',
@@ -694,10 +694,10 @@ const I18N = {
     'chart.periodLabel': '6M',
     'chart.priceRange': 'Price Range',
     'chart.pctChange': 'Chg',
-    'chart.predictBtn': '↗ Similar Past Patterns →',
-    'chart.similarBtn': '↗ Similar Past Patterns →',
+    'chart.predictBtn': 'Similar patterns ▾',
+    'chart.similarBtn': 'Similar patterns ▾',
     'chart.similarLoading': 'Searching similar patterns...',
-    'chart.similarClose': 'Close patterns',
+    'chart.similarClose': 'Close patterns ▴',
     'chart.predictTitle': 'Similar Past Patterns (60-day + 30-day follow-up)',
     'chart.predictActual': 'Match',
     'chart.predictForecast': 'Follow-up',
