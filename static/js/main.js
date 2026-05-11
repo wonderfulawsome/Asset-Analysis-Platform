@@ -1767,8 +1767,8 @@ async function loadFundamentalGap() {
   const titleEl = document.getElementById('nr-card-title');
   if (titleEl) titleEl.textContent = '펀더멘털 반영도';
 
-  // top_pct 가 작을수록 양수 거품 anomaly, 클수록 음수 압축 anomaly.
-  // "상위 N% 거품" / "하위 N% 압축" / "평소" 분기.
+  // top_pct 가 작을수록 양수 추월 anomaly, 클수록 음수 압축 anomaly.
+  // "상위 N% 추월" / "하위 N% 압축" / "평소" 분기.
   const topPct = cur.top_pct;     // 위에 있는 비율 (0=가장 위, 100=가장 아래)
   const topAbsPct = cur.top_abs_pct;  // |값| 기준 상위
   const value = cur.value;
@@ -1779,7 +1779,7 @@ async function loadFundamentalGap() {
   if (sign === 'bubble') {
     phaseLabel = '가격이 이익을 추월';
     phaseColor = '#FF8C00';
-    phaseDesc = `과거 10년 분포에서 상위 ${Math.max(0.1, topPct).toFixed(1)}% 거품 영역`;
+    phaseDesc = `과거 10년 분포에서 상위 ${Math.max(0.1, topPct).toFixed(1)}% 추월 영역`;
   } else if (sign === 'compress') {
     phaseLabel = '가격이 이익을 따라가지 못함';
     phaseColor = '#3B82F6';
@@ -1790,7 +1790,7 @@ async function loadFundamentalGap() {
     phaseDesc = '가격이 이익을 충실히 반영';
   }
 
-  // 게이지 위치 (0=좌측 압축, 50=균형, 100=우측 거품)
+  // 게이지 위치 (0=좌측 압축, 50=균형, 100=우측 추월)
   // value 범위 [stats.min, stats.max] 를 [0, 100] 으로 매핑, 0 위치 50 에 정렬.
   const vMin = Math.min(stats.min || -1, 0);
   const vMax = Math.max(stats.max || 1, 0);
@@ -1818,7 +1818,7 @@ async function loadFundamentalGap() {
       <div class="nr-gap">
         <div class="nr-gap-labels">
           <span>압축 (가격&lt;이익)</span>
-          <span>거품 (가격&gt;이익)</span>
+          <span>추월 (가격&gt;이익)</span>
         </div>
         <div class="nr-gap-track">
           <div class="nr-gap-fill" style="width:${pos}%;background:linear-gradient(to right,#3B82F6,#10B981,#FF8C00)"></div>
@@ -1864,7 +1864,7 @@ async function loadFundamentalGap() {
     dotColor: v => v > 0 ? '#FF8C00' : v < 0 ? '#3B82F6' : '#10B981',
     yFixedMin: yMin,
     yFixedMax: yMax,
-    yTopLabel: '거품 (가격>이익)',
+    yTopLabel: '추월 (가격>이익)',
     yBottomLabel: '압축 (가격<이익)',
   });
 }

@@ -26,8 +26,8 @@ def get_history(days: int = 30, region: str = Query('us')):
 def get_fundamental_gap(region: str = Query('us'), days: int = Query(2520, ge=30, le=4000)):
     """fundamental_gap 시계열 + 오늘의 10년 분포 내 상위 N%.
 
-    펀더멘털 갭 = log(P_t/P_{t-12}) - log(E_t/E_{t-12}). 양수=가격이 이익 추월(거품),
-    0 근처=반영, 음수=가격이 이익 압축. 노이즈 8피처 중 하나 (feature_values JSONB).
+    펀더멘털 갭 = log(P_t/P_{t-12}) - log(E_t/E_{t-12}). 양수=가격이 이익을 추월,
+    0 근처=반영, 음수=가격이 이익을 따라가지 못함. 노이즈 8피처 중 하나 (feature_values JSONB).
 
     Returns:
         {
