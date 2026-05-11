@@ -730,13 +730,15 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px; height: 22px;
+  width: 24px; height: 24px;
   border-radius: 7px;
-  font-size: 11px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
   vertical-align: middle;
-  margin-right: 8px;
+  margin-right: 10px;
   flex-shrink: 0;
+  font-family: 'SF Mono', 'Cascadia Code', 'Consolas', Menlo, monospace;
 }
 .ai-line {
   display: flex;
@@ -3221,21 +3223,63 @@ html.splash-skip .splash { display: none !important; }
   font-feature-settings: 'tnum' 1;
 }
 
-/* 5. 통합 카드: Noise vs Signal + 3개월 차트 (chart-combined 패턴 재사용) */
-#tab-fundamental .fundamental-combined {
-  padding: 16px 16px 14px;
-}
-#tab-fundamental .fc-regime {
+/* 5. 헤로 — Noise vs Signal 스코어 (chromeless, 큰 위계) */
+#tab-fundamental .fundamental-hero {
   position: relative;
-  /* card-tappable 으로 JS 가 동적 부착 — padding-bottom 은 .card-tappable 룰이 처리 */
+  padding: 18px 4px 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--sep);
 }
-#tab-fundamental .fc-divider {
-  height: 1px;
-  background: var(--sep);
-  margin: 14px -16px;     /* 카드 좌우 padding 을 가로지르는 풀폭 hairline */
+#tab-fundamental .fundamental-hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
 }
-#tab-fundamental .fc-chart {
-  padding-top: 2px;
+#tab-fundamental .fundamental-hero-overline {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--sub);
+}
+/* 헤로 안의 regime-card 내용 — nr-name 더 크게, gap-track 좀 더 굵게 */
+#tab-fundamental .fundamental-hero #regime-card .nr-status {
+  gap: 12px;
+}
+#tab-fundamental .fundamental-hero #regime-card .nr-icon-box {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+}
+#tab-fundamental .fundamental-hero #regime-card .nr-name {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+#tab-fundamental .fundamental-hero #regime-card .nr-sub {
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+#tab-fundamental .fundamental-hero #regime-card .nr-gap-track {
+  height: 6px;
+}
+/* card-tappable::after "클릭하여 자세히 보기" 힌트 위치 — chromeless 헤로에 맞춰 살짝 안쪽 */
+#tab-fundamental .fundamental-hero.card-tappable {
+  padding-bottom: 36px;
+}
+#tab-fundamental .fundamental-hero.card-tappable::after {
+  bottom: 12px;
+  right: 4px;
+}
+
+/* 차트 카드 — 펀더멘털·주가 3개월 추이 (chrome 1개) */
+#tab-fundamental .fundamental-chart-card {
+  padding: 16px 16px 14px;
+  margin-bottom: 16px;
+}
+#tab-fundamental .fundamental-chart-head {
+  margin-bottom: 10px;
 }
 #tab-fundamental .fc-section-label {
   font-size: 11px;
@@ -3243,7 +3287,6 @@ html.splash-skip .splash { display: none !important; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--sub);
-  margin-bottom: 10px;
 }
 
 /* 6. 분석 노트 — 카드 chrome 완전 제거 + 좌측 quote line 풀폭 텍스트 */
