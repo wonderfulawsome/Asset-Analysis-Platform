@@ -1749,6 +1749,118 @@ function renderDualLineChart(containerId, labels, crashVals, surgeVals) {
   svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });
 }
 
+// ── 펀더멘털 반영도 (fundamental_gap) — 펀더멘털 탭 hero + 10년 차트 ──
+// noise_score (이성/감정 종합점수) 대신 fundamental_gap 1개 피처 raw + 분포 위치 표시.
+async function loadFundamentalGap() {
+  let data;
+  try {
+    const res = await fetch('/api/regime/fundamental-gap?days=2520');
+    data = await res.json();
+  } catch (e) { console.error('loadFundamentalGap error:', e); return; }
+  if (!data || !data.current) return;
+
+  const cur = data.current;
+  const series = data.series || [];
+  const stats = data.stats || {};
+
+  // 카드 제목 업데이트
+  const titleEl = document.getElementById('nr-card-title');
+  if (titleEl) titleEl.textContent = '펀더멘털 반영도';
+
+  // top_pct 가 작을수록 양수 거품 anomaly, 클수록 음수 압축 anomaly.
+  // "상위 N% 거품" / "하위 N% 압축" / "평소" 분기.
+  const topPct = cur.top_pct;     // 위에 있는 비율 (0=가장 위, 100=가장 아래)
+  const topAbsPct = cur.top_abs_pct;  // |값| 기준 상위
+  const value = cur.value;
+  const sign = cur.sign;          // 'bubble' | 'compress' | 'neutral'
+  const pricePct = (Math.exp(value) - 1) * 100;   // log diff → 백분율 환산 (참고용)
+
+  let phaseLabel, phaseColor, phaseDesc;
+  if (sign === 'bubble') {
+    phaseLabel = '가격이 이익을 추월';
+    phaseColor = '#FF8C00';
+    phaseDesc = `과거 10년 분포에서 상위 ${Math.max(0.1, topPct).toFixed(1)}% 거품 영역`;
+  } else if (sign === 'compress') {
+    phaseLabel = '가격이 이익을 따라가지 못함';
+    phaseColor = '#3B82F6';
+    phaseDesc = `과거 10년 분포에서 하위 ${Math.max(0.1, 100 - topPct).toFixed(1)}% 압축 영역`;
+  } else {
+    phaseLabel = '균형 (펀더멘털 반영 중)';
+    phaseColor = '#10B981';
+    phaseDesc = '가격이 이익을 충실히 반영';
+  }
+
+  // 게이지 위치 (0=좌측 압축, 50=균형, 100=우측 거품)
+  // value 범위 [stats.min, stats.max] 를 [0, 100] 으로 매핑, 0 위치 50 에 정렬.
+  const vMin = Math.min(stats.min || -1, 0);
+  const vMax = Math.max(stats.max || 1, 0);
+  let pos;
+  if (value <= 0) {
+    pos = (1 - Math.abs(value / Math.max(0.01, Math.abs(vMin)))) * 50;
+  } else {
+    pos = 50 + Math.min(1, value / Math.max(0.01, vMax)) * 50;
+  }
+  pos = Math.max(2, Math.min(98, pos));
+
+  const container = document.getElementById('regime-card');
+  if (container) {
+    container.innerHTML = `
+      <div class="nr-status">
+        <div class="nr-icon-box" style="background:${phaseColor}18;color:${phaseColor}">
+          ${lucideIcon(sign === 'bubble' ? 'cloudLightning' : sign === 'compress' ? 'cloudDrizzle' : 'sun', 30, 1.8)}
+        </div>
+        <div style="display:flex;flex-direction:column;gap:2px;">
+          <span class="nr-name" style="color:${phaseColor}">${sign === 'bubble' ? '상위' : sign === 'compress' ? '하위' : '중간'} ${(sign === 'compress' ? 100 - topPct : topPct).toFixed(1)}%</span>
+          <span style="font-size:12px;color:var(--sub);">${phaseLabel}</span>
+        </div>
+      </div>
+      <div class="nr-sub">${phaseDesc} · 가격이 이익 대비 ${pricePct >= 0 ? '+' : ''}${pricePct.toFixed(0)}% 추월 (1년 누적)</div>
+      <div class="nr-gap">
+        <div class="nr-gap-labels">
+          <span>압축 (가격&lt;이익)</span>
+          <span>거품 (가격&gt;이익)</span>
+        </div>
+        <div class="nr-gap-track">
+          <div class="nr-gap-fill" style="width:${pos}%;background:linear-gradient(to right,#3B82F6,#10B981,#FF8C00)"></div>
+          <div class="nr-gap-dot" style="left:${pos}%;border-color:${phaseColor}"></div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:${phaseColor}08;border-left:3px solid ${phaseColor}">
+        <div style="font-size:11px;color:var(--sub);line-height:1.5">
+          현재값 ${value >= 0 ? '+' : ''}${value.toFixed(3)} (log 차이) · 10년 분포 평균 ${(stats.mean ?? 0).toFixed(3)}<br>
+          ${value >= 0 ? '가격이 이익 대비 빠르게 상승' : '가격이 이익 대비 후행'} — 0 에 가까울수록 펀더멘털 반영
+        </div>
+      </div>`;
+  }
+
+  // 10년 차트 — monthly downsample (각 월 마지막 값)
+  const byMonth = {};
+  series.forEach(s => {
+    const ym = s.date.slice(0, 7);
+    byMonth[ym] = s;
+  });
+  const monthly = Object.values(byMonth).sort((a, b) => a.date.localeCompare(b.date));
+  const points = monthly.map(r => ({
+    label: r.date.slice(2, 7),     // YY-MM
+    fullLabel: r.date,
+    value: r.value,
+  }));
+  const vals = points.map(p => p.value);
+  const dMin = Math.min(...vals), dMax = Math.max(...vals);
+  const pad = Math.max(0.1, (dMax - dMin) * 0.08);
+  const yMin = Math.min(dMin - pad, -0.05);   // 0 항상 포함
+  const yMax = Math.max(dMax + pad, 0.05);
+  renderLineChart('nr-chart', points, {
+    color: '#FF8C00',
+    zeroLine: true,
+    dotColor: v => v > 0 ? '#FF8C00' : v < 0 ? '#3B82F6' : '#10B981',
+    yFixedMin: yMin,
+    yFixedMax: yMax,
+    yTopLabel: '거품 (가격>이익)',
+    yBottomLabel: '압축 (가격<이익)',
+  });
+}
+
 // ── Noise Score 90일(3개월) 그래프 ──
 async function loadNoiseChart() {
   try {
@@ -2127,9 +2239,10 @@ async function refreshCurrentTab() {
       loadMarketOverview(), loadHoldingsSummary()
     ]);
   } else if (idx === 2) {
-    // 펀더멘털 탭
+    // 펀더멘털 탭 — 이성/감정 점수 대신 fundamental_gap 단일 피처 + 10년 추이.
+    // loadRegime() 도 호출 (시황 탭 인사이트용 _nrData 캐시 필요).
     await Promise.allSettled([
-      loadRegime(), loadNoiseChart(), loadAiExplain('fundamental')
+      loadRegime(), loadFundamentalGap(), loadAiExplain('fundamental')
     ]);
   } else if (idx === 3) {
     // 이상 탐지 탭

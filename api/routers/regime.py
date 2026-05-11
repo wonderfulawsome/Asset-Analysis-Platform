@@ -1,3 +1,4 @@
+import json as _json
 from fastapi import APIRouter, Query
 from database.repositories import fetch_noise_regime_current, fetch_noise_regime_history
 
@@ -19,6 +20,77 @@ def get_current(region: str = Query('us')):
 def get_history(days: int = 30, region: str = Query('us')):
     """최근 N일 국면 히스토리."""
     return fetch_noise_regime_history(days, region=_norm_region(region))
+
+
+@router.get('/fundamental-gap')
+def get_fundamental_gap(region: str = Query('us'), days: int = Query(2520, ge=30, le=4000)):
+    """fundamental_gap 시계열 + 오늘의 10년 분포 내 상위 N%.
+
+    펀더멘털 갭 = log(P_t/P_{t-12}) - log(E_t/E_{t-12}). 양수=가격이 이익 추월(거품),
+    0 근처=반영, 음수=가격이 이익 압축. 노이즈 8피처 중 하나 (feature_values JSONB).
+
+    Returns:
+        {
+          'region': 'us'|'kr',
+          'current': {'date', 'value', 'top_pct', 'top_abs_pct', 'sign'},
+          'series': [{'date', 'value'}, ...]   # 일별 (forward-filled monthly value)
+          'stats': {'min','max','mean','median'}
+        }
+    """
+    import numpy as np
+    region = _norm_region(region)
+    rows = fetch_noise_regime_history(days=days, region=region)
+    series = []
+    for r in rows:
+        fv = r.get('feature_values')
+        if isinstance(fv, str):
+            try:
+                fv = _json.loads(fv)
+            except Exception:
+                continue
+        if not isinstance(fv, dict):
+            continue
+        v = fv.get('fundamental_gap')
+        if v is None:
+            continue
+        try:
+            series.append({'date': r['date'], 'value': float(v)})
+        except (TypeError, ValueError):
+            continue
+
+    if not series:
+        return {'region': region, 'current': None, 'series': [], 'stats': None}
+
+    # rows 는 DB 에서 DESC 로 받음 → 차트용 ASC 정렬, current = 가장 최근.
+    series.sort(key=lambda s: s['date'])
+    values = np.array([s['value'] for s in series])
+    cur = series[-1]
+    cv = cur['value']
+    # top_pct (signed): 양수면 위 → 위에 N% 있음. 음수 큰값도 anomaly.
+    top_pct = float((values > cv).mean() * 100)
+    # top_abs_pct: |value| 분포에서 오늘의 |value| 가 차지하는 상위. (양수/음수 anomaly 종합)
+    abs_values = np.abs(values)
+    top_abs_pct = float((abs_values > abs(cv)).mean() * 100)
+    sign = 'bubble' if cv > 0 else ('compress' if cv < 0 else 'neutral')
+
+    return {
+        'region': region,
+        'current': {
+            'date': cur['date'],
+            'value': round(cv, 4),
+            'top_pct': round(top_pct, 1),
+            'top_abs_pct': round(top_abs_pct, 1),
+            'sign': sign,
+        },
+        'series': series,
+        'stats': {
+            'min': round(float(values.min()), 4),
+            'max': round(float(values.max()), 4),
+            'mean': round(float(values.mean()), 4),
+            'median': round(float(np.median(values)), 4),
+            'count': int(len(values)),
+        },
+    }
 
 
 @router.get('/score-distribution')
