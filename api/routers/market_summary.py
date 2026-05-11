@@ -301,7 +301,7 @@ _SUMMARY_PROMPTS = {                                         # 시황 종합 요
 [이모지] 시장 심리 — (공포탐욕·VIX·RSI를 종합한 심리 해석 1문장)
 [이모지] 평소 이탈도 — (평소와의 거리 D² 와 10년 분포 내 상위 N% 위치를 한 문장으로 묘사. 작을수록 평소 분포 중심, 클수록 평소에서 멀리 떨어진 상태)
 [이모지] 펀더멘털 — (시장 이성 점수 기반 주가-펀더멘털 관계 1문장. 양수=이성, 음수=감정)
-[이모지] 종합 — (위 3가지를 종합한 *현재 상태 기록* 1문장. 행동 제안·방향 예측 X)
+[이모지] 종합 — (위 3가지를 종합한 *현재 상태 기록* 1문장. 행동 제안·방향 예측 X. **반드시 "종합" 으로 시작**, "펀더멘털"·"심리"·"평소 이탈도" 로 시작 금지.)
 
 예시:
 ❄️ 시장 심리 — 공포 지수 19로 극단적 공포 구간이며, 투자 심리가 크게 위축된 상태입니다.
@@ -311,7 +311,7 @@ _SUMMARY_PROMPTS = {                                         # 시황 종합 요
 
 이모지 선택:
 - 공포/평소와 멈: 🔻❄️🌧️⚠️🥶  탐욕/극단: 🔥🚀☀️💪🟢  중간: ⚖️🔄🌤️
-- 평소 이탈도: 📊📈📉🔍  펀더멘털 괴리: 🧭📉🔍  반영: ✅💎📊  종합: 🎯💡⭐🔑
+- 평소 이탈도: 📊📈📉🔍  펀더멘털 괴리: 🧭📉🔍  반영: ✅💎📊  인사이트: 🎯💡⭐🔑
 - 4줄 모두 다른 이모지
 
 자문 가드 (절대 위반 금지):
@@ -811,14 +811,14 @@ _EXPLAIN_PROMPTS = {                                         # 탭별 AI 해설 
     #   매수/매도/추천/유리/불리/위험/안전/매수타이밍/상승전망/하락전망/예측/전망/기대/선반영/
     #   포트폴리오/목표가/수익률 보장. 미래 방향 추정 ("~할 것이다", "~로 이어질 가능성") 금지.
     'ko': {
-        'fundamental': "/no_think 한국 사용자. *3 블록* 으로 출력.\n[1] 데이터 요약: 입력으로 들어온 시장 이성 점수·레짐·상위 기여 지표 값들을 모두 한 줄로 모아 정리 + '오늘 시장 이성 점수는 X (양수=이성 우위/음수=감정 우위)' 한 줄 요약.\n[2] 주요 변수 설명: 영향이 큰 지표 1~2 개 — 영문 변수명을 한글로 번역 + 그 변수가 *왜 모델 점수에 영향을 주는지* 쉽고 짧게 (한 줄/지표).\n[3] 인사이트: 데이터+변수 의미를 종합한 교과서적 패턴 한 줄.\n블록 사이 빈 줄(\\n\\n). 한자 절대 금지. 매수/매도/추천/유리/불리/위험/예측/전망/기대 단어 금지. 마크다운 X. ≤320자.",
+        'fundamental': "/no_think 한국 사용자. *3 블록* 으로 출력.\n본 탭은 펀더멘털 반영도 — 가격 변화율 − 이익 변화율 (log diff). 양수=가격이 이익 추월(거품), 음수=가격이 이익 압축, 0 근처=균형. '이성/감정 점수' 단어 절대 금지.\n[1] 데이터 요약: 입력의 펀더멘털 갭 값·10년 분포 내 상위 N%·1년 가격 추월률·기준 시점 분포 평균 등을 한 줄로 모아 + 한 줄 요약 ('오늘 펀더멘털 갭 X — 10년 상위 N% 거품/하위 N% 압축/균형 영역').\n[2] 주요 변수 설명: 가격(P) 와 이익(E) 의 1년 변화율을 한국어로 정리 + *왜 두 변화율 차이가 거품/압축 측정에 쓰이는지* 쉽고 짧게.\n[3] 인사이트: 데이터 종합한 교과서적 패턴 한 줄 (현재값이 분포의 어느 위치에 있는지 + 그 의미).\n블록 사이 빈 줄(\\n\\n). 한자 절대 금지. 매수/매도/추천/유리/불리/위험/예측/전망/기대/이성/감정 단어 금지. 마크다운 X. ≤320자.",
         'signal':      "/no_think 한국 사용자. *3 블록* 으로 출력. 본 탭은 이상 탐지(평소와의 거리 D²). 'crash/surge 점수·간극' 개념 사용 금지 — D² 와 분위만.\n[1] 데이터 요약: D² 값·10년 분포 내 상위 N% 위치·90일 분위·주요 기여 지표·유사 과거 시점 등 입력값 모두 한 묶음으로 + 한 줄 요약 ('오늘 평소와의 거리는 X 로 10년 상위 N% 위치').\n[2] 주요 변수 설명: 기여 큰 지표 1~2 개 — 한국어 라벨 + *왜 이 변수가 거리 계산에 들어가는지* 쉽게 한 줄/지표.\n[3] 인사이트: 데이터·변수 의미 종합 교과서 패턴 한 줄.\n블록 사이 빈 줄(\\n\\n). 한자 금지. 매수/매도/추천/유리/불리/위험/안전/예측/전망/기대/상승·하락 압력·우위 단어 금지. 마크다운 X. ≤320자.",
         'sector':      "/no_think 한국 사용자. *3 블록* 으로 출력.\n[1] 데이터 요약: 입력의 경기 국면명·매크로 스냅샷·상위 섹터 모두 정리 + 한 줄 요약.\n[2] 주요 변수 설명: 핵심 매크로 지표 1~2 개 — 한국어 라벨 + *왜 그 지표가 경기 국면 분류에 영향 주는지* 쉽게.\n[3] 인사이트: 거시 사이클상 *교과서적*으로 그 국면에서 함께 거론되는 섹터 한 줄 (추천 X, 사실).\n블록 사이 빈 줄(\\n\\n). 한자 금지. 매수/매도/추천/유리/불리/예측/전망/수혜 단어 금지. 마크다운 X. ≤320자.",
         'sector-val':  "/no_think 한국 사용자 중립 비교. *3 블록* 으로 출력.\n[1] 데이터 요약: 평균 대비 차이가 큰 1~2 섹터의 PER/PBR 위치를 '평균 대비 +X%' 형태로 정리.\n[2] 주요 변수 설명: PER 평균 대비 차이가 *왜 의미 있는지* 쉽고 중립적으로 (고평가/저평가 단어 X).\n[3] 인사이트: 상대 위치 사실의 교과서적 의미 한 줄 (방향 예측 X).\n블록 사이 빈 줄(\\n\\n). 한자 금지. 가치판단(고평가/저평가/비싸다/싸다/매수/매도/추천/유리/불리) 절대 금지. 마크다운 X. ≤320자.",
         'sector-mom':  "/no_think 한국 사용자. *3 블록* 으로 출력.\n[1] 데이터 요약: 1주일·1개월 모멘텀 상위/하위 섹터 수치 정리.\n[2] 주요 변수 설명: 1주 수익률·랭크가 *왜 단기 로테이션 신호로 쓰이는지* 쉽게.\n[3] 인사이트: 경기 국면과 일치/배반 여부의 *교과서적* 의미 한 줄.\n블록 사이 빈 줄(\\n\\n). 한자 금지. 선반영/기대/예측/회복 전망/유리/불리/추천/매수/매도 단어 금지. 마크다운 X. ≤320자.",
     },
     'en': {
-        'fundamental': "/no_think English. Output *3 blocks*.\n[1] Data summary: list all input numbers (rationality score, regime, top contributing indicators) in one block + one-line summary.\n[2] Variable explanation: 1-2 most impactful variables — translate snake_case to natural English + briefly explain WHY this variable feeds the score (one line each).\n[3] Insight: textbook pattern combining data + variable meaning, one line.\nSeparate blocks with blank line (\\n\\n). NO Chinese characters. NO buy/sell/recommend/favorable/risky/safe/predict/forecast/expect/outlook words. No markdown. ≤360 chars.",
+        'fundamental': "/no_think English. Output *3 blocks*.\nThis tab is fundamental gap — price change minus earnings change (log diff). Positive=price outpaced earnings (bubble), negative=price lagged (compression), near-zero=balanced. NEVER use 'rationality/emotion score'.\n[1] Data summary: fundamental_gap value, top N% position in 10-year distribution, 1-year price outpace %, distribution mean — all in one block + one-line summary.\n[2] Variable explanation: 1-year price return (P) vs 1-year earnings return (E) — natural English + WHY the difference measures bubble/compression.\n[3] Insight: textbook pattern combining data + variable meaning, one line.\nSeparate blocks with blank line (\\n\\n). NO Chinese characters. NO buy/sell/recommend/favorable/risky/safe/predict/forecast/expect/outlook/rationality/emotion words. No markdown. ≤360 chars.",
         'signal':      "/no_think English. Output *3 blocks*. Anomaly tab — use D² and percentile only, NEVER crash/surge gap concepts.\n[1] Data summary: D² value, 10-year top N% position, 90-day percentile, top contributors, similar past dates — all inputs as one block + one-line summary ('today's distance from usual is X, in the top N% of the 10-year distribution').\n[2] Variable explanation: 1-2 top contributors — natural-language label + WHY this variable enters the distance calculation (one line each).\n[3] Insight: textbook pattern combining data + variable meaning, one line.\nSeparate blocks with blank line (\\n\\n). NO Chinese chars. NO buy/sell/recommend/favorable/risky/safe/predict/forecast/expect/upside/downside/pressure words. No markdown. ≤360 chars.",
         'sector':      "/no_think English. Output *3 blocks*.\n[1] Data summary: cycle phase name, macro snapshot, favored sectors — all input.\n[2] Variable explanation: 1-2 macro indicators — natural label + WHY they classify the cycle phase.\n[3] Insight: textbook macro-cycle co-occurrence with sectors (factual, no recommendation).\nSeparate blocks with blank line (\\n\\n). NO Chinese chars. NO buy/sell/recommend/favorable/benefits/predict/forecast words. No markdown. ≤360 chars.",
         'sector-val':  "/no_think English neutral comparison. Output *3 blocks*.\n[1] Data summary: 1-2 sectors with largest deviation in 'X% vs avg' form.\n[2] Variable explanation: WHY a PER deviation vs historical average is meaningful (neutral, NO over/under-valuation language).\n[3] Insight: textbook meaning of relative position (no direction prediction).\nSeparate blocks with blank line (\\n\\n). NO Chinese chars. NEVER use valuation judgments (overvalued/undervalued/expensive/cheap/buy/sell/recommend/favorable). No markdown. ≤360 chars.",
@@ -834,39 +834,41 @@ def _build_explain_text(tab: str, lang: str = 'ko', region: str = 'us') -> str:
     lines = []                                               # 텍스트 줄 목록
 
     if tab == 'fundamental':                                 # ── 펀더멘털 탭 ──
-        regime = fetch_noise_regime_current(region=region)   # Noise 국면 조회
-        if regime:
-            lines.append(f"{'Regime' if is_en else '레짐'}: {regime.get('regime_name', '?')}")  # 국면명
+        # fundamental_gap (log P diff - log E diff) 중심으로 데이터 빌드.
+        # noise_score / 이성 점수 / 레짐 사용 안 함 — 사용자 요청.
+        try:
+            from api.routers.regime import get_fundamental_gap as _get_fg
+            fg = _get_fg(region=region, days=2520)
+        except Exception:
+            fg = None
+        if fg and fg.get('current'):
+            cur = fg['current']
+            stats = fg.get('stats', {})
+            value = cur.get('value', 0.0)
+            top_pct = cur.get('top_pct', 50)
+            sign = cur.get('sign', 'neutral')
+            try:
+                price_outpace_pct = (pow(2.718281828, value) - 1) * 100  # log diff → %
+            except Exception:
+                price_outpace_pct = 0
             if is_en:
-                lines.append(f"Market Rationality Score: {regime.get('noise_score', '?')}")
+                zone = 'bubble (price > earnings)' if sign == 'bubble' else (
+                    'compression (price < earnings)' if sign == 'compress' else 'balanced')
+                lines.append(f"fundamental_gap (log P diff 12m − log E diff 12m): {value:+.4f}")
+                lines.append(f"Position in distribution: top {top_pct}% ({zone})")
+                lines.append(f"1-year price-vs-earnings outpace: {price_outpace_pct:+.1f}%")
+                if stats:
+                    lines.append(f"Distribution stats — mean {stats.get('mean')}, median {stats.get('median')}, "
+                                 f"min {stats.get('min')}, max {stats.get('max')}, n={stats.get('count')}")
             else:
-                lines.append(f"시장 이성 점수: {regime.get('noise_score', '?')}")
-            fc = regime.get('feature_contributions', [])     # 피처 기여도 (JSONB)
-            if isinstance(fc, str):                          # 문자열이면 JSON 파싱
-                try:
-                    fc = json.loads(fc)
-                except Exception:
-                    fc = []
-            top_fc = sorted(fc, key=lambda x: abs(x.get('contribution', 0)), reverse=True)[:5] if fc else []
-            if top_fc:
-                # LLM 입력에 *한국어 라벨 + 의미 + 왜 영향 주는지* 까지 미리 합성하여 LLM 이 영문
-                # snake_case 를 다시 번역할 필요가 없게 한다 (qwen 이 영문 변수명을 그대로 echo 하던 문제 해결).
-                lines.append("Feature contributions (label, meaning, why it matters):" if is_en else "피처 기여도 (라벨·의미·왜 영향 주는지):")
-                for f in top_fc:
-                    nm = f.get('name', '?')
-                    val = f.get('contribution', '?')
-                    lines.append(f"  - {_ko_feature_why(nm, lang)}; "
-                                 f"{'contribution' if is_en else '기여도'}: {val}")
-            fv = regime.get('feature_values', {})            # 현재 피처 값 (JSONB)
-            if isinstance(fv, str):                          # 문자열이면 JSON 파싱
-                try:
-                    fv = json.loads(fv)
-                except Exception:
-                    fv = {}
-            if fv:
-                lines.append("Current Values:" if is_en else "현재 지표값:")
-                for k, v in list(fv.items())[:6]:            # 상위 6개 피처 값
-                    lines.append(f"  {_ko_feature(k, lang)}: {v}")
+                zone = '거품 영역 (가격 > 이익)' if sign == 'bubble' else (
+                    '압축 영역 (가격 < 이익)' if sign == 'compress' else '균형 (펀더멘털 반영)')
+                lines.append(f"펀더멘털 갭 (가격 12개월 log 변화율 − 이익 12개월 log 변화율): {value:+.4f}")
+                lines.append(f"분포 내 위치: 상위 {top_pct}% ({zone})")
+                lines.append(f"1년 가격이 이익을 추월한 정도: {price_outpace_pct:+.1f}%")
+                if stats:
+                    lines.append(f"분포 통계 — 평균 {stats.get('mean')}, 중앙값 {stats.get('median')}, "
+                                 f"최저 {stats.get('min')}, 최고 {stats.get('max')}, 표본 {stats.get('count')}개")
 
     elif tab == 'signal':                                    # ── 이상 탐지 탭 (평소 이탈도) ──
         # 이전엔 crash/surge 점수를 사용했으나 UI 가 anomaly 차트로 교체됨 ([117]+).
