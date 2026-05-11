@@ -1141,9 +1141,9 @@ function switchTab(idx, addHistory) {
   if (idx === 1) {
     if (typeof loadAiSummary === 'function') loadAiSummary();
   }
-  // 펀더멘털 탭 진입 시 noise 차트 재렌더 + AI 해설
+  // 펀더멘털 탭 진입 시 fundamental_gap 차트 재렌더 + AI 해설
   if (idx === 2) {
-    setTimeout(() => { if (typeof loadNoiseChart === 'function') loadNoiseChart(); }, 100);
+    setTimeout(() => { if (typeof loadFundamentalGap === 'function') loadFundamentalGap(); }, 100);
     loadAiExplain('fundamental');
   }
   // 이상 탐지 탭 진입 시 anomaly 데이터 로드 + AI 해설
@@ -2240,9 +2240,11 @@ async function refreshCurrentTab() {
     ]);
   } else if (idx === 2) {
     // 펀더멘털 탭 — 이성/감정 점수 대신 fundamental_gap 단일 피처 + 10년 추이.
-    // loadRegime() 도 호출 (시황 탭 인사이트용 _nrData 캐시 필요).
+    // loadRegime() 먼저 (시황 탭 인사이트용 _nrData 캐시) → loadFundamentalGap() 가
+    // #regime-card 를 덮어쓰며 펀더멘털 반영도 화면으로 교체. 순서 보장 필수.
+    await loadRegime();
     await Promise.allSettled([
-      loadRegime(), loadFundamentalGap(), loadAiExplain('fundamental')
+      loadFundamentalGap(), loadAiExplain('fundamental')
     ]);
   } else if (idx === 3) {
     // 이상 탐지 탭
