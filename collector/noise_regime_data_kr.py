@@ -159,10 +159,11 @@ def fetch_kospi_shiller_like(years: int = 7) -> pd.DataFrame:
             return pd.DataFrame()
         df['E'] = df['P'] / df['PER']
 
-    # CAPE 등가 — 최근 N년 E 평균
-    df['E_smooth'] = df['E'].rolling(min(60, len(df)), min_periods=12).mean()
+    # CAPE 등가 — 최근 N년 E 평균 (warmup 짧게: min_periods=6 로 완화)
+    df['E_smooth'] = df['E'].rolling(min(60, len(df)), min_periods=6).mean()
     df['CAPE'] = df['P'] / df['E_smooth']
-    return df[['P', 'E', 'CAPE']].dropna()
+    # P / E 는 보존 (CAPE 만 warmup 후 valid). 다운스트림 erp_zscore 가 CAPE 만 dropna.
+    return df[['P', 'E', 'CAPE']]
 
 
 def fetch_kr_10y_monthly(years: int = 7) -> pd.Series:
