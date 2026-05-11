@@ -1833,13 +1833,21 @@ async function loadFundamentalGap() {
       </div>`;
   }
 
-  // 10년 차트 — monthly downsample (각 월 마지막 값)
+  // 차트 — monthly downsample (각 월 마지막 값). 데이터 가용 기간만 표시.
   const byMonth = {};
   series.forEach(s => {
     const ym = s.date.slice(0, 7);
     byMonth[ym] = s;
   });
   const monthly = Object.values(byMonth).sort((a, b) => a.date.localeCompare(b.date));
+  // 차트 제목 동적 갱신 — 실제 기간 표시
+  const titleEl2 = document.getElementById('fc-chart-title');
+  if (titleEl2 && monthly.length) {
+    const startY = monthly[0].date.slice(0, 4);
+    const endY = monthly[monthly.length - 1].date.slice(0, 4);
+    const years = (new Date(monthly[monthly.length - 1].date) - new Date(monthly[0].date)) / (365.25 * 86400 * 1000);
+    titleEl2.textContent = `펀더멘털 반영도 추이 (${startY}~${endY} · 약 ${years.toFixed(1)}년)`;
+  }
   const points = monthly.map(r => ({
     label: r.date.slice(2, 7),     // YY-MM
     fullLabel: r.date,

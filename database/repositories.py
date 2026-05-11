@@ -367,17 +367,29 @@ def fetch_noise_regime_current(region: str = 'us') -> Optional[dict]:
 
 
 def fetch_noise_regime_history(days: int = 30, region: str = 'us') -> list[dict]:
-    """최근 N건의 noise regime 히스토리를 날짜 내림차순으로 조회합니다."""
+    """최근 N건의 noise regime 히스토리를 날짜 내림차순으로 조회합니다.
+    days > 1000 일 때 Supabase REST 페이지 한도(1000) 회피 — range() 로 페이지네이션."""
     client = get_client()
-    response = (
-        client.table("noise_regime")
-        .select("*")
-        .eq("region", region)
-        .order("date", desc=True)
-        .limit(days)
-        .execute()
-    )
-    return [_flip_noise_record(_parse_json_fields(r, _NR_JSON_FIELDS)) for r in response.data]
+    rows = []
+    page_size = 1000
+    offset = 0
+    target = max(1, int(days))
+    while offset < target:
+        end = min(offset + page_size, target) - 1
+        r = (
+            client.table("noise_regime")
+            .select("*")
+            .eq("region", region)
+            .order("date", desc=True)
+            .range(offset, end)
+            .execute()
+        )
+        batch = r.data or []
+        rows.extend(batch)
+        if len(batch) < (end - offset + 1):
+            break
+        offset += page_size
+    return [_flip_noise_record(_parse_json_fields(r, _NR_JSON_FIELDS)) for r in rows]
 
 
 def fetch_noise_regime_all(region: str = 'us') -> list[dict]:
