@@ -7,16 +7,8 @@
   const STORAGE_KEY = 'region';
   const VALID = new Set(['us', 'kr']);
 
-  // ⚠️ production 은 US-only, 로컬 개발 환경 (localhost / 사설 IP) 에선 KR 토글 허용.
-  // hostname 으로 자동 감지 — production (dinsightlab.com 등) 은 _FORCE_US_ONLY=true.
-  const _IS_LOCAL_DEV = (() => {
-    const h = location.hostname;
-    return h === 'localhost' || h === '127.0.0.1'
-        || /^192\.168\./.test(h)
-        || /^10\./.test(h)
-        || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h);
-  })();
-  const _FORCE_US_ONLY = !_IS_LOCAL_DEV;
+  // KR 데이터 준비 완료 — production 도 토글 노출. (이전엔 _IS_LOCAL_DEV 만 허용)
+  const _FORCE_US_ONLY = false;
 
   function getRegion() {
     if (_FORCE_US_ONLY) return 'us';
