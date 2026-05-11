@@ -1553,6 +1553,21 @@ function renderLineChart(containerId, points, options = {}) {
     zeroLineStr = `<line class="chart-zero-line" x1="${pad.left}" y1="${y(0).toFixed(1)}" x2="${W - pad.right}" y2="${y(0).toFixed(1)}"/>`;
   }
 
+  // 임계선 (옵션) — [{ value, color, label, dash }] 배열로 여러 줄 가능
+  let thresholdLinesStr = '';
+  const thresholds = Array.isArray(options.thresholdLines) ? options.thresholdLines : [];
+  thresholds.forEach(th => {
+    if (th == null || typeof th.value !== 'number' || !isFinite(th.value)) return;
+    if (th.value < yMin || th.value > yMax) return;     // chart 범위 밖이면 skip
+    const yp = y(th.value).toFixed(1);
+    const color = th.color || '#FF8C00';
+    const dash = th.dash || '3 3';
+    thresholdLinesStr += `<line x1="${pad.left}" y1="${yp}" x2="${W - pad.right}" y2="${yp}" stroke="${color}" stroke-width="1" stroke-dasharray="${dash}" opacity="0.85"/>`;
+    if (th.label) {
+      thresholdLinesStr += `<text x="${(W - pad.right - 4).toFixed(1)}" y="${(parseFloat(yp) - 3).toFixed(1)}" text-anchor="end" style="font-size:10px;font-weight:600;fill:${color};paint-order:stroke;stroke:${getComputedStyle(document.documentElement).getPropertyValue('--bg').trim() || '#000'};stroke-width:3px;stroke-linejoin:round">${th.label}</text>`;
+    }
+  });
+
   // Y축 상단/하단 라벨 — Y축 숫자 자리에 표시 (옵션)
   let yAxisSideLabels = '';                                        // Y축 라벨 SVG
   if (options.yTopLabel) {                                         // 상단 라벨: Y축 최상단 위치
@@ -1571,6 +1586,7 @@ function renderLineChart(containerId, points, options = {}) {
       </linearGradient></defs>
       ${gridLines}
       ${zeroLineStr}
+      ${thresholdLinesStr}
       <path class="chart-area" d="${areaPath}" fill="url(#${gradId})"/>
       <path class="chart-line" d="${linePath}" stroke="${lineColor}"/>
       ${xLabels}
@@ -1858,6 +1874,9 @@ async function loadFundamentalGap() {
   const pad = Math.max(0.1, (dMax - dMin) * 0.08);
   const yMin = Math.min(dMin - pad, -0.05);   // 0 항상 포함
   const yMax = Math.max(dMax + pad, 0.05);
+  // 상위 10% 임계선 (90th percentile) — 양수 끝쪽
+  const sortedVals = [...vals].sort((a, b) => a - b);
+  const p90 = sortedVals[Math.min(sortedVals.length - 1, Math.floor(sortedVals.length * 0.9))];
   renderLineChart('nr-chart', points, {
     color: '#FF8C00',
     zeroLine: true,
@@ -1866,6 +1885,9 @@ async function loadFundamentalGap() {
     yFixedMax: yMax,
     yTopLabel: '추월 (가격>이익)',
     yBottomLabel: '압축 (가격<이익)',
+    thresholdLines: [
+      { value: p90, color: '#FF8C00', label: '상위 10%', dash: '3 3' },
+    ],
   });
 }
 
