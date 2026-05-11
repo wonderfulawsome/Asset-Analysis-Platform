@@ -375,15 +375,18 @@ document.getElementById('btn-edit-holdings').addEventListener('click', showHoldi
 // ── AI 시장 요약 + 탭 해설 ──
 let _aiSummaryLoaded = false;
 
-// 시황 AI 해설 라인 아이콘 — 블랙·오렌지 미니멀 톤
-// 순서: '종합' 키워드를 최상단에 두어 "종합 ... 방향 추정" 같은 문장에서
-// '방향' 보다 먼저 매칭되도록 함 (옛 버전은 '방향' 이 먼저라 종합 라인이 ▲ 로 잘못 매칭됐음)
+// 시황 AI 해설 — 4줄 고정 순서: idx 0=심리, 1=평소 이탈도, 2=펀더멘털, 3=종합
+// LLM 이 종합 라인을 "펀더멘털..." 로 잘못 시작하는 경우가 있어 idx 기반 매핑이 키워드 매칭보다 안정적.
+// 키워드 매칭은 줄 수가 4 가 아닐 때 폴백으로만 사용.
 const _aiIconSet = [
-  { keys: ['종합','판단','결론','핵심','overall'],                       icon: '■', bg: '#FF8C00',               color: '#000' },
   { keys: ['심리','공포','탐욕','sentiment','fear','greed'],            icon: '◇', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
-  { keys: ['평소 이탈도','이탈도','이상도','방향','direction','deviation'], icon: '↗', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
+  { keys: ['평소 이탈도','이탈도','이상도','direction','deviation'],     icon: '↗', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
   { keys: ['펀더멘털','noise','괴리','반영','이성','signal','rationality'], icon: '◉', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
+  { keys: ['종합','판단','결론','핵심','overall','insight','인사이트'],    icon: '■', bg: '#FF8C00',               color: '#000' },
 ];
+// 4줄 고정 순서에 강제 매핑할 한국어 타이틀 (LLM 이 4번째를 "펀더멘털 — " 로 잘못 시작해도
+// 프론트는 idx 3 에 "종합" 라벨을 부여하여 표시 일관성 유지)
+const _aiTitlesByIdx = ['시장 심리', '평소 이탈도', '펀더멘털', '종합'];
 
 function _cleanEmoji(str) {
   let s = str
@@ -406,22 +409,28 @@ function _cleanEmoji(str) {
   return s;
 }
 
-function _matchIcon(text, idx) {
-  const lower = text.toLowerCase();
+function _matchIcon(text, idx, totalLines) {
+  // 시황 AI 해설은 항상 4줄 고정 구조이므로 idx 기반 매핑 우선
+  // (LLM 이 종합 라인을 "펀더멘털..." 로 시작해도 idx 3 에는 ■ 종합 아이콘이 부여됨)
+  if (totalLines === 4 && typeof idx === 'number' && idx >= 0 && idx < _aiIconSet.length) {
+    return _aiIconSet[idx];
+  }
+  // 폴백: 키워드 매칭 (4줄 구조가 아닌 다른 컨텍스트 호환용)
+  const lower = (text || '').toLowerCase();
   for (const item of _aiIconSet) {
     if (item.keys.some(k => lower.includes(k))) return item;
   }
   return _aiIconSet[Math.min(idx, _aiIconSet.length - 1)];
 }
 
-function _buildLineHtml(clean, icon, textContent) {
+function _buildLineHtml(clean, icon, textContent, idx, totalLines) {
   const content = textContent || clean;
   const badge = `<span class="ai-badge" style="background:${icon.bg};color:${icon.color};">${icon.icon}</span>`;
   // 1차: "제목 — 내용" 분리
   let sep = content.match(/^(.+?)\s*[—]\s*(.+)$/);
   // 2차: 키워드 기반 강제 분리 (LLM이 구분자를 안 넣었을 때)
   if (!sep) {
-    const titleKeys = ['시장 심리','방향성','펀더멘털','종합판단','종합 판단'];
+    const titleKeys = ['시장 심리','평소 이탈도','펀더멘털','종합','종합판단','종합 판단','방향성'];
     for (const tk of titleKeys) {
       const idx = content.indexOf(tk);
       if (idx !== -1) {
@@ -431,18 +440,35 @@ function _buildLineHtml(clean, icon, textContent) {
       }
     }
   }
+  // 4줄 고정 구조면 idx 기반으로 타이틀 강제 (LLM 이 종합 라인을 "펀더멘털" 로 시작해도 표시는 "종합")
+  let forcedTitle = null;
+  if (totalLines === 4 && typeof idx === 'number' && _aiTitlesByIdx[idx]) {
+    forcedTitle = _aiTitlesByIdx[idx];
+  }
   if (sep) {
-    return `<div class="ai-line">${badge}<div class="ai-line-content"><strong style="color:var(--text-hi);">${sep[1].trim()}</strong> ${sep[2].trim()}</div></div>`;
+    const title = forcedTitle || sep[1].trim();
+    let body = sep[2].trim();
+    // 본문 시작이 잘못된 타이틀(예: 펀더멘털 — )이면 그 prefix 도 한 번 제거 (드물지만 LLM 이
+    // "펀더멘털 — 펀더멘털: 종합 ..." 식으로 prefix 를 두번 박는 경우 대비)
+    if (forcedTitle && forcedTitle !== sep[1].trim()) {
+      const stripPrefix = new RegExp('^(?:' + _aiTitlesByIdx.join('|') + ')\\s*[—:\\-]?\\s*');
+      body = body.replace(stripPrefix, '');
+    }
+    return `<div class="ai-line">${badge}<div class="ai-line-content"><strong style="color:var(--text-hi);">${title}</strong> ${body}</div></div>`;
+  }
+  if (forcedTitle) {
+    return `<div class="ai-line">${badge}<div class="ai-line-content"><strong style="color:var(--text-hi);">${forcedTitle}</strong> ${content}</div></div>`;
   }
   return `<div class="ai-line">${badge}<div class="ai-line-content">${content}</div></div>`;
 }
 
 function _formatAiText(raw) {
   const lines = raw.split('\n').filter(l => l.trim());
+  const total = lines.length;
   return lines.map((line, i) => {
     const clean = _cleanEmoji(line);
     if (!clean) return '';
-    return _buildLineHtml(clean, _matchIcon(clean, i));
+    return _buildLineHtml(clean, _matchIcon(clean, i, total), null, i, total);
   }).join('');
 }
 
@@ -466,12 +492,13 @@ async function loadAiSummary() {
       _aiSummaryLoaded = true;
       el.innerHTML = '';
 
-      // 줄별 데이터 준비
+      // 줄별 데이터 준비 — 총 줄 수가 4 면 idx 기반으로 아이콘/타이틀 매핑
       const lines = raw.split('\n').filter(l => l.trim());
+      const totalLines = lines.length;
       const lineData = lines.map((line, i) => {
         const clean = _cleanEmoji(line);
-        const icon = _matchIcon(clean, i);
-        return { clean, icon };
+        const icon = _matchIcon(clean, i, totalLines);
+        return { clean, icon, idx: i };
       }).filter(d => d.clean);
 
       let lineIdx = 0;
@@ -480,11 +507,11 @@ async function loadAiSummary() {
           el.insertAdjacentHTML('beforeend', timestamp);
           return;
         }
-        const { clean, icon } = lineData[lineIdx];
+        const { clean, icon, idx: realIdx } = lineData[lineIdx];
         // 제목/내용 분리 (1차: — 구분자, 2차: 키워드 fallback)
         let sep = clean.match(/^(.+?)\s*[—]\s*(.+)$/);
         if (!sep) {
-          const titleKeys = ['시장 심리','방향성','펀더멘털','종합판단','종합 판단'];
+          const titleKeys = ['시장 심리','평소 이탈도','펀더멘털','종합','종합판단','종합 판단','방향성'];
           for (const tk of titleKeys) {
             const idx = clean.indexOf(tk);
             if (idx !== -1 && clean.slice(idx + tk.length).trim()) {
@@ -493,8 +520,19 @@ async function loadAiSummary() {
             }
           }
         }
-        const title = sep ? sep[1].trim() : '';
-        const body = sep ? sep[2].trim() : clean;
+        // 4줄 고정 구조면 idx 기반 타이틀 강제 (LLM 이 종합 라인을 "펀더멘털 — " 로 잘못 시작해도
+        // 표시는 "종합" 으로 일관화 → 펀더멘털 2개로 보이던 문제 해결)
+        let forcedTitle = null;
+        if (totalLines === 4 && typeof realIdx === 'number' && _aiTitlesByIdx[realIdx]) {
+          forcedTitle = _aiTitlesByIdx[realIdx];
+        }
+        const title = forcedTitle || (sep ? sep[1].trim() : '');
+        let body = sep ? sep[2].trim() : clean;
+        // 본문 시작이 잘못된 타이틀 prefix 면 한 번 제거
+        if (forcedTitle && sep && forcedTitle !== sep[1].trim()) {
+          const stripPrefix = new RegExp('^(?:' + _aiTitlesByIdx.join('|') + ')\\s*[—:\\-]?\\s*');
+          body = body.replace(stripPrefix, '');
+        }
         const badge = `<span class="ai-badge" style="background:${icon.bg};color:${icon.color};">${icon.icon}</span>`;
 
         // 줄 컨테이너 생성
