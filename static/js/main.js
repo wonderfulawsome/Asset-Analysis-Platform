@@ -2604,3 +2604,55 @@ window.recordTabSwitch = function(tabIdxOrName) {
 
   setTimeout(safeDismiss, remaining);
 })();
+
+// ═══════════════════════════════════════════════════════════════
+// 탭 헤드라인 — 룰베이스 한 줄 해설 (각 탭 최상단 박스)
+// ═══════════════════════════════════════════════════════════════
+// 페이지 진입 시 1회 bulk fetch → 8개 #headline-{key} 채움.
+// region toggle 은 location.reload() 트리거 → 자동 재실행.
+(function initTabHeadlines() {
+  // 탭 키 목록 (백엔드 TAB_KEYS 와 1:1 매핑, 순서 무관)
+  const TAB_KEYS = ['chart', 'market', 'fundamental', 'signal', 'sector',
+                    'sector-val', 'sector-mom', 'market-valuation'];
+
+  // 한 탭 div 에 텍스트 채움 + loading 클래스 제거
+  function renderText(key, text) {
+    const el = document.getElementById('headline-' + key);
+    if (!el) return;
+    const span = el.querySelector('.tab-headline-text');
+    if (span) span.textContent = text;
+    el.classList.remove('loading');
+  }
+
+  // 전체 실패 시 placeholder 메시지
+  function renderFail(msg) {
+    TAB_KEYS.forEach(k => renderText(k, msg || '데이터 준비 중.'));
+  }
+
+  // /api/market-summary/tab-headline?region=... bulk 호출 → div 채움
+  async function loadAll() {
+    try {
+      const url = (typeof window.withRegion === 'function')
+        ? window.withRegion('/api/market-summary/tab-headline')
+        : '/api/market-summary/tab-headline';
+      const res = await fetch(url);
+      if (!res.ok) { renderFail(); return; }
+      const data = await res.json();
+      if (!data || typeof data !== 'object') { renderFail(); return; }
+      TAB_KEYS.forEach(k => {
+        if (typeof data[k] === 'string') renderText(k, data[k]);
+        else renderText(k, '데이터 준비 중.');
+      });
+    } catch (e) {
+      console.error('[tab-headline] load 실패:', e);
+      renderFail();
+    }
+  }
+
+  // 초기 실행 (DOM 준비 후)
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadAll);
+  } else {
+    loadAll();
+  }
+})();

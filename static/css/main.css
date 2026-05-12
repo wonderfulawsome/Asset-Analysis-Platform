@@ -411,6 +411,38 @@ body {
   text-align: center;
 }
 
+/* ── 탭 헤드라인 박스 (각 탭 최상단 한 줄 해설) ─────────── */
+/* 룰베이스 한 줄 요약 — 초보자가 오늘 탭 상태를 한 문장으로 파악 */
+/* 브랜드 오렌지(#FF8C00) 톤 — Passive 포인트 컬러와 일관 */
+.tab-headline-box {
+  margin: 12px 0 16px 0;                            /* 위아래 여백 */
+  padding: 12px 14px;                               /* 내부 여백 */
+  border-radius: 10px;                              /* 둥근 모서리 */
+  background: rgba(255, 140, 0, 0.08);              /* 연한 오렌지 배경 */
+  border-left: 3px solid #FF8C00;                   /* 좌측 오렌지 강조선 */
+  font-size: 13px;                                  /* 본문보다 약간 작게 */
+  line-height: 1.55;                                /* 가독성 */
+  color: var(--fg);                                 /* 기본 텍스트 색 */
+  font-weight: 500;                                 /* 가벼운 강조 */
+}
+.tab-headline-box .tab-headline-label {
+  display: inline-block;                            /* 라벨 인라인 */
+  margin-right: 8px;                                /* 텍스트와 간격 */
+  padding: 2px 7px;                                 /* 작은 칩 형태 */
+  border-radius: 6px;                               /* 모서리 */
+  background: rgba(255, 140, 0, 0.18);              /* 더 진한 오렌지 */
+  color: #FF8C00;                                   /* 오렌지 텍스트 */
+  font-size: 10.5px;                                /* 칩 글씨 */
+  font-weight: 700;                                 /* 굵게 */
+  vertical-align: middle;                           /* 텍스트 정렬 */
+}
+.tab-headline-box .tab-headline-text {
+  vertical-align: middle;                           /* 칩과 정렬 맞춤 */
+}
+.tab-headline-box.loading {
+  opacity: 0.5;                                     /* 로딩 시 흐림 */
+}
+
 /* ── 면책 문구 ─────────────────────────────────── */
 .disclaimer {
   margin-top: 32px;                                /* 콘텐츠와 간격 */

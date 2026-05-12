@@ -114,6 +114,17 @@ def get_market_summary_today(region: str = Query('us')):
     return _compute_market_summary_today_payload(region)
 
 
+@router.get('/tab-headline')                                  # GET /api/market-summary/tab-headline
+def get_tab_headlines(region: str = Query('us')):
+    """8개 탭 한 줄 해설 일괄 조회. app_cache 우선, miss 시 live compute 폴백.
+    룰베이스 (LLM 미사용). 초보자가 각 탭의 오늘 상태를 한 문장으로 파악.
+    """
+    from processor.tab_headline import fetch_tab_headlines     # 지연 임포트 (순환 방지)
+    region = _norm_region(region)
+    payload = fetch_tab_headlines(region)
+    return payload or {'region': region, 'cached': False}
+
+
 # ═══════════════════════════════════════════════════════════════
 # Groq LLM 공통
 # ═══════════════════════════════════════════════════════════════

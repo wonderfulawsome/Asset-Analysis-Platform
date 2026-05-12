@@ -929,6 +929,17 @@ def run_pipeline(light: bool = False) -> None:
         print(f'[Step 17] crash_surge direction precompute 실패: {e}')
         traceback.print_exc()
 
+    # Step 18: 탭별 한 줄 해설 (룰베이스) 적재.
+    # 8개 탭(차트/시황/펀더/이탈도/사이클/밸류/모멘텀/시장밸류) × region 단일 app_cache 1행.
+    # endpoint 호출 시 8 RTT (rule 마다 DB select) → 1 RTT (cache select) 로 단축.
+    try:
+        from processor.tab_headline import precompute_tab_headlines
+        ok = precompute_tab_headlines('us')
+        print(f"[Step 18] tab_headlines us {'OK' if ok else 'FAIL/EMPTY'}")
+    except Exception as e:
+        print(f'[Step 18] tab_headlines precompute 실패: {e}')
+        traceback.print_exc()
+
     elapsed = (datetime.datetime.now() - start).seconds  # 소요 시간 계산
     print(f'\n{"="*50}')
     print(f'[Pipeline-{mode}] 완료 (소요: {elapsed}초)')

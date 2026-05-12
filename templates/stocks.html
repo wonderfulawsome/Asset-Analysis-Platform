@@ -29,7 +29,7 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=136">
+  <link rel="stylesheet" href="/static/css/main.css?v=137">
   <!-- Tailwind CDN 제거: preflight 가 body 의 margin:0 auto 를 덮어써 홈 뷰가 좌측 정렬됨.
        홈 뷰는 home.css 자체 grid 로 처리하므로 Tailwind 없이도 동작 -->
   <link rel="stylesheet" href="/static/css/home.css?v=18">
@@ -300,6 +300,9 @@
     <!-- ═══ 시장 탭 ═══ -->
     <main class="content" id="tab-market" style="display:none;">
 
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-market"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
+
       <!-- AI 오늘의 시장 한줄요약 -->
       <div id="ai-summary-card" class="card fade-target">
         <div class="card-head">
@@ -347,6 +350,9 @@
     <!-- ═══ 펀더멘털 탭 ═══ -->
     <main class="content" id="tab-fundamental" style="display:none;">
 
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-fundamental"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
+
       <!-- ① 헤로 — Noise vs Signal 스코어 (chromeless, 큰 위계) -->
       <section class="fc-regime fade-target fundamental-hero">
         <div class="fundamental-hero-head">
@@ -380,6 +386,9 @@
 
     <!-- ═══ 섹터 탭 ═══ -->
     <main class="content" id="tab-sector" style="display:none;">
+
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-sector"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
 
       <!-- Economic Phase -->
       <div id="sc-phase-card" class="phase-card fade-target"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
@@ -430,6 +439,9 @@
     <!-- ═══ 평소 이탈도 탭 (구 신호 탭) ═══ -->
     <main class="content" id="tab-signal" style="display:none;">
 
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-signal"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
+
       <!-- 1. 10년 평소 이탈도 시계열 차트 (맨 위) -->
       <div class="fade-target">
         <div class="section-label" data-i18n="an.chartLabel">10년 평소 이탈도 추이</div>
@@ -470,6 +482,9 @@
 
     <!-- ═══ 차트 탭 ═══ -->
     <main class="content" id="tab-chart">
+
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-chart"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
 
       <!-- 티커 선택 -->
       <div class="chart-ticker-bar fade-target">
@@ -530,6 +545,8 @@
     <!-- ═══ 섹터 밸류에이션 탭 ═══ -->
     <main class="content" id="tab-sector-val" style="display:none;">
       <h2 class="page-title">섹터 밸류에이션</h2>
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-sector-val"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
       <div id="sector-val-content"></div>
 
       <!-- AI 해설 -->
@@ -549,6 +566,8 @@
     <!-- ═══ 섹터 모멘텀 랭킹 탭 ═══ -->
     <main class="content" id="tab-sector-mom" style="display:none;">
       <h2 class="page-title">섹터 모멘텀 랭킹</h2>
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-sector-mom"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
       <div id="sector-mom-content"></div>
 
       <!-- AI 해설 -->
@@ -568,6 +587,8 @@
     <!-- ═══ 시장 밸류 (ERP / Fed Model) 탭 ═══ -->
     <main class="content" id="tab-market-valuation" style="display:none;">
       <h2 class="page-title">시장 밸류</h2>
+      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
+      <div class="tab-headline-box loading" id="headline-market-valuation"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
       <div id="market-valuation-formula" class="mv-formula"></div>
       <div id="market-valuation-gauge" class="mv-gauge"></div>
       <div class="mv-section-label">분해</div>
@@ -638,7 +659,7 @@
     try { if (localStorage.getItem('lang') !== 'ko') localStorage.setItem('lang', 'ko'); } catch (e) {}
   </script>
   <script src="/static/js/chart.js?v=35"></script>
-  <script src="/static/js/main.js?v=150"></script>
+  <script src="/static/js/main.js?v=151"></script>
   <script src="/static/js/sector.js?v=9"></script>
   <script src="/static/js/home.js?v=49"></script>
   <script src="/static/js/anomaly.js?v=21"></script>

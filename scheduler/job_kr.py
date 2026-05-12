@@ -335,6 +335,17 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] crash_surge direction precompute 실패: {e}')
             traceback.print_exc()
 
+        # 17) 탭별 한 줄 해설 (룰베이스) 적재.
+        # 8개 탭(차트/시황/펀더/이탈도/사이클/밸류/모멘텀/시장밸류) × region 단일 app_cache 1행.
+        # endpoint 호출 시 8 RTT (rule 마다 DB select) → 1 RTT (cache select) 로 단축.
+        try:
+            from processor.tab_headline import precompute_tab_headlines
+            ok = precompute_tab_headlines('kr')
+            print(f"[KR-Pipeline] tab_headlines kr {'OK' if ok else 'FAIL/EMPTY'}")
+        except Exception as e:
+            print(f'[KR-Pipeline] tab_headlines precompute 실패: {e}')
+            traceback.print_exc()
+
     except Exception as e:
         print(f'[KR-Pipeline] 전체 실패: {e}')
         traceback.print_exc()
