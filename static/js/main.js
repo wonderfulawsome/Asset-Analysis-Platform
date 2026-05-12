@@ -1892,14 +1892,16 @@ async function loadFundamentalGap() {
   const pad = Math.max(0.1, (dMax - dMin) * 0.08);
   const yMin = Math.min(dMin - pad, -0.05);   // 0 항상 포함
   const yMax = Math.max(dMax + pad, 0.05);
-  // 상위 10% 임계선 — hero percentile 과 동일 baseline (거품 시기 제외 ~2년).
-  // backend 가 baseline_window='pre-2y' 사용하므로 frontend 도 동일하게 최근 2년 제외.
+  // 상위 10% 임계선 — hero percentile (pre-2y baseline) 과 동일 기준.
+  // monthly downsampled points 가 아닌 원본 daily series 사용 (~1000 row 충분).
   const lastDate = points[points.length - 1].fullLabel;
   const cutoffMs = new Date(lastDate).getTime() - 730 * 86400 * 1000;
-  const baselineVals = points.filter(p => new Date(p.fullLabel).getTime() < cutoffMs).map(p => p.value);
+  const dailyBaselineVals = series
+    .filter(s => new Date(s.date).getTime() < cutoffMs)
+    .map(s => s.value);
   let p90;
-  if (baselineVals.length >= 60) {
-    const sorted = [...baselineVals].sort((a, b) => a - b);
+  if (dailyBaselineVals.length >= 60) {
+    const sorted = [...dailyBaselineVals].sort((a, b) => a - b);
     p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
   } else {
     const sortedAll = [...vals].sort((a, b) => a - b);

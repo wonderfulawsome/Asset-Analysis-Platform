@@ -203,22 +203,24 @@
     const yMax = yTransform(yMaxRaw);
     const yRange = yMax - yMin || 1;
 
-    // 상위 10% 경계값 — 평소 분포 기준 (최근 2년 = 거품 시기 제외).
-    // hero percentile (per-day rolling 10y) 과 시각 정합 유지: 차트 threshold 가
-    // 너무 높으면 (peaks 포함) 오늘 d2 가 dot 아래로 보여 hero "상위 N%" 와 불일치.
-    const lastSeriesDate = series.length ? series[series.length - 1].date : null;
-    let baselineVals = vals;
-    if (lastSeriesDate) {
-      const cutoffMs = new Date(lastSeriesDate).getTime() - 730 * 86400 * 1000;
-      const pre = series
-        .filter(s => new Date(s.date).getTime() < cutoffMs && (s.d2 || 0) < 1000 && (s.d2 || 0) >= 0)
-        .map(s => s.d2);
-      if (pre.length >= 60) baselineVals = pre;
+    // 상위 10% 경계값 — backend 의 per-day percentile_10y >= 90 인 시점들의 D² 중앙값.
+    // 이렇게 해야 hero (current.percentile_10y) 와 시각 정합 유지: hero 가 "상위 7%"
+    // 라면 오늘 d2 가 threshold 위에 위치해야 함.
+    const top10Pts = series
+      .filter(s => (s.percentile_10y || 0) >= 90 && (s.d2 || 0) >= 0 && (s.d2 || 0) < 1000)
+      .map(s => s.d2)
+      .sort((a, b) => a - b);
+    let p90 = null;
+    if (top10Pts.length >= 5) {
+      // top 10% 영역의 하단 경계 = 가장 작은 d2 (이 값 이상이면 percentile_10y >= 90)
+      p90 = top10Pts[0];
+    } else {
+      // fallback: visible vals 90th percentile
+      const sortedVals = [...vals].sort((a, b) => a - b);
+      p90 = sortedVals.length
+        ? sortedVals[Math.min(sortedVals.length - 1, Math.floor(sortedVals.length * 0.9))]
+        : null;
     }
-    const sortedVals = [...baselineVals].sort((a, b) => a - b);
-    const p90 = sortedVals.length
-      ? sortedVals[Math.min(sortedVals.length - 1, Math.floor(sortedVals.length * 0.9))]
-      : null;
 
     // 강세장(1) / 하락장(0) 배경 음영 색
     const REGIME_BULL_FILL = '#22c55e';   // green
