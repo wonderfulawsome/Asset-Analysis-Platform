@@ -1874,9 +1874,19 @@ async function loadFundamentalGap() {
   const pad = Math.max(0.1, (dMax - dMin) * 0.08);
   const yMin = Math.min(dMin - pad, -0.05);   // 0 항상 포함
   const yMax = Math.max(dMax + pad, 0.05);
-  // 상위 10% 임계선 (90th percentile) — 양수 끝쪽
-  const sortedVals = [...vals].sort((a, b) => a - b);
-  const p90 = sortedVals[Math.min(sortedVals.length - 1, Math.floor(sortedVals.length * 0.9))];
+  // 상위 10% 임계선 — hero percentile 과 동일 baseline (거품 시기 제외 ~2년).
+  // backend 가 baseline_window='pre-2y' 사용하므로 frontend 도 동일하게 최근 2년 제외.
+  const lastDate = points[points.length - 1].fullLabel;
+  const cutoffMs = new Date(lastDate).getTime() - 730 * 86400 * 1000;
+  const baselineVals = points.filter(p => new Date(p.fullLabel).getTime() < cutoffMs).map(p => p.value);
+  let p90;
+  if (baselineVals.length >= 60) {
+    const sorted = [...baselineVals].sort((a, b) => a - b);
+    p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
+  } else {
+    const sortedAll = [...vals].sort((a, b) => a - b);
+    p90 = sortedAll[Math.min(sortedAll.length - 1, Math.floor(sortedAll.length * 0.9))];
+  }
   renderLineChart('nr-chart', points, {
     color: '#FF8C00',
     zeroLine: true,
@@ -1886,7 +1896,7 @@ async function loadFundamentalGap() {
     yTopLabel: '추월 (가격>이익)',
     yBottomLabel: '압축 (가격<이익)',
     thresholdLines: [
-      { value: p90, color: '#FF8C00', label: '상위 10%', dash: '3 3' },
+      { value: p90, color: '#FF8C00', label: '상위 10% (거품 이전 기준)', dash: '3 3' },
     ],
   });
 }

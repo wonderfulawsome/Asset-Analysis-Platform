@@ -190,16 +190,20 @@
     const cW = W - pad.left - pad.right;
     const cH = H - pad.top - pad.bottom;
 
-    const vals = series.map(s => s.d2 || 0).filter(v => v >= 0);
+    const rawVals = series.map(s => s.d2 || 0).filter(v => v >= 0);
+    // 알고리즘 초기 panel start 의 covariance matrix 불안정으로 산출된 비현실값
+    // (D² > 1000) 을 차트/threshold 계산에서 제외 — 평시 D² 변동 가시화.
+    // 백엔드 DB 에는 raw 보존 (percentile 계산은 그대로 사용).
+    const vals = rawVals.filter(v => v < 1000);
     // y 스케일 — D² 가 long-tail (대부분 < 30, 코로나 등 극단치 100+)
     // log1p (= log(1+x)) 압축: 0 입력 안전, 극단치 강하게 눌러 평시 변동 가시화
     const yTransform = v => Math.log1p(Math.max(v, 0));
     const yMin = 0;
-    const yMaxRaw = Math.max(...vals);
+    const yMaxRaw = vals.length ? Math.max(...vals) : 100;
     const yMax = yTransform(yMaxRaw);
     const yRange = yMax - yMin || 1;
 
-    // 상위 10% 경계값 — 시계열 분포 기준 (p90)
+    // 상위 10% 경계값 — 시계열 분포 기준 (p90, outlier 제거 후)
     const sortedVals = [...vals].sort((a, b) => a - b);
     const p90 = sortedVals.length
       ? sortedVals[Math.min(sortedVals.length - 1, Math.floor(sortedVals.length * 0.9))]
@@ -230,7 +234,9 @@
       }
     }
 
-    const path = series.map((s, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(s.d2 || 0).toFixed(1)}`).join(' ');
+    // outlier (D² > 1000) 는 yMax 로 clip (라인이 화면 밖으로 튀어나가는 것 방지)
+    const clip = v => Math.min(Math.max(v || 0, 0), yMaxRaw);
+    const path = series.map((s, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(clip(s.d2)).toFixed(1)}`).join(' ');
     const baseY = y(0).toFixed(1);
     const area = path + ` L${x(series.length - 1).toFixed(1)},${baseY} L${x(0).toFixed(1)},${baseY} Z`;
 
