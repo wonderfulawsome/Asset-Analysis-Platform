@@ -71,11 +71,24 @@ def get_fundamental_gap(region: str = Query('us'), days: int = Query(2520, ge=30
     values = np.array([s['value'] for s in series])
     cur = series[-1]
     cv = cur['value']
-    # top_pct (signed): 양수면 위 → 위에 N% 있음. 음수 큰값도 anomaly.
-    top_pct = float((values > cv).mean() * 100)
-    # top_abs_pct: |value| 분포에서 오늘의 |value| 가 차지하는 상위. (양수/음수 anomaly 종합)
-    abs_values = np.abs(values)
-    top_abs_pct = float((abs_values > abs(cv)).mean() * 100)
+    # percentile 계산: 최근 2년 (거품 시기) 제외한 baseline 기준.
+    # 이유: KR KOSPI 가 2024 중반부터 급등 — panel 후반 2년이 거의 모두 거품 영역.
+    # 그 2년을 baseline 에 포함시키면 평균이 위로 끌어올려져 "오늘 +0.82" 가
+    # 상위 41% 같은 둔감한 값으로 보이게 됨. 24개월 제외 시 상위 4% (직관 일치).
+    import datetime as _dt
+    try:
+        last_date = _dt.date.fromisoformat(cur['date'])
+        cutoff = (last_date - _dt.timedelta(days=730)).isoformat()
+        baseline_vals = np.array([s['value'] for s in series if s['date'] < cutoff])
+    except Exception:
+        baseline_vals = values
+    if len(baseline_vals) < 60:                     # 너무 짧으면 전체 사용
+        baseline_vals = values
+        baseline_window = 'all'
+    else:
+        baseline_window = 'pre-2y'
+    top_pct = float((baseline_vals > cv).mean() * 100)
+    top_abs_pct = float((np.abs(baseline_vals) > abs(cv)).mean() * 100)
     sign = 'bubble' if cv > 0 else ('compress' if cv < 0 else 'neutral')
 
     return {
@@ -86,6 +99,8 @@ def get_fundamental_gap(region: str = Query('us'), days: int = Query(2520, ge=30
             'top_pct': round(top_pct, 1),
             'top_abs_pct': round(top_abs_pct, 1),
             'sign': sign,
+            'baseline_window': baseline_window,         # 'pre-1y' (최근 1년 제외) | 'all'
+            'baseline_n': int(len(baseline_vals)),
         },
         'series': series,
         'stats': {
@@ -94,6 +109,9 @@ def get_fundamental_gap(region: str = Query('us'), days: int = Query(2520, ge=30
             'mean': round(float(values.mean()), 4),
             'median': round(float(np.median(values)), 4),
             'count': int(len(values)),
+            # baseline (percentile 기준) 통계
+            'baseline_mean': round(float(baseline_vals.mean()), 4),
+            'baseline_median': round(float(np.median(baseline_vals)), 4),
         },
     }
 
