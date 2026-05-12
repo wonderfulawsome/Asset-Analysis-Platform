@@ -304,7 +304,7 @@
     if (p90 !== null) {
       const yp90 = y(p90).toFixed(1);
       thresholdLines += `<line x1="${pad.left}" y1="${yp90}" x2="${W - pad.right}" y2="${yp90}" stroke="${ORANGE_TOP10}" stroke-width="1" opacity="0.85"/>`;
-      thresholdLines += `<text x="${(W - pad.right - 4).toFixed(1)}" y="${(parseFloat(yp90) - 3).toFixed(1)}" text-anchor="end" style="font-size:10px;font-weight:600;fill:${ORANGE_TOP10};paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round">상위 10% (평소 기준)</text>`;
+      thresholdLines += `<text x="${(W - pad.right - 4).toFixed(1)}" y="${(parseFloat(yp90) - 3).toFixed(1)}" text-anchor="end" style="font-size:10px;font-weight:600;fill:${ORANGE_TOP10};paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round">상위 10%</text>`;
     }
 
     el.innerHTML = `

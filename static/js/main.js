@@ -1924,7 +1924,7 @@ async function loadFundamentalGap() {
     yTopLabel: '추월 (가격>이익)',
     yBottomLabel: '압축 (가격<이익)',
     thresholdLines: [
-      { value: p90, color: '#FF8C00', label: '상위 10% (거품 이전 기준)', dash: '3 3' },
+      { value: p90, color: '#FF8C00', label: '상위 10%', dash: '3 3' },
     ],
     excludeBands: excludeBands,
   });
