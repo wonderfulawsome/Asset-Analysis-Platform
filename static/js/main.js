@@ -1568,6 +1568,23 @@ function renderLineChart(containerId, points, options = {}) {
     }
   });
 
+  // baseline 제외 음영 (옵션) — [{ fromIdx, toIdx, color, label }] 차트 일부 구간 fade
+  let excludeBandStr = '';
+  const bands = Array.isArray(options.excludeBands) ? options.excludeBands : [];
+  bands.forEach(b => {
+    if (b == null) return;
+    const i0 = Math.max(0, Math.min(points.length - 1, b.fromIdx || 0));
+    const i1 = Math.max(0, Math.min(points.length - 1, b.toIdx ?? points.length - 1));
+    if (i1 <= i0) return;
+    const x0 = x(i0), x1 = x(i1);
+    const fillColor = b.color || 'rgba(255,255,255,0.04)';
+    excludeBandStr += `<rect x="${x0.toFixed(1)}" y="${pad.top}" width="${(x1 - x0).toFixed(1)}" height="${cH.toFixed(1)}" fill="${fillColor}"/>`;
+    if (b.label) {
+      const labelX = (x0 + x1) / 2;
+      excludeBandStr += `<text x="${labelX.toFixed(1)}" y="${(pad.top + 10).toFixed(1)}" text-anchor="middle" style="font-size:9px;font-weight:600;fill:var(--sub2,#888);opacity:0.85">${b.label}</text>`;
+    }
+  });
+
   // Y축 상단/하단 라벨 — Y축 숫자 자리에 표시 (옵션)
   let yAxisSideLabels = '';                                        // Y축 라벨 SVG
   if (options.yTopLabel) {                                         // 상단 라벨: Y축 최상단 위치
@@ -1585,6 +1602,7 @@ function renderLineChart(containerId, points, options = {}) {
         <stop offset="100%" stop-color="${lineColor}" stop-opacity="0"/>
       </linearGradient></defs>
       ${gridLines}
+      ${excludeBandStr}
       ${zeroLineStr}
       ${thresholdLinesStr}
       <path class="chart-area" d="${areaPath}" fill="url(#${gradId})"/>
@@ -1887,6 +1905,14 @@ async function loadFundamentalGap() {
     const sortedAll = [...vals].sort((a, b) => a - b);
     p90 = sortedAll[Math.min(sortedAll.length - 1, Math.floor(sortedAll.length * 0.9))];
   }
+  // 거품 시기 (최근 2년) 음영 — baseline 계산 제외 구간임을 시각화
+  const cutoffIdx = points.findIndex(p => new Date(p.fullLabel).getTime() >= cutoffMs);
+  const excludeBands = cutoffIdx > 0 ? [{
+    fromIdx: cutoffIdx,
+    toIdx: points.length - 1,
+    color: 'rgba(255,140,0,0.05)',
+    label: '평균 계산 제외 (거품 시기)',
+  }] : [];
   renderLineChart('nr-chart', points, {
     color: '#FF8C00',
     zeroLine: true,
@@ -1898,6 +1924,7 @@ async function loadFundamentalGap() {
     thresholdLines: [
       { value: p90, color: '#FF8C00', label: '상위 10% (거품 이전 기준)', dash: '3 3' },
     ],
+    excludeBands: excludeBands,
   });
 }
 

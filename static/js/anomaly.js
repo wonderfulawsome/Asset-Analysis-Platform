@@ -203,8 +203,19 @@
     const yMax = yTransform(yMaxRaw);
     const yRange = yMax - yMin || 1;
 
-    // 상위 10% 경계값 — 시계열 분포 기준 (p90, outlier 제거 후)
-    const sortedVals = [...vals].sort((a, b) => a - b);
+    // 상위 10% 경계값 — 평소 분포 기준 (최근 2년 = 거품 시기 제외).
+    // hero percentile (per-day rolling 10y) 과 시각 정합 유지: 차트 threshold 가
+    // 너무 높으면 (peaks 포함) 오늘 d2 가 dot 아래로 보여 hero "상위 N%" 와 불일치.
+    const lastSeriesDate = series.length ? series[series.length - 1].date : null;
+    let baselineVals = vals;
+    if (lastSeriesDate) {
+      const cutoffMs = new Date(lastSeriesDate).getTime() - 730 * 86400 * 1000;
+      const pre = series
+        .filter(s => new Date(s.date).getTime() < cutoffMs && (s.d2 || 0) < 1000 && (s.d2 || 0) >= 0)
+        .map(s => s.d2);
+      if (pre.length >= 60) baselineVals = pre;
+    }
+    const sortedVals = [...baselineVals].sort((a, b) => a - b);
     const p90 = sortedVals.length
       ? sortedVals[Math.min(sortedVals.length - 1, Math.floor(sortedVals.length * 0.9))]
       : null;
@@ -291,7 +302,7 @@
     if (p90 !== null) {
       const yp90 = y(p90).toFixed(1);
       thresholdLines += `<line x1="${pad.left}" y1="${yp90}" x2="${W - pad.right}" y2="${yp90}" stroke="${ORANGE_TOP10}" stroke-width="1" opacity="0.85"/>`;
-      thresholdLines += `<text x="${(W - pad.right - 4).toFixed(1)}" y="${(parseFloat(yp90) - 3).toFixed(1)}" text-anchor="end" style="font-size:10px;font-weight:600;fill:${ORANGE_TOP10};paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round">상위 10%</text>`;
+      thresholdLines += `<text x="${(W - pad.right - 4).toFixed(1)}" y="${(parseFloat(yp90) - 3).toFixed(1)}" text-anchor="end" style="font-size:10px;font-weight:600;fill:${ORANGE_TOP10};paint-order:stroke;stroke:#fff;stroke-width:3px;stroke-linejoin:round">상위 10% (평소 기준)</text>`;
     }
 
     el.innerHTML = `
