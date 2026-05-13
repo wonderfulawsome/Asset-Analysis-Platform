@@ -1209,83 +1209,121 @@ def _fallback_ai_summary(lang: str, region: str) -> str:
             phase_tag = f" / cycle {phase}" if phase else ""
             line4 = f"🎯 Overall — {summary}{phase_tag}."
         else:
-            # ── 간결 1~2문장 — 3 지표만 사용 (사용자 결정 2026-05-13) ──
-            # 1) 일일 수익률 (KOSPI/S&P500), 2) RSI 과매수/과매도,
-            # 3) 펀더멘털 (실적-주가 갭 percentile + 방향). 심리·이탈도·국면 등 노출 X.
-            macro = fetch_macro_latest(region=region) or {}
+            # ── 시황탭 AI 카드 — 3줄 (데이터 2 + 인사이트 1) 형식 (사용자 요청 2026-05-13) ──
+            macro_rows = fetch_macro_latest2(region=region) or []
+            def _pick(field):
+                for row in macro_rows:
+                    v = row.get(field)
+                    if v is not None:
+                        return v
+                return None
+            ret_v = _pick('sp500_return')
+            rsi_v = _pick('sp500_rsi')
             idx_name = 'KOSPI' if region == 'kr' else 'S&P500'
 
-            # 일일 수익률 + RSI 한 문장
-            ret_v = macro.get('sp500_return')
-            rsi_v = macro.get('sp500_rsi')
-            ret_phrase = ""
+            # 펀더멘털-주가 갭 (펀더멘털 탭과 동일 source)
+            gap_top_pct = None
+            gap_sign = 'neutral'
+            try:
+                from api.routers.regime import get_fundamental_gap as _get_fg
+                fg_res = _get_fg(region=region, days=2520) or {}
+                cur = fg_res.get('current') or {}
+                gap_top_pct = cur.get('top_pct')
+                gap_sign = cur.get('sign', 'neutral')
+            except Exception as _e:
+                print(f"[ai-summary] fundamental gap fetch 실패: {_e}")
+
+            # ── 줄1: 심리 + 일일 수익률 + RSI 묶음 ──
+            parts1 = []
+            if fg_score is not None:
+                parts1.append(f"심리 공포탐욕 {round(float(fg_score))}({fg_label})")
             if ret_v is not None:
                 try:
-                    ret_phrase = f"{idx_name} {float(ret_v):+.2f}%"
+                    rv = float(ret_v)
+                    if region == 'us':
+                        rv = rv * 100  # decimal → percent
+                    parts1.append(f"{idx_name} 일일 {rv:+.2f}%")
                 except (TypeError, ValueError):
                     pass
-            rsi_phrase = ""
             if rsi_v is not None:
                 try:
                     rf = float(rsi_v)
                     if rf >= 70:
-                        rsi_phrase = f"RSI {rf:.0f} 과매수권"
+                        rsi_tag = '과매수'
+                    elif rf >= 60:
+                        rsi_tag = '과매수 근접'
                     elif rf <= 30:
-                        rsi_phrase = f"RSI {rf:.0f} 과매도권"
+                        rsi_tag = '과매도'
+                    elif rf <= 40:
+                        rsi_tag = '과매도 근접'
                     else:
-                        rsi_phrase = f"RSI {rf:.0f} 정상권"
+                        rsi_tag = '중립'
+                    parts1.append(f"RSI {rf:.1f}({rsi_tag})")
                 except (TypeError, ValueError):
                     pass
-            if ret_phrase and rsi_phrase:
-                line1 = f"{ret_phrase}, {rsi_phrase}"
-            elif ret_phrase:
-                line1 = ret_phrase
-            elif rsi_phrase:
-                line1 = rsi_phrase
-            else:
-                line1 = f"{idx_name} 시황 데이터 수집 중"
+            line1 = ", ".join(parts1) + "." if parts1 else "시황 데이터 수집 중."
 
-            # 펀더멘털 (실적-주가 갭 percentile + 방향)
-            line2 = "실적-주가 갭 데이터 수집 중"
+            # ── 줄2: 이탈도 + 펀더멘털-주가 갭 + 경기국면 ──
+            parts2 = []
+            if top_pct is not None:
+                parts2.append(f"시장 이탈도 10년 상위 {top_pct}%")
+            if gap_top_pct is not None:
+                try:
+                    gtp = float(gap_top_pct)
+                    if gap_sign == 'bubble':
+                        gap_word = "주가가 실적 추월"
+                    elif gap_sign == 'compress':
+                        gap_word = "실적이 주가 추월"
+                    else:
+                        gap_word = "균형"
+                    parts2.append(f"펀더멘털-주가 갭 상위 {gtp:.1f}%({gap_word})")
+                except (TypeError, ValueError):
+                    pass
+            if phase:
+                parts2.append(f"경기국면 {phase}")
+            line2 = ", ".join(parts2) + "." if parts2 else "분포·국면 데이터 수집 중."
+
+            # ── 줄3: 인사이트 (종합 라벨, 자문 표현 X) ──
+            # RSI 과매수/과매도 + 이탈도 + 펀더멘털 갭 조합 → 시장 구간 라벨
             try:
-                from api.routers.regime import get_fundamental_gap as _get_fg
-                fg_res = _get_fg(region=region, days=2520)
-                cur = (fg_res or {}).get('current') if isinstance(fg_res, dict) else None
-                if cur:
-                    tp_raw = cur.get('top_pct')
-                    sign_v = cur.get('sign', 'neutral')
-                    if tp_raw is not None:
-                        tpf = float(tp_raw)
-                        if sign_v == 'bubble':
-                            ep = round(tpf, 1)
-                            dir_word = "주가가 실적보다 빠르게 오른"
-                        elif sign_v == 'compress':
-                            ep = round(100 - tpf, 1)
-                            dir_word = "주가가 실적을 따라가지 못한"
-                        else:
-                            ep = 50.0
-                            dir_word = ""
-                        if ep <= 5:
-                            mag = "매우 큰 괴리"
-                        elif ep <= 15:
-                            mag = "드문 괴리"
-                        elif ep <= 30:
-                            mag = "약한 괴리"
-                        elif ep <= 70:
-                            mag = "평소 수준"
-                        else:
-                            mag = "정합 강한"
-                        line2 = f"실적-주가 갭 상위 {ep}% ({dir_word} {mag}) 구간"
-            except Exception as _e:
-                print(f"[home headline] fundamental gap fetch 실패: {_e}")
+                rf = float(rsi_v) if rsi_v is not None else None
+            except Exception:
+                rf = None
+            is_overbought = rf is not None and rf >= 70
+            is_oversold = rf is not None and rf <= 30
+            is_gap_wide = gap_top_pct is not None and float(gap_top_pct) <= 15
 
-            return f"{line1}. {line2}이다."
+            if is_overbought and is_gap_wide:
+                insight = "인사이트 — 과매수 RSI 와 큰 펀더멘털-주가 괴리가 동시에 관측되는 *상승 후반 패턴* 구간"
+            elif is_oversold and is_gap_wide:
+                insight = "인사이트 — 과매도 RSI 와 큰 펀더멘털-주가 괴리가 동시에 관측되는 *하락 후반 패턴* 구간"
+            elif is_overbought:
+                insight = "인사이트 — RSI 과매수권 도달, 펀더멘털 갭은 평소 수준에 머문 *단기 과열* 구간"
+            elif is_oversold:
+                insight = "인사이트 — RSI 과매도권 도달, 펀더멘털 갭은 평소 수준에 머문 *단기 침체* 구간"
+            elif is_greed and is_high_distance:
+                insight = "인사이트 — 탐욕 심리와 평소에서 멀리 떨어진 시장 상태가 동시에 관측되는 *동반 이격* 구간"
+            elif is_fear and is_high_distance:
+                insight = "인사이트 — 공포 심리와 평소에서 멀리 떨어진 시장 상태가 동시에 관측되는 *동반 이격* 구간"
+            elif is_low_distance:
+                insight = "인사이트 — 전반 지표가 10년 평소 분포 중심 부근에 있는 *균형* 구간"
+            elif is_greed or is_fear:
+                insight = "인사이트 — 심리는 한쪽으로 기울었으나 시장 전체는 평소 범위 안에 머문 *부분 정렬* 구간"
+            else:
+                insight = "인사이트 — 지표들이 균형 있게 공존하는 *중립* 구간"
+            line3 = insight + "."
+
+            return "\n".join([line1, line2, line3])
 
         return "\n".join([line1, line2, line3, line4])
     except Exception:
         if lang == 'en':
-            return "Market snapshot loading — indicators syncing."
-        return "오늘 시장 스냅샷 수집 중. 지표 동기화 후 표시."
+            return ("Market snapshot loading.\n"
+                    "Distribution data syncing.\n"
+                    "Insight pending.")
+        return ("시황 데이터 수집 중.\n"
+                "분포·국면 데이터 수집 중.\n"
+                "인사이트 — 지표 동기화 후 표시.")
 
 
 # 기술 변수명 → (한국어 라벨, 의미, 왜 모델에 영향 주는지). LLM 미가용 fallback 에서 사용.
