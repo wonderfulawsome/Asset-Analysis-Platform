@@ -104,6 +104,50 @@ def _kr_rate_monthly(key: str, months: int) -> pd.Series:
     return s
 
 
+def _vkospi_monthly(months: int) -> pd.Series:
+    """VKOSPI 일별 close → MS 월초 평균. FDR 사용 (yfinance VKOSPI 미지원).
+    2026-05-13 추가 (옵션 A, 침체 leading indicator 보강).
+    """
+    from datetime import date as _date, timedelta as _td
+    end_dt = _date.today()
+    start_dt = end_dt - _td(days=months * 31 + 30)
+    try:
+        import FinanceDataReader as fdr
+        df = fdr.DataReader('VKOSPI', start_dt, end_dt)
+        if df is not None and not df.empty and 'Close' in df.columns:
+            s = df['Close'].dropna()
+            if hasattr(s.index, 'tz') and s.index.tz is not None:
+                s = s.tz_localize(None)
+            return s.resample('MS').mean().dropna()
+    except Exception as e:
+        print(f"[sector_macro_kr] VKOSPI FDR 실패: {e}")
+    return pd.Series(dtype=float)
+
+
+def _usdkrw_monthly_yoy(months: int) -> pd.Series:
+    """USD/KRW 일별 close → MS 월말 last → YoY%. yfinance 'KRW=X'.
+    2026-05-13 추가 (옵션 A, 자본 유출/원화 약세 = 침체 leading).
+    """
+    from datetime import date as _date, timedelta as _td
+    end_dt = _date.today()
+    start_dt = end_dt - _td(days=(months + 24) * 31)            # YoY 계산 위해 +24개월 buffer
+    try:
+        import yfinance as yf
+        df = yf.download('KRW=X', start=str(start_dt), end=str(end_dt),
+                         progress=False, auto_adjust=False)
+        if df is None or df.empty or 'Close' not in df.columns:
+            return pd.Series(dtype=float)
+        s = df['Close'].squeeze()
+        if hasattr(s.index, 'tz') and s.index.tz is not None:
+            s = s.tz_localize(None)
+        s_monthly = s.resample('MS').last().dropna()
+        s_yoy = (s_monthly.pct_change(12) * 100).dropna()       # YoY%
+        return s_yoy
+    except Exception as e:
+        print(f"[sector_macro_kr] USDKRW yfinance 실패: {e}")
+    return pd.Series(dtype=float)
+
+
 def fetch_sector_macro_kr(months: int = 240) -> pd.DataFrame:
     """KR 12 거시 + 2 derived → MS 인덱스 wide DataFrame.
 
@@ -137,6 +181,11 @@ def fetch_sector_macro_kr(months: int = 240) -> pd.DataFrame:
     yield_spread = (kr10 - kr3).dropna() if (not kr10.empty and not kr3.empty) else pd.Series(dtype=float)
     credit_spread = (corp - kr3).dropna() if (not corp.empty and not kr3.empty) else pd.Series(dtype=float)
 
+    # ── 2026-05-13 추가 (옵션 A) — VKOSPI + USD/KRW YoY 침체 leading indicators ──
+    print("  ④ FDR VKOSPI + yfinance USDKRW YoY...")
+    vkospi = _vkospi_monthly(months)
+    usdkrw_yoy = _usdkrw_monthly_yoy(months)
+
     # ── YoY 변환 ──
     df = pd.DataFrame({
         "kr_indpro_yoy":   _yoy(indpro),
@@ -151,6 +200,8 @@ def fetch_sector_macro_kr(months: int = 240) -> pd.DataFrame:
         "kr_cpi_yoy":      _yoy(cpi),
         "kr_gdp_yoy":      _yoy(gdp),
         "kr_m2_yoy":       _yoy(m2),
+        "kr_vkospi":       vkospi,              # VKOSPI 월평균 (시장 변동성)
+        "kr_usdkrw_yoy":   usdkrw_yoy,          # USD/KRW YoY% (원화 약세 = 자본 유출)
     })
 
     # MS 정렬 + 지연 지표 최대 3개월 ffill (월별 발표 시점 차이 보정)

@@ -16,6 +16,10 @@ FEATURE_COLS_US = [
     'pmi', 'yield_spread', 'anfci', 'icsa_yoy',
     'permit_yoy', 'real_retail_yoy', 'capex_yoy',
     'real_income_yoy', 'pmi_chg3m', 'capex_yoy_chg3m',
+    # 2026-05-13 추가 (옵션 A, 둔화·침체 leading indicators 보강)
+    'unrate',                                                 # 실업률 절댓값
+    'hy_oas',                                                 # 하이일드 OAS 스프레드 (신용 위험)
+    'vix',                                                    # VIX (시장 스트레스)
 ]
 # KR 12종 + derived 2종 (총 14컬럼) — 4-state HMM 학습용
 FEATURE_COLS_KR = [
@@ -24,6 +28,9 @@ FEATURE_COLS_KR = [
     'kr_permit_yoy', 'kr_retail_yoy', 'kr_capex_yoy', 'kr_income_yoy',
     'kr_cpi_yoy', 'kr_gdp_yoy', 'kr_m2_yoy',
     'kr_indpro_chg3m', 'kr_capex_yoy_chg3m',
+    # 2026-05-13 추가 (옵션 A, 둔화·침체 leading indicators 보강)
+    'kr_vkospi',                                              # VKOSPI 월평균 (시장 변동성)
+    'kr_usdkrw_yoy',                                          # USD/KRW YoY% (원화 약세=자본 유출)
 ]
 
 # state→phase 점수 산출용 컬럼 — region 별 "PMI 등 수준 지표" + "모멘텀 지표"
@@ -33,8 +40,11 @@ PHASE_SCORE_COLS = {
     'kr': ('kr_indpro_yoy', 'kr_indpro_chg3m'),
 }
 
-# HMM 상태 정렬 후 국면 매핑: rank 0(최저)→침체, 1→둔화, 2→회복, 3→확장
-RANK_TO_PHASE = [3, 2, 0, 1]
+# HMM 상태 정렬 후 국면 매핑 (6-state, 사용자 결정 2026-05-13).
+# rank 0,1 (최저 2개) → 침체 / rank 2,3 → 둔화 / rank 4 → 회복 / rank 5 (최고) → 확장
+# 둔화·침체 영역을 각각 2× 확대 (회복/확장 1개씩 유지).
+# PHASE id: 0=회복, 1=확장, 2=둔화, 3=침체 (PHASE_NAMES dict 기준).
+RANK_TO_PHASE = [3, 3, 2, 2, 0, 1]
 
 
 def _map_states_to_phases(model: GaussianHMM, feature_cols: list[str],
@@ -127,11 +137,12 @@ def run_sector_cycle(macro: pd.DataFrame, sector_ret: pd.DataFrame,
     scaler = StandardScaler()
     X_scaled = scaler.fit_transform(X_df.values)
 
-    # GaussianHMM 학습 (full → diag 폴백)
+    # GaussianHMM 학습 (full → diag 폴백). n_components=6 (사용자 결정 2026-05-13:
+    # 둔화·침체 각 2개 state, 회복/확장 1개 씩 — 둔화·침체 영역 2× 확대).
     for cov_type in ('full', 'diag'):
         try:
             model = GaussianHMM(
-                n_components=4,
+                n_components=6,
                 covariance_type=cov_type,
                 n_iter=200,
                 random_state=42,
@@ -148,10 +159,13 @@ def run_sector_cycle(macro: pd.DataFrame, sector_ret: pd.DataFrame,
     df_with_phase = df.loc[X_df.index].copy()
     df_with_phase['phase'] = [state_to_phase[s] for s in states]
 
-    # 최신 시점 확률
+    # 최신 시점 확률 — 6 state 를 4 phase 로 합산 (같은 phase 매핑된 state probability 합)
     all_proba = model.predict_proba(X_scaled)
     latest_proba_raw = all_proba[-1]
-    proba_by_phase = {state_to_phase[i]: float(p) for i, p in enumerate(latest_proba_raw)}
+    proba_by_phase: dict = {}
+    for i, p in enumerate(latest_proba_raw):
+        ph = state_to_phase[i]
+        proba_by_phase[ph] = proba_by_phase.get(ph, 0.0) + float(p)
     pred_phase = max(proba_by_phase, key=proba_by_phase.get)
     proba_dict = {PHASE_NAMES[ph]: round(proba_by_phase.get(ph, 0.0), 4) for ph in range(4)}
 

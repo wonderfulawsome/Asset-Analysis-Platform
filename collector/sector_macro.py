@@ -11,17 +11,21 @@ FRED_BASE = 'https://fred.stlouisfed.org/graph/fredgraph.csv?id='
 # 웹 브라우저처럼 보이기 위한 HTTP 헤더 (차단 방지)
 HEADERS   = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
 
-# FRED 시리즈 ID → 코드에서 사용할 컬럼명 매핑 (8개 지표)
+# FRED 시리즈 ID → 코드에서 사용할 컬럼명 매핑.
+# 2026-05-13 추가 (사용자 결정 옵션 A): unrate/hy_oas/vix — 둔화·침체 leading indicators 보강.
 FRED_SERIES = {
-    'INDPRO':  'indpro',          # 산업생산지수
-    'T10Y3M':  'yield_spread',    # 10년-3개월 장단기 금리차
-    'ANFCI':   'anfci',           # 시카고 연준 금융상황지수
-    'ICSA':    'icsa',            # 신규 실업수당 청구건수
-    'PERMIT':  'permit',          # 건축허가 건수
-    'RRSFS':   'real_retail',     # 실질 소매판매
-    'ANDENO':  'capex_orders',    # 비국방 자본재 신규주문 (설비투자 선행지표)
-    'W875RX1': 'real_income',     # 실질 개인소득 (이전지출 제외)
-    'CPIAUCSL': 'cpi',            # 소비자물가지수 (CPI)
+    'INDPRO':       'indpro',          # 산업생산지수
+    'T10Y3M':       'yield_spread',    # 10년-3개월 장단기 금리차
+    'ANFCI':        'anfci',           # 시카고 연준 금융상황지수
+    'ICSA':         'icsa',            # 신규 실업수당 청구건수
+    'PERMIT':       'permit',          # 건축허가 건수
+    'RRSFS':        'real_retail',     # 실질 소매판매
+    'ANDENO':       'capex_orders',    # 비국방 자본재 신규주문 (설비투자 선행지표)
+    'W875RX1':      'real_income',     # 실질 개인소득 (이전지출 제외)
+    'CPIAUCSL':     'cpi',             # 소비자물가지수 (CPI)
+    'UNRATE':       'unrate',          # 실업률 (%) — 침체 leading indicator
+    'BAMLH0A0HYM2': 'hy_oas',          # 하이일드 OAS 스프레드 (%p) — 신용 위험 / 침체 leading
+    'VIXCLS':       'vix',             # VIX 변동성지수 — 시장 스트레스 leading
 }
 
 _fred_session = requests.Session()                       # FRED 전용 세션 (TCP 연결 재사용)
@@ -119,6 +123,18 @@ def fetch_sector_macro() -> pd.DataFrame:
     df_cpi['cpi_yoy'] = df_cpi['cpi'].pct_change(12) * 100
     df_cpi = df_cpi[['cpi_yoy']].dropna()
 
+    # ── UNRATE (실업률): 월별 절댓값, 침체 leading indicator ──
+    df_unrate = raw['UNRATE'].copy()
+    df_unrate = df_unrate[['unrate']].dropna()
+
+    # ── HY_OAS (하이일드 스프레드): 일별 → 월말 last, 침체 leading ──
+    df_hyoas = raw['BAMLH0A0HYM2'].resample('MS').mean()
+    df_hyoas = df_hyoas[['hy_oas']].dropna()
+
+    # ── VIX: 일별 → 월말 평균, 시장 스트레스 ──
+    df_vix = raw['VIXCLS'].resample('MS').mean()
+    df_vix = df_vix[['vix']].dropna()
+
     ### 각 지표의 전년대비 변화율 계산
 
     # ── 최종 관측일 추출 (ffill 전, 데이터 신선도 표시용) ──
@@ -127,6 +143,7 @@ def fetch_sector_macro() -> pd.DataFrame:
         'icsa_yoy': df_icsa, 'permit_yoy': df_permit,
         'real_retail_yoy': df_rrsfs, 'capex_yoy': df_capex,
         'real_income_yoy': df_income, 'cpi_yoy': df_cpi,
+        'unrate': df_unrate, 'hy_oas': df_hyoas, 'vix': df_vix,
     }
     last_obs_dates = {}
     for col, src in _obs_sources.items():
@@ -141,7 +158,7 @@ def fetch_sector_macro() -> pd.DataFrame:
         if len(valid_ism) > 0:
             last_obs_dates['ism_pmi'] = str(valid_ism.index[-1].date())
 
-    # ── 8개 지표를 날짜 기준으로 병합 ──
+    # ── 12개 지표를 날짜 기준으로 병합 ──
     macro = (df_pmi
              .join(df_yield,  how='outer')                # outer join: 한쪽에만 있는 날짜도 포함
              .join(df_anfci,  how='outer')
@@ -150,7 +167,10 @@ def fetch_sector_macro() -> pd.DataFrame:
              .join(df_rrsfs,  how='outer')
              .join(df_capex,  how='outer')
              .join(df_income, how='outer')
-             .join(df_cpi,    how='outer'))
+             .join(df_cpi,    how='outer')
+             .join(df_unrate, how='outer')
+             .join(df_hyoas,  how='outer')
+             .join(df_vix,    how='outer'))
     # ISM PMI 결합 (선택적 — NULL 허용, HMM 피처에 포함하지 않음)
     if df_ism is not None:
         macro = macro.join(df_ism, how='left')
