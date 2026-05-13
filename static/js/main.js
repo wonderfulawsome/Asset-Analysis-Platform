@@ -1890,29 +1890,10 @@ async function loadFundamentalGap() {
   const pad = Math.max(0.1, (dMax - dMin) * 0.08);
   const yMin = Math.min(dMin - pad, -0.05);   // 0 항상 포함
   const yMax = Math.max(dMax + pad, 0.05);
-  // 상위 10% 임계선 — hero percentile (pre-2y baseline) 과 동일 기준.
-  // monthly downsampled points 가 아닌 원본 daily series 사용 (~1000 row 충분).
-  const lastDate = points[points.length - 1].fullLabel;
-  const cutoffMs = new Date(lastDate).getTime() - 730 * 86400 * 1000;
-  const dailyBaselineVals = series
-    .filter(s => new Date(s.date).getTime() < cutoffMs)
-    .map(s => s.value);
-  let p90;
-  if (dailyBaselineVals.length >= 60) {
-    const sorted = [...dailyBaselineVals].sort((a, b) => a - b);
-    p90 = sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.9))];
-  } else {
-    const sortedAll = [...vals].sort((a, b) => a - b);
-    p90 = sortedAll[Math.min(sortedAll.length - 1, Math.floor(sortedAll.length * 0.9))];
-  }
-  // 거품 시기 (최근 2년) 음영 — baseline 계산 제외 구간임을 시각화
-  const cutoffIdx = points.findIndex(p => new Date(p.fullLabel).getTime() >= cutoffMs);
-  const excludeBands = cutoffIdx > 0 ? [{
-    fromIdx: cutoffIdx,
-    toIdx: points.length - 1,
-    color: 'rgba(255,140,0,0.05)',
-    label: '평균 계산 제외 (거품 시기)',
-  }] : [];
+  // 상위 10% 임계선 — 거품 시기 포함 전체 panel 기준 (사용자 결정 2026-05-13).
+  // 옛 pre-2y baseline 제외 로직 폐기 — endpoint 의 baseline_window='all' 과 일관.
+  const sortedAll = [...vals].sort((a, b) => a - b);
+  const p90 = sortedAll[Math.min(sortedAll.length - 1, Math.floor(sortedAll.length * 0.9))];
   renderLineChart('nr-chart', points, {
     color: '#FF8C00',
     zeroLine: true,
@@ -1924,7 +1905,6 @@ async function loadFundamentalGap() {
     thresholdLines: [
       { value: p90, color: '#FF8C00', label: '상위 10%', dash: '3 3' },
     ],
-    excludeBands: excludeBands,
   });
 }
 
@@ -2614,21 +2594,24 @@ window.recordTabSwitch = function(tabIdxOrName) {
   const TAB_KEYS = ['fundamental', 'signal', 'sector',
                     'sector-val', 'sector-mom', 'market-valuation'];
 
-  // 한 탭 div 에 텍스트 채움 + 데이터 일시 부착 + loading 클래스 제거
-  function renderText(key, text, dataDate) {
+  // 한 탭 div 에 텍스트 채움 + 데이터 발생 일시 + 마지막 확인 시각 부착 + loading 클래스 제거
+  function renderText(key, text, dataDate, checkedAt) {
     const el = document.getElementById('headline-' + key);
     if (!el) return;
     const span = el.querySelector('.tab-headline-text');
     if (span) span.textContent = text;
-    // 데이터 일시 표시 (있으면 작은 그레이 텍스트로 박스 내부에 추가)
+    // 데이터 일시 (raw 발생) + 확인 시각 (endpoint compute 시점) 두 정보를 한 줄로
     let dateEl = el.querySelector('.tab-headline-date');
-    if (dataDate) {
+    const parts = [];
+    if (dataDate) parts.push('데이터 ' + dataDate);
+    if (checkedAt) parts.push('확인 ' + checkedAt);
+    if (parts.length) {
       if (!dateEl) {
         dateEl = document.createElement('span');
         dateEl.className = 'tab-headline-date';
         el.appendChild(dateEl);
       }
-      dateEl.textContent = '데이터 ' + dataDate;
+      dateEl.textContent = parts.join(' · ');
     } else if (dateEl) {
       dateEl.remove();
     }
@@ -2637,7 +2620,7 @@ window.recordTabSwitch = function(tabIdxOrName) {
 
   // 전체 실패 시 placeholder 메시지
   function renderFail(msg) {
-    TAB_KEYS.forEach(k => renderText(k, msg || '데이터 준비 중.', null));
+    TAB_KEYS.forEach(k => renderText(k, msg || '데이터 준비 중.', null, null));
   }
 
   // /api/market-summary/tab-headline?region=... bulk 호출 → div 채움
@@ -2651,9 +2634,10 @@ window.recordTabSwitch = function(tabIdxOrName) {
       const data = await res.json();
       if (!data || typeof data !== 'object') { renderFail(); return; }
       const dates = (data.data_dates && typeof data.data_dates === 'object') ? data.data_dates : {};
+      const checkedAt = data.generated_at || null;  // compute_all 호출 시각 = 마지막 확인 시각
       TAB_KEYS.forEach(k => {
-        if (typeof data[k] === 'string') renderText(k, data[k], dates[k] || null);
-        else renderText(k, '데이터 준비 중.', null);
+        if (typeof data[k] === 'string') renderText(k, data[k], dates[k] || null, checkedAt);
+        else renderText(k, '데이터 준비 중.', null, checkedAt);
       });
     } catch (e) {
       console.error('[tab-headline] load 실패:', e);

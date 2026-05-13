@@ -452,7 +452,10 @@ def fetch_tab_headlines(region: str) -> Optional[dict]:
     now = _t.time()
     cached = _live_cache.get(region)
     if cached and (now - cached[1]) < _LIVE_TTL:
-        return {**cached[0], 'cached': True, 'source': 'live_ttl'}
+        # TTL hit: raw 데이터는 캐시 그대로, generated_at(확인 시각) 만 현재 시각으로 갱신
+        out = {**cached[0], 'cached': True, 'source': 'live_ttl'}
+        out['generated_at'] = datetime.now(timezone(timedelta(hours=9))).strftime('%Y-%m-%d %H:%M')
+        return out
     payload = compute_all(region)
     payload['cached'] = False
     payload['source'] = 'live'
