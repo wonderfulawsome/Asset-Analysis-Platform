@@ -173,40 +173,54 @@ def _headline_signal(region: str) -> str:
         return f"시장이 매우 잔잔한 상태 (10년 분포 상위 {top_pct}% 수준). 평소보다 훨씬 안정적인 흔한 구간이다."
 
 
-# ── 룰 5: 거시경제 / 섹터 사이클 — "경기 위치 + 시장 변동성" ────
-_VIX_BASELINE = {'us': 19.2, 'kr': 25.0}                          # 평소 VIX/VKOSPI 기준선
+# ── 룰 5: 거시경제 / 섹터 사이클 — "경기 국면 + 주요 매크로 3종" ────
+# 사용자 결정 2026-05-13: VIX 대신 주요 판단 매크로 3개 노출.
+# US: PMI(제조업 경기), 장단기금리차(침체 예측), ANFCI(금융 컨디션)
+# KR: GDP YoY(성장률), CPI YoY(인플레), 장단기금리차(금융 컨디션)
 
 
 def _headline_sector(region: str) -> str:
-    sc = fetch_sector_cycle_latest(region=region)                 # 경기국면 1행
-    macro = fetch_macro_latest(region=region) or {}               # VIX 가져오기
+    sc = fetch_sector_cycle_latest(region=region)                 # 경기국면 1행 + macro_snapshot
     if not sc:
         return "경기국면 데이터 준비 중."
     phase = sc.get('phase_name', '?')
-    # 경기국면 풀이 (4단계 회복/확장/둔화/침체)
     phase_meaning = {
         '회복': '경기가 바닥을 지나 회복 흐름에 들어선 회복',
         '확장': '경기가 본격적으로 좋아지는 확장',
         '둔화': '경기 상승세가 꺾여 둔화되는 둔화',
         '침체': '경기가 바닥권에 머무는 침체',
     }.get(phase, phase)
-    vix = macro.get('vix')
-    vix_name = 'VIX(공포지수)' if region == 'us' else 'VKOSPI(공포지수)'
-    base = _VIX_BASELINE[_norm_region(region)]
-    if vix is None:
-        return f"{phase_meaning} 국면. 변동성 데이터 부재 상태이다."
-    try:
-        v = float(vix)
-    except (TypeError, ValueError):
-        return f"{phase_meaning} 국면. 변동성 파싱 실패 상태이다."
-    diff_pct = (v - base) / base * 100                            # 평소 대비 변동 %
-    if diff_pct > 30:
-        vstate = f"{vix_name} {v:.1f}로 평소({base:.0f}) 대비 +{diff_pct:.0f}% 높은 시장 불안감"
-    elif diff_pct < -20:
-        vstate = f"{vix_name} {v:.1f}로 평소({base:.0f}) 대비 {diff_pct:.0f}% 낮은 안정적 시장"
+    snap = sc.get('macro_snapshot') or {}                         # 매크로 스냅샷 dict
+    # region 별 주요 3개 지표 (key, 한글 라벨, 단위, 부호 표시 여부)
+    if _norm_region(region) == 'us':
+        spec = [
+            ('pmi',          'PMI',         '',  False),          # 제조업 PMI (50 기준선)
+            ('yield_spread', '장단기금리차', '%p', False),         # 10Y-3M
+            ('anfci',        'ANFCI',       '',  True),           # 금융컨디션 (음수=완화)
+        ]
     else:
-        vstate = f"{vix_name} {v:.1f}로 평소({base:.0f}) 수준의 변동성"
-    return f"{vstate}. {phase_meaning} 국면이다."
+        spec = [
+            ('kr_gdp_yoy',      'GDP YoY',     '%',  True),       # 경제성장률
+            ('kr_cpi_yoy',      'CPI YoY',     '%',  True),       # 인플레이션
+            ('kr_yield_spread', '장단기금리차', '%p', False),     # 10Y-3M
+        ]
+    parts = []
+    for key, label, unit, signed in spec:
+        v = snap.get(key)
+        if v is None:
+            continue
+        try:
+            vf = float(v)
+        except (TypeError, ValueError):
+            continue
+        if signed:
+            parts.append(f"{label} {vf:+.2f}{unit}")
+        else:
+            parts.append(f"{label} {vf:.2f}{unit}")
+    macro_phrase = ", ".join(parts)
+    if macro_phrase:
+        return f"{phase_meaning} 국면. {macro_phrase} 상태이다."
+    return f"{phase_meaning} 국면이다."
 
 
 # ── 룰 6: 섹터 밸류에이션 — "PER 10년 평균 대비 위/아래" (자문 가치판단 X) ─────

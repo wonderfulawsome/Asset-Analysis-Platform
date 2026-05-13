@@ -1180,56 +1180,77 @@ def _fallback_ai_summary(lang: str, region: str) -> str:
             phase_tag = f" / cycle {phase}" if phase else ""
             line4 = f"🎯 Overall — {summary}{phase_tag}."
         else:
-            # ── 오늘 한눈에 (핵심 수치 묶음) ──
-            parts = []
-            if fg_score is not None:
-                parts.append(f"공포탐욕 {round(float(fg_score))} ({fg_label})")
-            if top_pct is not None:
-                parts.append(f"시장 이탈도 상위 {top_pct}%")
-            if ns is not None:
-                ns_dir = '이성 쪽' if (ns or 0) >= 0 else '감정 쪽'
-                parts.append(f"이성 점수 {_fmt_signed(ns, 2)} ({ns_dir})")
-            if phase:
-                parts.append(f"경기국면 {phase}")
-            line1 = "[오늘 한눈에] " + (", ".join(parts) if parts else "지표 수집 중") + "."
+            # ── 간결 1~2문장 — 3 지표만 사용 (사용자 결정 2026-05-13) ──
+            # 1) 일일 수익률 (KOSPI/S&P500), 2) RSI 과매수/과매도,
+            # 3) 펀더멘털 (실적-주가 갭 percentile + 방향). 심리·이탈도·국면 등 노출 X.
+            macro = fetch_macro_latest(region=region) or {}
+            idx_name = 'KOSPI' if region == 'kr' else 'S&P500'
 
-            # ── 데이터가 만들어진 이유 (각 변수가 결과에 어떻게 기여했는지) ──
-            why_bits = []
-            if fg_score is not None:
-                if is_greed:
-                    why_bits.append("심리 지표는 탐욕 영역으로 군중 매수세가 강한 상태")
-                elif is_fear:
-                    why_bits.append("심리 지표는 공포 영역으로 군중 매수세가 약해진 상태")
-                else:
-                    why_bits.append("심리 지표는 중립 영역에 위치한 상태")
-            if top_pct is not None:
-                if is_high_distance:
-                    why_bits.append(f"시장 이탈도는 10년 분포 상위 {top_pct}%로 평소 패턴과 거리가 먼 위치")
-                elif is_low_distance:
-                    why_bits.append(f"시장 이탈도는 10년 분포 하위 {100 - top_pct:.0f}%로 평소 범위 안에 위치")
-                else:
-                    why_bits.append(f"시장 이탈도는 10년 중간대(상위 {top_pct}%)에 위치")
-            if ns is not None:
-                if (ns or 0) >= 0:
-                    why_bits.append("이성 점수는 양수로 주가가 펀더멘털을 잘 반영하는 구간")
-                else:
-                    why_bits.append("이성 점수는 음수로 주가와 펀더멘털 사이에 분리가 있는 구간")
-            line2 = "[왜 이런 결과] " + ". ".join(why_bits) + "." if why_bits else "[왜 이런 결과] 지표 분석 중."
-
-            # ── 종합 (현재 구간 라벨) ──
-            if is_greed and is_high_distance:
-                regime_label = "탐욕 심리와 펀더멘털 분리가 동시에 관측되는 동반 이격 구간"
-            elif is_fear and is_high_distance:
-                regime_label = "공포 심리와 펀더멘털 분리가 동시에 관측되는 동반 이격 구간"
-            elif is_low_distance:
-                regime_label = "전반 지표가 10년 평소 분포 중심 부근에 있는 균형 구간"
-            elif is_greed or is_fear:
-                regime_label = "심리는 한쪽으로 기울었으나 시장 전체는 평소 범위 안에 머문 부분 정렬 구간"
+            # 일일 수익률 + RSI 한 문장
+            ret_v = macro.get('sp500_return')
+            rsi_v = macro.get('sp500_rsi')
+            ret_phrase = ""
+            if ret_v is not None:
+                try:
+                    ret_phrase = f"{idx_name} {float(ret_v):+.2f}%"
+                except (TypeError, ValueError):
+                    pass
+            rsi_phrase = ""
+            if rsi_v is not None:
+                try:
+                    rf = float(rsi_v)
+                    if rf >= 70:
+                        rsi_phrase = f"RSI {rf:.0f} 과매수권"
+                    elif rf <= 30:
+                        rsi_phrase = f"RSI {rf:.0f} 과매도권"
+                    else:
+                        rsi_phrase = f"RSI {rf:.0f} 정상권"
+                except (TypeError, ValueError):
+                    pass
+            if ret_phrase and rsi_phrase:
+                line1 = f"{ret_phrase}, {rsi_phrase}"
+            elif ret_phrase:
+                line1 = ret_phrase
+            elif rsi_phrase:
+                line1 = rsi_phrase
             else:
-                regime_label = "지표들이 균형 있게 공존하는 중립 구간"
-            line3 = f"[현재 구간] {regime_label}."
+                line1 = f"{idx_name} 시황 데이터 수집 중"
 
-            return "\n".join([line1, line2, line3])
+            # 펀더멘털 (실적-주가 갭 percentile + 방향)
+            line2 = "실적-주가 갭 데이터 수집 중"
+            try:
+                from api.routers.regime import get_fundamental_gap as _get_fg
+                fg_res = _get_fg(region=region, days=2520)
+                cur = (fg_res or {}).get('current') if isinstance(fg_res, dict) else None
+                if cur:
+                    tp_raw = cur.get('top_pct')
+                    sign_v = cur.get('sign', 'neutral')
+                    if tp_raw is not None:
+                        tpf = float(tp_raw)
+                        if sign_v == 'bubble':
+                            ep = round(tpf, 1)
+                            dir_word = "주가가 실적보다 빠르게 오른"
+                        elif sign_v == 'compress':
+                            ep = round(100 - tpf, 1)
+                            dir_word = "주가가 실적을 따라가지 못한"
+                        else:
+                            ep = 50.0
+                            dir_word = ""
+                        if ep <= 5:
+                            mag = "매우 큰 괴리"
+                        elif ep <= 15:
+                            mag = "드문 괴리"
+                        elif ep <= 30:
+                            mag = "약한 괴리"
+                        elif ep <= 70:
+                            mag = "평소 수준"
+                        else:
+                            mag = "정합 강한"
+                        line2 = f"실적-주가 갭 상위 {ep}% ({dir_word} {mag}) 구간"
+            except Exception as _e:
+                print(f"[home headline] fundamental gap fetch 실패: {_e}")
+
+            return f"{line1}. {line2}이다."
 
         return "\n".join([line1, line2, line3, line4])
     except Exception:
