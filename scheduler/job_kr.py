@@ -6,7 +6,7 @@
 - index_price_raw (region='kr'): KODEX 200, TIGER 200, KOSDAQ150 등 + KODEX/TIGER 섹터 ETF
 
 향후 추가 (Stage 3+):
-- noise_regime / crash_surge / sector_cycle / valuation_signal — KR 모델 학습 후 적재
+- noise_regime / sector_cycle / valuation_signal — KR 모델 학습 후 적재
 - 합성 한국 F&G — fear_greed_raw 에 region='kr' 적재
 """
 
@@ -28,7 +28,7 @@ def run_kr_pipeline() -> None:
         from collector.valuation_signal_kr import fetch_valuation_signal_today_kr
         from database.repositories import (
             upsert_macro, upsert_index_prices, upsert_valuation_signal,
-            upsert_noise_regime, upsert_crash_surge,
+            upsert_noise_regime,
         )
 
         # 1) macro_raw — 최근 5일치 (오늘 + 며칠 buffer)
@@ -177,45 +177,6 @@ def run_kr_pipeline() -> None:
             print(f'[KR-Pipeline] sector_valuation 실패: {e}')
             traceback.print_exc()
 
-        # 7) KR Crash/Surge — 학습된 모델 있으면 오늘자 1행 적재 (신호탭)
-        # KRX/VKOSPI 일부 fetch 실패로 NaN 발생 시: ffill+bfill 후 NaN 컬럼만 0 fallback.
-        # 그래도 안 되면 가장 최근 NaN 없는 행으로 후퇴 적재 (날짜는 그 행 기준).
-        try:
-            from processor.feature3_crash_surge import load_crash_surge_model, predict_crash_surge
-            from collector.crash_surge_data_kr import (
-                fetch_crash_surge_light_kr, compute_features_kr,
-            )
-            cs_model = load_crash_surge_model(region='kr')
-            if cs_model is not None:
-                raw = fetch_crash_surge_light_kr(lookback_days=300)
-                feat_df = compute_features_kr(raw)
-                if feat_df is not None and not feat_df.empty:
-                    # 1차: ffill + bfill 로 결측 채움
-                    filled = feat_df.ffill().bfill()
-                    last_row = filled.tail(1)
-                    nan_cols = last_row.columns[last_row.isna().any()].tolist()
-                    if nan_cols:
-                        # 일부 컬럼 전체 NaN → 0 fallback (학습 분포 약간 왜곡되지만 적재 가능)
-                        print(f'[KR-Pipeline] crash_surge 잔여 NaN 컬럼 {len(nan_cols)}개 → 0 fallback: {nan_cols}')
-                        last_row = last_row.fillna(0)
-                    # 적재 — date 는 feat_df 의 마지막 인덱스 (가장 최근 거래일)
-                    last_date = last_row.index[-1].strftime('%Y-%m-%d')
-                    result = predict_crash_surge(last_row.values, cs_model)
-                    result['date'] = last_date
-                    upsert_crash_surge(result, region='kr')
-                    print(f"[KR-Pipeline] crash_surge {last_date} "
-                          f"crash={result['crash_score']:.1f}({result['crash_grade']}) "
-                          f"surge={result['surge_score']:.1f}({result['surge_grade']}) 적재"
-                          f"{' (NaN ' + str(len(nan_cols)) + '개 fallback)' if nan_cols else ''}")
-                else:
-                    print('[KR-Pipeline] crash_surge 피처 빈 DF — 건너뜀')
-            else:
-                print('[KR-Pipeline] crash_surge_xgb_kr.pkl 없음 — 학습 먼저 '
-                      '(python -m scripts.train_kr_crash_surge)')
-        except Exception as e:
-            print(f'[KR-Pipeline] crash_surge 실패: {e}')
-            traceback.print_exc()
-
         # 10) 무거운 화면 응답 사전 계산 — 사용자 클릭 시 app_cache select 만 수행.
         # AI 요약은 LLM quota 에 의존하므로, 실패해도 sector valuation/momentum cache 를 막지 않게
         # non-LLM cache 와 분리한다.
@@ -323,16 +284,6 @@ def run_kr_pipeline() -> None:
                 print(f"[KR-Pipeline] 실패: {result['fail']}")
         except Exception as e:
             print(f'[KR-Pipeline] chart_ohlc_cache precompute 실패: {e}')
-            traceback.print_exc()
-
-        # 16) crash-surge direction 분석 통째 적재 (app_cache).
-        # endpoint 매번 numpy 루프 (전 시계열 × 5/10/20 horizon) → cache select 1회.
-        try:
-            from api.routers.crash_surge import precompute_direction
-            ok = precompute_direction('kr')
-            print(f"[KR-Pipeline] crash_surge direction kr {'OK' if ok else 'FAIL/EMPTY'}")
-        except Exception as e:
-            print(f'[KR-Pipeline] crash_surge direction precompute 실패: {e}')
             traceback.print_exc()
 
         # 17) 탭별 한 줄 해설 (룰베이스) 적재.

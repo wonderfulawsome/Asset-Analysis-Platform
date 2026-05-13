@@ -12,18 +12,9 @@ from collector.noise_regime_data import (
 )
 from database.repositories import (upsert_macro, upsert_noise_regime, upsert_fear_greed,
                                    upsert_index_prices, upsert_sector_macro, upsert_sector_cycle,
-                                   upsert_crash_surge, fetch_crash_surge_all, fetch_noise_regime_all)
+                                   fetch_noise_regime_all)
 from processor.feature1_regime import train_hmm, load_model, predict_regime, backfill_noise_regime
 from processor.feature2_sector_cycle import run_sector_cycle
-from collector.crash_surge_data import (
-    fetch_crash_surge_raw, fetch_crash_surge_light,
-    compute_features, compute_labels, prepare_datasets, ALL_FEATURES,
-    save_fred_cache,                                         # FRED 파일 캐시 저장 함수
-)
-from processor.feature3_crash_surge import (
-    train_crash_surge, load_model as load_crash_surge_model, predict_crash_surge,
-    backfill_crash_surge,
-)
 from processor.feature4_chart_predict import run_chart_predict_all
 from database.repositories import upsert_chart_predict
 from collector.real_estate_trade import fetch_trades, fetch_rents
@@ -402,36 +393,7 @@ def run_pipeline(light: bool = False) -> None:
         # 0이 아닌 index_prices를 DB에 저장
         upsert_index_prices(index_prices)
 
-    # Step 5b: 경량 모드 crash/surge 실시간 예측 (기존 모델 사용, 학습 없음)
     if light:
-        print('\n[Step 5b] 폭락/급등 실시간 예측...')
-        try:
-            cs_model = load_crash_surge_model()  # 저장된 모델 로드
-            if cs_model is not None:
-                raw_light = fetch_crash_surge_light()  # 최근 데이터 경량 수집 (SPY/Cboe/PutCall 실시간 포함)
-                features_light = compute_features(raw_light['spy'], raw_light['fred'],
-                                                  raw_light['cboe'],
-                                                  raw_light['yahoo_macro'])  # 44 피처 계산
-                # Core 피처 NaN 제거, Aux fillna(0) 처리
-                from collector.crash_surge_data import CORE_FEATURES, AUX_FEATURES
-                import numpy as np
-                feat_row = features_light[ALL_FEATURES].copy()  # 피처만 추출
-                feat_row = feat_row.ffill()  # FRED/Yahoo 결측 → 직전 값으로 채움
-                feat_row = feat_row.dropna(subset=CORE_FEATURES)  # Core NaN 제거
-                feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)  # Aux 결측 대체
-                feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)  # inf 제거
-                if len(feat_row) > 0:
-                    latest_row = feat_row.iloc[[-1]].values  # 최신 1행 추출
-                    cs_result = predict_crash_surge(latest_row, cs_model)  # 예측 실행
-                    upsert_crash_surge(cs_result)  # DB 저장
-                else:
-                    print('  [CrashSurge-Light] 유효한 피처 행 없음, 건너뜀')
-            else:
-                print('  [CrashSurge-Light] 저장된 모델 없음, 건너뜀 (전체 파이프라인에서 학습 필요)')
-        except Exception as e:
-            print(f'  [CrashSurge-Light] 실시간 예측 실패: {e}')
-            traceback.print_exc()
-
         # Step 5d: ERP (Fed Model) 일일 갱신 — DB 가드 (오늘 row 있으면 skip)
         print('\n[Step 5d] ERP 시그널 갱신...')
         try:
@@ -587,90 +549,6 @@ def run_pipeline(light: bool = False) -> None:
         except Exception as e:
             print(f'[Step 6c] per_weighted 실패, 건너뜀: {e}')
             traceback.print_exc()
-
-        # Step 7: XGBoost 폭락/급등 전조 탐지 (모델 학습 + 오늘 예측)
-        print('\n[Step 7] 폭락/급등 전조 탐지...')
-        cs_datasets = None
-        cs_model = None
-        cs_should_retrain = False
-        try:
-            raw = fetch_crash_surge_raw(fred_cache=fred_cache)  # Step 3 캐시 재사용
-            save_fred_cache(raw['fred'])                      # 경량 파이프라인용 파일 캐시 저장
-            features = compute_features(raw['spy'], raw['fred'], raw['cboe'],
-                                                  raw['yahoo_macro'])
-            labels = compute_labels(raw['spy']['Close'])
-            cs_datasets = prepare_datasets(features, labels, raw['spy']['Close'])
-
-            cs_model = load_crash_surge_model()
-            current_month = datetime.date.today().strftime('%Y-%m')
-            cs_should_retrain = (cs_model is None or
-                                 cs_model.get('train_month') != current_month)
-            if cs_should_retrain:
-                try:
-                    print('[Step 7] 모델 재학습 (Optuna 50 trials)...')
-                    X_tr, y_tr = cs_datasets['train']
-                    X_cal, y_cal = cs_datasets['calib']
-                    X_te, y_te = cs_datasets['test']
-                    X_dev, y_dev = cs_datasets['dev']
-                    X_full = cs_datasets['df_full'][ALL_FEATURES].values
-                    cs_model = train_crash_surge(X_tr, y_tr, X_cal, y_cal, X_te, y_te,
-                                                 X_dev, y_dev, X_full, n_trials=50)
-                except Exception as e:
-                    print(f'[Step 7] 모델 재학습 실패, 기존 모델로 예측 계속: {e}')
-                    traceback.print_exc()
-                    cs_model = load_crash_surge_model()  # 기존 모델 다시 로드
-            else:
-                print(f'[Step 7] 기존 모델 사용 (학습 월: {cs_model["train_month"]})')
-
-            # 예측은 재학습 성패와 무관하게 실행
-            if cs_model is not None:
-                latest_row = cs_datasets['df_full'][ALL_FEATURES].iloc[[-1]].values
-                cs_result = predict_crash_surge(latest_row, cs_model)
-                upsert_crash_surge(cs_result)
-            else:
-                print('[Step 7] 사용 가능한 모델 없음, 예측 건너뜀')
-        except Exception as e:
-            print(f'[Step 7] 폭락/급등 전조 실패, 경량 fallback 시도: {e}')
-            traceback.print_exc()
-            # Fallback: 경량 수집으로 예측 시도
-            try:
-                fallback_model = load_crash_surge_model()
-                if fallback_model is not None:
-                    import numpy as np
-                    from collector.crash_surge_data import CORE_FEATURES, AUX_FEATURES
-                    raw_light = fetch_crash_surge_light()
-                    features_light = compute_features(raw_light['spy'], raw_light['fred'],
-                                                      raw_light['cboe'], raw_light['yahoo_macro'])
-                    feat_row = features_light[ALL_FEATURES].copy()
-                    feat_row = feat_row.ffill()
-                    feat_row = feat_row.dropna(subset=CORE_FEATURES)
-                    feat_row[AUX_FEATURES] = feat_row[AUX_FEATURES].fillna(0)
-                    feat_row = feat_row.replace([np.inf, -np.inf], np.nan).dropna(subset=ALL_FEATURES)
-                    if len(feat_row) > 0:
-                        latest_row = feat_row.iloc[[-1]].values
-                        cs_result = predict_crash_surge(latest_row, fallback_model)
-                        upsert_crash_surge(cs_result)
-                        print('[Step 7-fallback] 경량 수집으로 예측 성공')
-                    else:
-                        print('[Step 7-fallback] 유효한 피처 행 없음')
-            except Exception as e2:
-                print(f'[Step 7-fallback] 경량 fallback도 실패: {e2}')
-
-        # Step 7b: 백필 (모델 학습/예측과 분리)
-        if cs_should_retrain and cs_datasets is not None and cs_model is not None:
-            try:
-                print('\n[Step 7b] 신규 날짜 점수 백필...')
-                backfill_records = backfill_crash_surge(cs_datasets['df_full'], cs_model)
-                existing = fetch_crash_surge_all()
-                existing_dates = {r['date'] for r in existing}
-                new_records = [r for r in backfill_records if r['date'] not in existing_dates]
-                print(f'[Step 7b] 전체 {len(backfill_records)}건 중 신규 {len(new_records)}건 백필')
-                for rec in new_records:
-                    upsert_crash_surge(rec)
-                print(f'[Step 7b] 백필 완료: {len(new_records)}건 DB 저장')
-            except Exception as e:
-                print(f'[Step 7b] 폭락/급등 백필 실패, 건너뜀: {e}')
-                traceback.print_exc()
 
         # Step 8: 앙상블 ETF 30일 가격 예측 (16 tickers) — 추론 모드 (.pkl load)
         # 학습은 매월 1일 train_chart_pipeline 가 별도 담당 (api/app.py Stage 3)
@@ -918,15 +796,6 @@ def run_pipeline(light: bool = False) -> None:
             print(f"[Step 16] 실패: {result['fail']}")
     except Exception as e:
         print(f'[Step 16] chart_ohlc_cache precompute 실패: {e}')
-        traceback.print_exc()
-
-    # Step 17: crash-surge direction 통째 적재 (app_cache).
-    try:
-        from api.routers.crash_surge import precompute_direction
-        ok = precompute_direction('us')
-        print(f"[Step 17] crash_surge direction us {'OK' if ok else 'FAIL/EMPTY'}")
-    except Exception as e:
-        print(f'[Step 17] crash_surge direction precompute 실패: {e}')
         traceback.print_exc()
 
     # Step 18: 탭별 한 줄 해설 (룰베이스) 적재.
