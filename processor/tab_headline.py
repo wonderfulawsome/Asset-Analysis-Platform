@@ -131,18 +131,20 @@ def _headline_fundamental(region: str) -> str:
     else:
         ep = 50.0
         dir_phrase = ""
-    # 5단계 분기 (ep 작을수록 극단)
+    # 6단계 분기 (ep 작을수록 극단). 45~55 만 "평소 수준" (사용자 결정 2026-05-13).
     if ep <= 5:
         return f"실적과 주가가 매우 크게 따로 움직이는 구간 (상위 {ep}% 이내, {dir_phrase} 큰 괴리). 실적보다 심리가 가격을 끌고 가는 상태이다."
     elif ep <= 15:
         return f"실적과 주가가 따로 움직이는 드문 괴리 구간 (상위 {ep}%, {dir_phrase} 상태). 실적이 가격에 부분적으로만 반영된 상태이다."
-    elif ep <= 30:
+    elif ep < 45:
         suffix = f" {dir_phrase} 상태이다." if dir_phrase else ""
         return f"실적과 주가 사이에 약한 괴리가 있는 구간 (상위 {ep}%).{suffix}"
-    elif ep <= 70:
+    elif ep <= 55:
         return f"실적과 주가가 평소 수준의 거리감을 유지하는 구간 (상위 {ep}%). 큰 괴리 없는 정상 상태이다."
+    elif ep <= 70:
+        return f"실적과 주가가 평소보다 잔잔한 약한 정합 구간 (상위 {ep}%). 실적이 가격에 안정적으로 반영된 상태이다."
     else:
-        return f"실적과 주가가 가까운 정합 구간 (상위 {ep}%, 평소보다 잔잔). 실적이 가격에 잘 반영된 상태이다."
+        return f"실적과 주가가 가까운 정합 강한 구간 (상위 {ep}%, 평소보다 매우 잔잔). 실적이 가격에 잘 반영된 상태이다."
 
 
 # ── 룰 4: 평소 이탈도 — "평소 대비 이탈 강도 percentile + 빈도 풀이" ──

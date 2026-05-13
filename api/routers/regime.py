@@ -71,22 +71,12 @@ def get_fundamental_gap(region: str = Query('us'), days: int = Query(2520, ge=30
     values = np.array([s['value'] for s in series])
     cur = series[-1]
     cv = cur['value']
-    # percentile 계산: 최근 2년 (거품 시기) 제외한 baseline 기준.
-    # 이유: KR KOSPI 가 2024 중반부터 급등 — panel 후반 2년이 거의 모두 거품 영역.
-    # 그 2년을 baseline 에 포함시키면 평균이 위로 끌어올려져 "오늘 +0.82" 가
-    # 상위 41% 같은 둔감한 값으로 보이게 됨. 24개월 제외 시 상위 4% (직관 일치).
-    import datetime as _dt
-    try:
-        last_date = _dt.date.fromisoformat(cur['date'])
-        cutoff = (last_date - _dt.timedelta(days=730)).isoformat()
-        baseline_vals = np.array([s['value'] for s in series if s['date'] < cutoff])
-    except Exception:
-        baseline_vals = values
-    if len(baseline_vals) < 60:                     # 너무 짧으면 전체 사용
-        baseline_vals = values
-        baseline_window = 'all'
-    else:
-        baseline_window = 'pre-2y'
+    # percentile 계산: 거품 시기 포함 전체 panel 사용 (사용자 결정 2026-05-13).
+    # 이유: 사용자가 panel 자체 분포에서 현재 위치를 보고 싶어함 — 거품 시기 제외 시
+    # 평균이 인위적으로 낮아져 percentile 이 극단으로 치우치는 문제를 피하기보다
+    # 자연스러운 panel 전체 기준 percentile 노출 선호.
+    baseline_vals = values
+    baseline_window = 'all'
     top_pct = float((baseline_vals > cv).mean() * 100)
     top_abs_pct = float((np.abs(baseline_vals) > abs(cv)).mean() * 100)
     sign = 'bubble' if cv > 0 else ('compress' if cv < 0 else 'neutral')
