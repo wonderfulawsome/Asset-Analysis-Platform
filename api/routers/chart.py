@@ -17,10 +17,10 @@ _CACHE_SEC = 600  # 10분
 CHART_TICKERS = ['SPY', 'QQQ', 'DIA', 'IWM', 'VTI', 'VOO', 'SOXX', 'SMH',
                  'XLK', 'XLF', 'XLE', 'XLV', 'ARKK', 'GLD', 'TLT', 'SCHD']
 
-# 주요 KR ETF 목록 (pykrx, 6자리 종목코드)
+# 주요 KR ETF 목록 (pykrx, 6자리 종목코드).
+# 2026-05-14: TIGER 코스피200 (102110) 제거 — KODEX 200(069500) 과 중복 (사용자 결정).
 CHART_TICKERS_KR = [
     '069500',  # KODEX 200
-    '102110',  # TIGER 200
     '232080',  # TIGER 코스닥150
     '229200',  # KODEX 코스닥150
     '091160',  # KODEX 반도체

@@ -125,8 +125,9 @@ function getTickerLabel(ticker) {                  // 티커명 번역 조회
   return t('ticker.' + ticker) || ticker;          // 번역 없으면 티커 코드 반환
 }
 // 시장 탭 컨베이어 — region 별 ticker 목록 (US: SPY/QQQ 등, KR: KODEX/TIGER)
+// 2026-05-14: TIGER 코스피200 (102110) 제거 — KODEX 200 과 중복 (사용자 결정).
 const TICKER_LABELS_KEYS_US = ['SPY','QQQ','SOXX','BND','IWM','DIA'];
-const TICKER_LABELS_KEYS_KR = ['069500','102110','232080','091160','266420','341850'];
+const TICKER_LABELS_KEYS_KR = ['069500','232080','091160','266420','341850'];
 function _curRegion() { return (typeof window.getRegion === 'function') ? window.getRegion() : 'us'; }
 function TICKER_LABELS_KEYS_FN() {
   return _curRegion() === 'kr' ? TICKER_LABELS_KEYS_KR : TICKER_LABELS_KEYS_US;
@@ -137,7 +138,7 @@ const TICKER_LABELS_KEYS = TICKER_LABELS_KEYS_US;
 function getTickerLabels() {
   if (_curRegion() === 'kr') {
     return {
-      '069500': 'KODEX 200', '102110': 'TIGER 200', '232080': 'TIGER 코스닥150',
+      '069500': 'KODEX 200', '232080': 'TIGER 코스닥150',
       '091160': 'KODEX 반도체', '266420': 'KODEX 헬스케어', '341850': 'TIGER 리츠',
     };
   }
