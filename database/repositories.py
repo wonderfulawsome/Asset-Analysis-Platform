@@ -1481,31 +1481,38 @@ def fetch_sector_valuation_history(days: int = 365 * 5, region: str = 'us') -> l
 
 
 def fetch_sector_valuation_latest(region: str = 'us') -> list[dict]:
-    """가장 최근 date 의 섹터 밸류에이션 행. 테이블 미생성/빈 상태면 []."""
+    """각 ticker 별 가장 최근 date 의 섹터 밸류에이션 행.
+
+    옛 동작 — 전체 max date 단일 기준이라 일부 ticker (월별 백필) row 누락.
+    신규 동작 — ticker 별 max date 행을 모두 반환. 모든 ticker 가 노출됨.
+    테이블 미생성/빈 상태면 [].
+    """
     client = get_client()
     try:
-        last = (
+        # 최근 N일 (예: 180일) 의 모든 row 가져와 ticker 별 max date 행 추출.
+        # 180일 = 거래 lag 큰 ETF (월별 백필 + 거래량 적은 통신서비스 등) 까지 커버.
+        from datetime import datetime, timedelta
+        since = (datetime.utcnow() - timedelta(days=180)).date().isoformat()
+        response = (
             client.table("sector_valuation")
-            .select("date")
+            .select("*")
             .eq("region", region)
+            .gte("date", since)
             .order("date", desc=True)
-            .limit(1)
             .execute()
         )
     except Exception as e:
         print(f"[DB] sector_valuation 조회 실패 (테이블 없음 가능): {e}")
         return []
-    if not last.data:
+    if not response.data:
         return []
-    target = last.data[0]["date"]
-    response = (
-        client.table("sector_valuation")
-        .select("*")
-        .eq("region", region)
-        .eq("date", target)
-        .execute()
-    )
-    return response.data
+    # ticker 별 최신 row (date desc 정렬이라 첫 만남이 최신).
+    seen: dict[str, dict] = {}
+    for row in response.data:
+        t = row.get("ticker")
+        if t and t not in seen:
+            seen[t] = row
+    return list(seen.values())
 
 
 # ── valuation_signal (ERP / Fed Model) ─────────────────────────
