@@ -349,6 +349,56 @@ _RULES = {                                                        # 탭 키 → 
 }
 
 
+def _fmt_date(raw) -> Optional[str]:
+    """raw date 문자열을 'YYYY-MM-DD HH:MM' 형태로 표준화 (시각 없으면 YYYY-MM-DD 만)."""
+    if not raw:
+        return None
+    s = str(raw)
+    # ISO 형태 'YYYY-MM-DDTHH:MM:SS...' 또는 'YYYY-MM-DD HH:MM:SS' 또는 'YYYY-MM-DD'
+    s = s.replace('T', ' ')
+    if len(s) >= 16:
+        return s[:16]
+    return s[:10]
+
+
+def _collect_data_dates(region: str) -> dict:
+    """각 탭의 raw 데이터 갱신 일시 수집 — 사용자 노출용 'YYYY-MM-DD HH:MM'."""
+    dates: dict = {}
+    try:
+        r = fetch_noise_regime_current(region=region) or {}
+        dates['fundamental'] = _fmt_date(r.get('date'))
+    except Exception:
+        pass
+    try:
+        r = fetch_anomaly_current(region=region) or {}
+        dates['signal'] = _fmt_date(r.get('date'))
+    except Exception:
+        pass
+    try:
+        r = fetch_sector_cycle_latest(region=region) or {}
+        dates['sector'] = _fmt_date(r.get('date'))
+    except Exception:
+        pass
+    try:
+        rows = fetch_sector_valuation_latest(region=region) or []
+        if rows and isinstance(rows, list):
+            dates['sector-val'] = _fmt_date(rows[0].get('date'))
+    except Exception:
+        pass
+    # sector-mom 은 매크로 sp500_return 기반 (compute_sector_momentum 결과). macro_latest date 사용.
+    try:
+        r = fetch_macro_latest(region=region) or {}
+        dates['sector-mom'] = _fmt_date(r.get('date'))
+    except Exception:
+        pass
+    try:
+        r = fetch_valuation_signal_latest(region=region) or {}
+        dates['market-valuation'] = _fmt_date(r.get('date'))
+    except Exception:
+        pass
+    return dates
+
+
 def compute_all(region: str) -> dict:
     """8개 탭 헤드라인 전체 생성. 실패 항목은 fallback 메시지."""
     region = _norm_region(region)
@@ -360,6 +410,12 @@ def compute_all(region: str) -> dict:
             print(f"[tab_headline] {key}/{region} 실패: {e}")
             text = "데이터 일시 준비 중."
         out[key] = text
+    # 각 탭별 raw 데이터 갱신 일시 (사용자 표시용)
+    try:
+        out['data_dates'] = _collect_data_dates(region)
+    except Exception as e:
+        print(f"[tab_headline] data_dates 수집 실패: {e}")
+        out['data_dates'] = {}
     out['region'] = region
     out['generated_at'] = datetime.now(timezone(timedelta(hours=9))).strftime('%Y-%m-%d %H:%M')
     return out

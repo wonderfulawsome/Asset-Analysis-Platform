@@ -439,6 +439,14 @@ body {
 .tab-headline-box .tab-headline-text {
   vertical-align: middle;                           /* 칩과 정렬 맞춤 */
 }
+.tab-headline-box .tab-headline-date {
+  display: block;                                   /* 다음 줄로 분리 */
+  margin-top: 6px;                                  /* 본문과 간격 */
+  font-size: 10.5px;                                /* 작은 보조 텍스트 */
+  color: var(--sub2);                               /* 그레이 톤 */
+  font-weight: 400;                                 /* 일반 두께 */
+  letter-spacing: 0.1px;                            /* 가독성 */
+}
 .tab-headline-box.loading {
   opacity: 0.5;                                     /* 로딩 시 흐림 */
 }

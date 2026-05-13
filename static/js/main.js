@@ -2614,18 +2614,30 @@ window.recordTabSwitch = function(tabIdxOrName) {
   const TAB_KEYS = ['fundamental', 'signal', 'sector',
                     'sector-val', 'sector-mom', 'market-valuation'];
 
-  // 한 탭 div 에 텍스트 채움 + loading 클래스 제거
-  function renderText(key, text) {
+  // 한 탭 div 에 텍스트 채움 + 데이터 일시 부착 + loading 클래스 제거
+  function renderText(key, text, dataDate) {
     const el = document.getElementById('headline-' + key);
     if (!el) return;
     const span = el.querySelector('.tab-headline-text');
     if (span) span.textContent = text;
+    // 데이터 일시 표시 (있으면 작은 그레이 텍스트로 박스 내부에 추가)
+    let dateEl = el.querySelector('.tab-headline-date');
+    if (dataDate) {
+      if (!dateEl) {
+        dateEl = document.createElement('span');
+        dateEl.className = 'tab-headline-date';
+        el.appendChild(dateEl);
+      }
+      dateEl.textContent = '데이터 ' + dataDate;
+    } else if (dateEl) {
+      dateEl.remove();
+    }
     el.classList.remove('loading');
   }
 
   // 전체 실패 시 placeholder 메시지
   function renderFail(msg) {
-    TAB_KEYS.forEach(k => renderText(k, msg || '데이터 준비 중.'));
+    TAB_KEYS.forEach(k => renderText(k, msg || '데이터 준비 중.', null));
   }
 
   // /api/market-summary/tab-headline?region=... bulk 호출 → div 채움
@@ -2638,9 +2650,10 @@ window.recordTabSwitch = function(tabIdxOrName) {
       if (!res.ok) { renderFail(); return; }
       const data = await res.json();
       if (!data || typeof data !== 'object') { renderFail(); return; }
+      const dates = (data.data_dates && typeof data.data_dates === 'object') ? data.data_dates : {};
       TAB_KEYS.forEach(k => {
-        if (typeof data[k] === 'string') renderText(k, data[k]);
-        else renderText(k, '데이터 준비 중.');
+        if (typeof data[k] === 'string') renderText(k, data[k], dates[k] || null);
+        else renderText(k, '데이터 준비 중.', null);
       });
     } catch (e) {
       console.error('[tab-headline] load 실패:', e);
