@@ -3495,3 +3495,19 @@ html.splash-skip .splash { display: none !important; }
   padding: 0 0 4px;
 }
 
+/* ── sector-valuation 데이터 부족 ETF 라벨 ── */
+.sv-name.insufficient {
+  opacity: 0.7;                                    /* 회색 톤 */
+}
+.sv-data-warn {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(156, 163, 175, 0.15);
+  color: #9ca3af;
+  font-size: 9.5px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
