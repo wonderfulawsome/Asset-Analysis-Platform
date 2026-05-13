@@ -99,33 +99,50 @@ def _headline_market(region: str) -> str:
     return f"{idx_name} 오늘 {ret_f:+.2f}% 움직였어요. {speed}이에요."
 
 
-# ── 룰 3: 펀더멘털 — "실적 대비 주가 괴리 강도 + 풀이" ──
+# ── 룰 3: 펀더멘털 — "실적-주가 갭 percentile + 거품/저평가 방향" ──
+# /api/regime/fundamental-gap 의 top_pct + sign 사용 (화면 fundamental 탭 표시값과 동일).
+# top_pct = baseline 중 current 보다 큰 비율. bubble 사이드는 작을수록 극단(거품),
+# compress 사이드는 100-top_pct 가 작을수록 극단(저평가).
 def _headline_fundamental(region: str) -> str:
-    reg = fetch_noise_regime_current(region=region)               # Noise 국면 1행
-    if not reg:
+    try:
+        from api.routers.regime import get_fundamental_gap          # 지연 임포트 (순환 방지)
+        result = get_fundamental_gap(region=_norm_region(region), days=2520)
+    except Exception as e:
+        print(f"[tab_headline] fundamental gap fetch 실패: {e}")
         return "실적 국면 데이터 준비 중."
-    score = reg.get('noise_score')                                # 괴리 강도 (음수=괴리, 양수=정합)
-    fv = reg.get('feature_values') or {}                          # 8 피처 단위값
+    cur = (result or {}).get('current') if isinstance(result, dict) else None
+    if not cur:
+        return "실적 국면 데이터 준비 중."
+    tp_raw = cur.get('top_pct')                                      # 방향성 percentile (화면 표시값)
+    sign = cur.get('sign', 'neutral')                                # 'bubble'=주가 위, 'compress'=주가 아래
+    if tp_raw is None:
+        return "실적-주가 갭 데이터 부재."
     try:
-        s = float(score) if score is not None else 0.0
+        tp = float(tp_raw)
     except (TypeError, ValueError):
-        s = 0.0
-    # fundamental_gap = 실적 대비 주가 괴리 (절댓값 ≈ 표준편차 단위)
-    gap = fv.get('fundamental_gap')
-    try:
-        g = abs(float(gap)) if gap is not None else None
-    except (TypeError, ValueError):
-        g = None
-    gap_phrase = f"(실적-주가 갭 {g:.2f}σ)" if g is not None else ""
-    # noise_score 4분위 → 풀이
-    if s > 1:
-        return f"실적과 주가가 잘 맞물려 움직이는 정합 강한 구간{gap_phrase}. 실적이 가격에 충분히 반영된 상태이다."
-    elif s > 0:
-        return f"실적과 주가가 대체로 정합한 구간{gap_phrase}. 큰 괴리 없는 정상 상태이다."
-    elif s > -2:
-        return f"실적 대비 주가가 약간 따로 움직이는 약한 괴리 구간{gap_phrase}. 실적과 가격이 부분적으로 분리된 상태이다."
+        return "실적-주가 갭 데이터 파싱 실패."
+    # sign 별 "극단 percentile" 산출 — 화면 표시 방식 (작을수록 극단) 과 일치
+    if sign == 'bubble':
+        ep = round(tp, 1)                                            # bubble: top_pct 작을수록 큰 거품
+        dir_phrase = "주가가 실적보다 빠르게 오른"
+    elif sign == 'compress':
+        ep = round(100 - tp, 1)                                      # compress: bottom_pct (100-top_pct) 작을수록 큰 저평가
+        dir_phrase = "주가가 실적을 따라가지 못한"
     else:
-        return f"실적과 주가가 크게 따로 움직이는 큰 괴리 구간{gap_phrase}. 실적보다 심리가 가격을 끌고 가는 상태이다."
+        ep = 50.0
+        dir_phrase = ""
+    # 5단계 분기 (ep 작을수록 극단)
+    if ep <= 5:
+        return f"실적과 주가가 매우 크게 따로 움직이는 구간 (상위 {ep}% 이내, {dir_phrase} 큰 괴리). 실적보다 심리가 가격을 끌고 가는 상태이다."
+    elif ep <= 15:
+        return f"실적과 주가가 따로 움직이는 드문 괴리 구간 (상위 {ep}%, {dir_phrase} 상태). 실적이 가격에 부분적으로만 반영된 상태이다."
+    elif ep <= 30:
+        suffix = f" {dir_phrase} 상태이다." if dir_phrase else ""
+        return f"실적과 주가 사이에 약한 괴리가 있는 구간 (상위 {ep}%).{suffix}"
+    elif ep <= 70:
+        return f"실적과 주가가 평소 수준의 거리감을 유지하는 구간 (상위 {ep}%). 큰 괴리 없는 정상 상태이다."
+    else:
+        return f"실적과 주가가 가까운 정합 구간 (상위 {ep}%, 평소보다 잔잔). 실적이 가격에 잘 반영된 상태이다."
 
 
 # ── 룰 4: 평소 이탈도 — "평소 대비 이탈 강도 percentile + 빈도 풀이" ──
@@ -192,13 +209,23 @@ def _headline_sector(region: str) -> str:
     return f"{vstate}. {phase_meaning} 국면이다."
 
 
-# ── 룰 6: 섹터 밸류에이션 — "비싼 섹터 / 싼 섹터" ──────────────
+# ── 룰 6: 섹터 밸류에이션 — "PER 10년 평균 대비 위/아래" (자문 가치판단 X) ─────
+# DB sector_valuation 테이블은 per_z 미보관 → endpoint compute_valuation_payload() 호출.
+# 자문 회피: "싸다/비싸다/고평가/저평가" 표현 X. descriptive 사실만 ("평균 위/아래", "z 1σ 이상").
 def _headline_sector_val(region: str) -> str:
-    rows = fetch_sector_valuation_latest(region=region)           # 섹터 밸류 최신 행들
+    try:
+        from api.routers.sector_cycle import compute_valuation_payload   # 지연 임포트
+        payload = compute_valuation_payload(region=_norm_region(region))
+    except Exception as e:
+        print(f"[tab_headline] sector_val payload 실패: {e}")
+        return "섹터 밸류에이션 데이터 준비 중."
+    rows = (payload or {}).get('valuations') if isinstance(payload, dict) else None
     if not rows:
-        return "섹터 밸류 데이터 준비 중."
-    highs = []                                                    # 고평가 (z>+1)
-    lows = []                                                     # 저평가 (z<-1)
+        return "섹터 밸류에이션 데이터 준비 중."
+    above = []                                                    # z>0 (PER 평균 위)
+    below = []                                                    # z<0 (PER 평균 아래)
+    above_1sig = 0                                                # z≥1
+    below_1sig = 0                                                # z≤-1
     for r in rows:
         z = r.get('per_z') if r.get('per_z') is not None else r.get('per_weighted_z')
         if z is None:
@@ -208,21 +235,27 @@ def _headline_sector_val(region: str) -> str:
         except (TypeError, ValueError):
             continue
         label = r.get('sector_name') or r.get('ticker') or '?'
-        if zf > 1:
-            highs.append((label, zf))
-        elif zf < -1:
-            lows.append((label, zf))
-    n_high, n_low = len(highs), len(lows)
-    if n_high == 0 and n_low == 0:
-        return "10년 평균 대비 가격 차이 큰 섹터 0개. 모든 섹터가 평소 가격대에 있는 정상 상태이다."
+        if zf > 0:
+            above.append((label, zf))
+            if zf >= 1.0:
+                above_1sig += 1
+        elif zf < 0:
+            below.append((label, zf))
+            if zf <= -1.0:
+                below_1sig += 1
+    n_above, n_below = len(above), len(below)
+    if n_above == 0 and n_below == 0:
+        return "10년 평균 대비 모든 섹터가 평소 수준의 PER 을 유지하는 상태이다."
     parts = []
-    if n_high:
-        top = max(highs, key=lambda x: x[1])
-        parts.append(f"평소보다 비싼 섹터 {n_high}개 (1σ↑, 최고 {top[0]})")
-    if n_low:
-        bot = min(lows, key=lambda x: x[1])
-        parts.append(f"평소보다 싼 섹터 {n_low}개 (1σ↓, 최저 {bot[0]})")
-    return "10년 평균 대비 " + ", ".join(parts) + " 상태이다."
+    if n_above:
+        top = max(above, key=lambda x: x[1])
+        strong = f", 그중 1σ 이상 {above_1sig}개" if above_1sig else ""
+        parts.append(f"PER 이 10년 평균 위 섹터 {n_above}개 (편차 가장 큰 곳 {top[0]}{strong})")
+    if n_below:
+        bot = min(below, key=lambda x: x[1])
+        strong = f", 그중 1σ 이상 {below_1sig}개" if below_1sig else ""
+        parts.append(f"PER 이 10년 평균 아래 섹터 {n_below}개 (편차 가장 큰 곳 {bot[0]}{strong})")
+    return ", ".join(parts) + " 상태이다."
 
 
 # ── 룰 7: 섹터 모멘텀 — "이번 달 가장 많이 오른/내린 섹터" ──────
