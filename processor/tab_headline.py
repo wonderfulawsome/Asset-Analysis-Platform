@@ -103,7 +103,7 @@ def _headline_market(region: str) -> str:
 def _headline_fundamental(region: str) -> str:
     reg = fetch_noise_regime_current(region=region)               # Noise 국면 1행
     if not reg:
-        return "펀더멘털 국면 데이터 준비 중."
+        return "실적 국면 데이터 준비 중."
     score = reg.get('noise_score')                                # 괴리 강도 (음수=괴리, 양수=정합)
     fv = reg.get('feature_values') or {}                          # 8 피처 단위값
     try:
@@ -119,13 +119,13 @@ def _headline_fundamental(region: str) -> str:
     gap_phrase = f"(실적-주가 갭 {g:.2f}σ)" if g is not None else ""
     # noise_score 4분위 → 풀이
     if s > 1:
-        return f"실적과 주가가 잘 맞물려 움직이는 정합 강한 구간{gap_phrase}. 펀더멘털이 가격에 충분히 반영된 상태이다."
+        return f"실적과 주가가 잘 맞물려 움직이는 정합 강한 구간{gap_phrase}. 실적이 가격에 충분히 반영된 상태이다."
     elif s > 0:
         return f"실적과 주가가 대체로 정합한 구간{gap_phrase}. 큰 괴리 없는 정상 상태이다."
     elif s > -2:
-        return f"실적 대비 주가가 약간 따로 움직이는 약한 괴리 구간{gap_phrase}. 펀더멘털과 가격이 부분적으로 분리된 상태이다."
+        return f"실적 대비 주가가 약간 따로 움직이는 약한 괴리 구간{gap_phrase}. 실적과 가격이 부분적으로 분리된 상태이다."
     else:
-        return f"실적과 주가가 크게 따로 움직이는 큰 괴리 구간{gap_phrase}. 펀더멘털보다 심리가 가격을 끌고 가는 상태이다."
+        return f"실적과 주가가 크게 따로 움직이는 큰 괴리 구간{gap_phrase}. 실적보다 심리가 가격을 끌고 가는 상태이다."
 
 
 # ── 룰 4: 평소 이탈도 — "평소 대비 이탈 강도 percentile + 빈도 풀이" ──
