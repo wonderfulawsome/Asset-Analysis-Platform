@@ -718,42 +718,18 @@ def get_home_headline(lang: str = Query('ko'), region: str = Query('us')):
     lang = lang if lang in ('ko', 'en') else 'ko'
     region = _norm_region(region)
     err = _ERR_MSGS[lang]
-    key = _cache_key(lang, region)
     now = time.time()
 
-    disable_groq = os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
-
-    if not disable_groq:
-        # 1) in-memory hot cache (TTL 만료 전이면 가장 빠름)
-        with _headline_lock:
-            c = _headline_cache.get(key)
-            if c and c['summary'] and now < c['expires']:
-                return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
-
-        # 2) DB 캐시 (스케줄러 미리 생성한 row)
-        try:
-            row = fetch_ai_headline(region, lang)
-            if row and row.get('summary'):
-                with _headline_lock:
-                    _headline_cache[key] = {
-                        'summary': row['summary'],
-                        'generated_at': row.get('generated_at'),
-                        'expires': now + _AI_TTL,
-                    }
-                return {'summary': row['summary'],
-                        'generated_at': row.get('generated_at'),
-                        'cached': True, 'source': 'db'}
-        except Exception as e:
-            print(f'[Home Headline] DB 조회 실패: {e}')
-
-    # 3) rule-based fallback — 3개 데이터 (RSI 과매수/과매도 + 지수 일일 수익률 + 펀더멘털 반영도)
+    # 사용자 요청 (2026-05-13): home-headline 은 *항상* rule-based brief 사용.
+    # LLM 응답 / DB cache 모두 우회 — 환경(local/Railway) 무관 동일 결과 보장.
+    # 3개 데이터: RSI 과매수/과매도 + 지수 일일 수익률 + 펀더멘털-주가 갭 차이 상위 N% 위치.
     try:
         head = _build_home_brief(lang, region) or (err.get('no_data') or '지표 동기화 후 표시.')
         return {'summary': head, 'generated_at': _kst_now_str(),
-                'cached': False, 'source': 'fallback'}
+                'cached': False, 'source': 'brief'}
     except Exception as e:
         print(f'[Home Headline] brief 빌드 실패: {e}')
-        return {'summary': err['no_data'], 'error': True, 'cached': False, 'source': 'cache_miss'}
+        return {'summary': err['no_data'], 'error': True, 'cached': False, 'source': 'brief_error'}
 
 
 def _build_home_brief(lang: str, region: str) -> str:
