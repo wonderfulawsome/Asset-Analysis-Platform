@@ -720,29 +720,40 @@ def get_home_headline(lang: str = Query('ko'), region: str = Query('us')):
     key = _cache_key(lang, region)
     now = time.time()
 
-    # 1) in-memory hot cache (TTL 만료 전이면 가장 빠름)
-    with _headline_lock:
-        c = _headline_cache.get(key)
-        if c and c['summary'] and now < c['expires']:
-            return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
+    disable_groq = os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
 
-    # 2) DB 캐시 (스케줄러 미리 생성한 row)
+    if not disable_groq:
+        # 1) in-memory hot cache (TTL 만료 전이면 가장 빠름)
+        with _headline_lock:
+            c = _headline_cache.get(key)
+            if c and c['summary'] and now < c['expires']:
+                return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
+
+        # 2) DB 캐시 (스케줄러 미리 생성한 row)
+        try:
+            row = fetch_ai_headline(region, lang)
+            if row and row.get('summary'):
+                with _headline_lock:
+                    _headline_cache[key] = {
+                        'summary': row['summary'],
+                        'generated_at': row.get('generated_at'),
+                        'expires': now + _AI_TTL,
+                    }
+                return {'summary': row['summary'],
+                        'generated_at': row.get('generated_at'),
+                        'cached': True, 'source': 'db'}
+        except Exception as e:
+            print(f'[Home Headline] DB 조회 실패: {e}')
+
+    # 3) rule-based fallback — _fallback_ai_summary 의 첫 두 라인으로 짧은 헤드라인 구성
     try:
-        row = fetch_ai_headline(region, lang)
-        if row and row.get('summary'):
-            with _headline_lock:
-                _headline_cache[key] = {
-                    'summary': row['summary'],
-                    'generated_at': row.get('generated_at'),
-                    'expires': now + _AI_TTL,
-                }
-            return {'summary': row['summary'],
-                    'generated_at': row.get('generated_at'),
-                    'cached': True, 'source': 'db'}
-    except Exception as e:
-        print(f'[Home Headline] DB 조회 실패: {e}')
-
-    return {'summary': err['no_data'], 'error': True, 'cached': False, 'source': 'cache_miss'}
+        full = _fallback_ai_summary(lang, region)
+        lines = [l for l in (full or '').splitlines() if l.strip()]
+        head = '\n'.join(lines[:2]) if lines else (err.get('no_data') or '지표 동기화 후 표시됩니다.')
+        return {'summary': head, 'generated_at': _kst_now_str(),
+                'cached': False, 'source': 'fallback'}
+    except Exception:
+        return {'summary': err['no_data'], 'error': True, 'cached': False, 'source': 'cache_miss'}
 
 
 @router.get('/ai-summary')                                   # GET /api/market-summary/ai-summary
@@ -758,31 +769,36 @@ def get_ai_summary(background_tasks: BackgroundTasks,
     err = _ERR_MSGS[lang]
     key = _cache_key(lang, region)
     now = time.time()
-    # 1차: in-memory cache hit
-    with _ai_lock:
-        c = _ai_cache.get(key)
-        if c and c['summary'] and now < c['expires']:
-            return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
-    # 2차: DB (app_cache) hit
-    try:
-        payload = fetch_app_cache(_ai_summary_cache_key(lang, region))
-        if payload and payload.get('summary'):
-            with _ai_lock:
-                _ai_cache[key] = {
-                    'summary': payload['summary'],
-                    'generated_at': payload.get('generated_at'),
-                    'expires': now + _AI_TTL,
-                }
-            return {**payload, 'cached': True, 'source': 'app_cache'}
-    except Exception as e:
-        print(f'[AI Summary] DB read 실패 (계속 진행): {e}')
+    # DISABLE_GROQ=true: 옛 LLM 캐시(in-memory/DB) 완전 무시하고 매번 fresh fallback 으로
+    disable_groq = os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
+    if not disable_groq:
+        # 1차: in-memory cache hit
+        with _ai_lock:
+            c = _ai_cache.get(key)
+            if c and c['summary'] and now < c['expires']:
+                return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
+        # 2차: DB (app_cache) hit
+        try:
+            payload = fetch_app_cache(_ai_summary_cache_key(lang, region))
+            if payload and payload.get('summary'):
+                with _ai_lock:
+                    _ai_cache[key] = {
+                        'summary': payload['summary'],
+                        'generated_at': payload.get('generated_at'),
+                        'expires': now + _AI_TTL,
+                    }
+                return {**payload, 'cached': True, 'source': 'app_cache'}
+        except Exception as e:
+            print(f'[AI Summary] DB read 실패 (계속 진행): {e}')
     # 3차: cache miss → 즉시 fallback 응답 + 백그라운드 LLM 생성 (다음 요청용 캐시)
     try:
         fallback = _fallback_ai_summary(lang, region)
     except Exception as e:
         print(f'[AI Summary] fallback error: {e}')
         fallback = err.get('fail') or '현재 지표 기준으로 시장 상황을 점검 중입니다.'
-    background_tasks.add_task(_bg_generate_summary, lang, region)
+    # DISABLE_GROQ=true: 백그라운드 LLM 생성 등록 안 함 (LLM 호출 0 강제)
+    if os.getenv('DISABLE_GROQ', '').lower() not in ('true', '1', 'yes'):
+        background_tasks.add_task(_bg_generate_summary, lang, region)
     return {'summary': fallback, 'generated_at': _kst_now_str(),
             'cached': False, 'source': 'fallback'}
 
@@ -1164,48 +1180,65 @@ def _fallback_ai_summary(lang: str, region: str) -> str:
             phase_tag = f" / cycle {phase}" if phase else ""
             line4 = f"🎯 Overall — {summary}{phase_tag}."
         else:
-            sent_emoji = '🔥' if is_greed else ('❄️' if is_fear else '⚖️')
-            sent_body = (
-                f"공포탐욕지수 {round(float(fg_score))} ({fg_label})"
-                if fg_score is not None else "심리 지표 수집 중"
-            )
-            line1 = f"{sent_emoji} 시장 심리 — {sent_body} 입니다."
-            an_emoji = '📈' if is_high_distance else ('📊' if is_low_distance else '📉')
-            an_body = (
-                f"D² {d2}"
-                + (f", 10년 분포 내 상위 {top_pct}% 위치" if top_pct is not None else "")
-                if d2 is not None else "이상도 데이터 수집 중"
-            )
-            line2 = f"{an_emoji} 평소 이탈도 — {an_body} 입니다."
-            ns_body = (
-                f"이성 점수 {_fmt_signed(ns, 2)} ({'이성' if (ns or 0) >= 0 else '감정'} 우위)"
-                if ns is not None else "이성 점수 수집 중"
-            )
-            line3 = f"🧭 펀더멘털 — {ns_body} 입니다."
+            # ── 오늘 한눈에 (핵심 수치 묶음) ──
+            parts = []
+            if fg_score is not None:
+                parts.append(f"공포탐욕 {round(float(fg_score))} ({fg_label})")
+            if top_pct is not None:
+                parts.append(f"시장 이탈도 상위 {top_pct}%")
+            if ns is not None:
+                ns_dir = '이성 쪽' if (ns or 0) >= 0 else '감정 쪽'
+                parts.append(f"이성 점수 {_fmt_signed(ns, 2)} ({ns_dir})")
+            if phase:
+                parts.append(f"경기국면 {phase}")
+            line1 = "[오늘 한눈에] " + (", ".join(parts) if parts else "지표 수집 중") + "."
+
+            # ── 데이터가 만들어진 이유 (각 변수가 결과에 어떻게 기여했는지) ──
+            why_bits = []
+            if fg_score is not None:
+                if is_greed:
+                    why_bits.append("심리 지표는 탐욕 영역으로 군중 매수세가 강한 상태")
+                elif is_fear:
+                    why_bits.append("심리 지표는 공포 영역으로 군중 매수세가 약해진 상태")
+                else:
+                    why_bits.append("심리 지표는 중립 영역에 위치한 상태")
+            if top_pct is not None:
+                if is_high_distance:
+                    why_bits.append(f"시장 이탈도는 10년 분포 상위 {top_pct}%로 평소 패턴과 거리가 먼 위치")
+                elif is_low_distance:
+                    why_bits.append(f"시장 이탈도는 10년 분포 하위 {100 - top_pct:.0f}%로 평소 범위 안에 위치")
+                else:
+                    why_bits.append(f"시장 이탈도는 10년 중간대(상위 {top_pct}%)에 위치")
+            if ns is not None:
+                if (ns or 0) >= 0:
+                    why_bits.append("이성 점수는 양수로 주가가 펀더멘털을 잘 반영하는 구간")
+                else:
+                    why_bits.append("이성 점수는 음수로 주가와 펀더멘털 사이에 분리가 있는 구간")
+            line2 = "[왜 이런 결과] " + ". ".join(why_bits) + "." if why_bits else "[왜 이런 결과] 지표 분석 중."
+
+            # ── 종합 (현재 구간 라벨) ──
             if is_greed and is_high_distance:
-                summary = "탐욕 심리와 평소에서 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격*"
+                regime_label = "탐욕 심리와 펀더멘털 분리가 동시에 관측되는 동반 이격 구간"
             elif is_fear and is_high_distance:
-                summary = "공포 심리와 평소에서 멀리 떨어진 시장 상태가 동시에 관측되는 *교과서적 동반 이격*"
+                regime_label = "공포 심리와 펀더멘털 분리가 동시에 관측되는 동반 이격 구간"
             elif is_low_distance:
-                summary = "오늘 시장 상태는 10년 평소 분포 중심 부근 — 심리가 오늘의 주된 차별 변수"
+                regime_label = "전반 지표가 10년 평소 분포 중심 부근에 있는 균형 구간"
             elif is_greed or is_fear:
-                summary = "심리는 한쪽으로 기운 반면 시장 상태는 평소 분포 중간 위치 — 부분 정렬"
+                regime_label = "심리는 한쪽으로 기울었으나 시장 전체는 평소 범위 안에 머문 부분 정렬 구간"
             else:
-                summary = "지표들이 현재 스냅샷에서 공존하는 상태 — 방향 추정이 아닌 상태 기록"
-            phase_tag = f" / 경기국면 {phase}" if phase else ""
-            line4 = f"🎯 종합 — {summary}{phase_tag} 상태입니다."
+                regime_label = "지표들이 균형 있게 공존하는 중립 구간"
+            line3 = f"[현재 구간] {regime_label}."
+
+            return "\n".join([line1, line2, line3])
 
         return "\n".join([line1, line2, line3, line4])
     except Exception:
         if lang == 'en':
-            return ("❄️ Market Sentiment — sentiment data loading.\n"
-                    "📊 Anomaly Distance — anomaly data loading.\n"
-                    "🧭 Fundamentals — rationality data loading.\n"
-                    "🎯 Overall — commentary using the latest numeric snapshot.")
-        return ("❄️ 시장 심리 — 심리 데이터 수집 중입니다.\n"
-                "📊 평소 이탈도 — 이상도 데이터 수집 중입니다.\n"
-                "🧭 펀더멘털 — 이성 점수 수집 중입니다.\n"
-                "🎯 종합 — 현재 지표 기준 스냅샷으로 안내 중입니다.")
+            return ("Today — indicators loading.\n"
+                    "Context — distribution position will appear once data syncs.")
+        return ("[오늘 한눈에] 지표 데이터 수집 중입니다.\n"
+                "[왜 이런 결과] 데이터 동기화 후 표시됩니다.\n"
+                "[현재 구간] 분석 준비 중입니다.")
 
 
 # 기술 변수명 → (한국어 라벨, 의미, 왜 모델에 영향 주는지). LLM 미가용 fallback 에서 사용.
@@ -1417,25 +1450,37 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                     "no direction inferred."
                 )
             else:
-                zone = ('추월 영역 (가격 > 이익)' if sign == 'bubble' else
-                        '압축 영역 (가격 < 이익)' if sign == 'compress' else
-                        '균형 (펀더멘털 반영)')
+                zone = ('가격이 이익을 추월한 구간' if sign == 'bubble' else
+                        '이익이 가격을 추월한 구간' if sign == 'compress' else
+                        '가격과 이익이 비슷한 속도인 구간')
+                outpace_str = f"{_fmt_signed(outpace, 1)}%" if outpace is not None else '-'
                 block1 = (
-                    f"[데이터 요약] 펀더멘털 갭: {_fmt_signed(value, 4)}.\n"
-                    f"분포 위치: 상위 {top_pct}% (표본 {stats.get('count')}개, {zone}).\n"
-                    f"1년 가격이 이익을 추월한 정도: {_fmt_signed(outpace, 1) if outpace is not None else '-'}%.\n"
-                    f"분포 통계 — 평균 {stats.get('mean')}, 중앙값 {stats.get('median')}, "
-                    f"최저 {stats.get('min')}, 최고 {stats.get('max')}."
+                    f"[오늘 한눈에] 최근 1년 동안 가격이 이익을 {outpace_str} 추월했으며, {zone}입니다.\n"
+                    f"이 격차는 10년 표본({stats.get('count')}개) 중 상위 {top_pct}% 위치입니다."
                 )
-                block2 = (
-                    "[주요 변수 설명]\n"
-                    "  - 가격(P) 1년 log 수익률과 이익(E) 1년 log 수익률 — 두 변화율 차이가 "
-                    "가격이 이익 대비 얼마나 빠르게 움직였는지 분리해서 보여줍니다.\n"
-                    "  - P 가 E 보다 빠르면(양수 갭) P/E 배수가 확장, E 가 P 보다 빠르면(음수 갭) 압축됩니다."
-                )
+                # 영향 큰 두 변수 (가격, 이익) 의 1년 변화율 풀이
+                if value is not None and outpace is not None:
+                    if sign == 'bubble':
+                        impact = (
+                            "주가는 빠르게 올랐는데 기업 이익은 그만큼 따라오지 못해 둘 사이 격차가 벌어진 상태"
+                            "다 보니, 자연스럽게 P/E 배수가 평소보다 확장되었습니다"
+                        )
+                    elif sign == 'compress':
+                        impact = (
+                            "기업 이익이 가격보다 빠르게 늘어 P/E 배수가 평소보다 압축된 상태로, "
+                            "가격이 이익을 충분히 반영하지 못하고 있는 구간입니다"
+                        )
+                    else:
+                        impact = (
+                            "가격과 이익이 비슷한 속도로 움직여 P/E 배수가 평소 범위 안에 머무는 균형 구간입니다"
+                        )
+                else:
+                    impact = "데이터 동기화 후 영향 분석 표시됩니다"
+                block2 = f"[왜 이 결과] {impact}."
                 block3 = (
-                    "[인사이트] 오늘 값은 가격-이익 추월 또는 압축이 과거 분포의 어느 위치에 있는지 "
-                    "사실 기록일 뿐이며, 방향 예측은 포함하지 않습니다."
+                    f"[참고] 10년 분포에서 평균 {stats.get('mean')}, 중앙값 {stats.get('median')}, "
+                    f"범위 {stats.get('min')} ~ {stats.get('max')}. "
+                    f"오늘 위치(상위 {top_pct}%)는 사실 기록으로, 향후 방향은 알 수 없습니다."
                 )
             return f"{block1}\n\n{block2}\n\n{block3}"
 
@@ -1490,18 +1535,21 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                     "a textbook 'how-different-from-usual' state, with no direction inferred."
                 )
             else:
+                d2_str = f"{d2}" if d2 is not None else '-'
                 block1 = (
-                    f"[데이터 요약] 평소와의 거리(D²): {d2 if d2 is not None else '-'}.\n"
-                    f"위치: 10년 분포 내 상위 {top_pct}%"
-                    f" / 90일 분위 {pct_90d}.\n"
-                    f"주된 기여 지표: {contrib_str}.\n"
-                    f"유사 과거 시점: {knn_str}.\n"
-                    f"요약: 오늘 평소와의 거리는 10년 상위 {top_pct}% 위치입니다."
+                    f"[오늘 한눈에] 시장 이탈도(D²) {d2_str}, 10년 분포 상위 {top_pct}% 위치입니다.\n"
+                    f"오늘 거리를 끌어올린 주된 변수: {contrib_str}."
                 )
-                block2 = f"[주요 변수 설명 — 왜 거리 계산에 들어가는지]\n{why_lines}"
+                # 변수 풀이 (왜 이 변수들이 거리를 키웠는지)
+                if why_lines and why_lines != '-':
+                    impact_lines = why_lines.replace('  - ', '- ')
+                    block2 = f"[왜 이 결과]\n{impact_lines}"
+                else:
+                    block2 = "[왜 이 결과] 데이터 동기화 후 영향 분석 표시됩니다."
                 block3 = (
-                    "[인사이트] 위 지표들이 함께 가리키는 *교과서적* 패턴은 오늘 시장 상태가 10년 평소 분포와 얼마나 떨어졌는지의 "
-                    "복합 거리이며, '평소와의 거리' 사실 기록일 뿐 방향 예측은 포함하지 않습니다."
+                    f"[참고] 비슷한 거리가 관측됐던 과거 시점: {knn_str}. "
+                    "거리 수치는 오늘 시장이 10년 평소 패턴과 얼마나 떨어졌는지의 사실 기록이며, "
+                    "이후 방향은 알 수 없습니다."
                 )
             return f"{block1}\n\n{block2}\n\n{block3}"
 
@@ -1540,18 +1588,26 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                 )
             else:
                 block1 = (
-                    f"[데이터 요약] 경기 국면: {phase}.\n"
-                    f"매크로 스냅샷: {macro_str}.\n"
-                    f"함께 거론되는 섹터: {sectors}.\n"
-                    f"요약: 매크로 지표 종합 결과 현재는 {phase} 국면 위치입니다."
+                    f"[오늘 한눈에] 현재 경기 국면은 '{phase}'으로 분류됩니다.\n"
+                    f"이 판단의 근거가 된 매크로 지표: {macro_str}."
                 )
-                block2 = (
-                    "[주요 변수 설명 — 왜 모델에 영향을 주는지]\n"
-                    "  - 매크로 지표(수익률 곡선·성장·물가)는 총수요와 공급의 위치를 추적하기 때문에 경기 국면 분류의 핵심 입력으로 들어갑니다."
-                )
+                # 매크로 지표가 어떻게 국면 분류에 영향을 주는지 풀이
+                impact_bits = []
+                if 'pmi' in str(ms).lower() or 'PMI' in macro_str:
+                    impact_bits.append("제조업 PMI는 50을 기준으로 확장(>50)/수축(<50)을 가른 신호")
+                if '금리차' in macro_str or 'yield' in macro_str.lower():
+                    impact_bits.append("장단기 금리차는 경기 사이클 위치(역전 시 둔화·정상화 시 회복)를 비춥니다")
+                if '금융환경' in macro_str:
+                    impact_bits.append("금융환경지수는 자금 시장의 스트레스 정도를 한 수치로 요약합니다")
+                if '실업' in macro_str:
+                    impact_bits.append("실업청구 변화는 고용 시장의 단기 흐름을 보여줍니다")
+                if not impact_bits:
+                    impact_bits.append("위 매크로 지표들의 조합이 현재 경기 국면 분류 결과에 영향을 주었습니다")
+                block2 = "[왜 이 결과] " + ". ".join(impact_bits) + "."
                 block3 = (
-                    f"[인사이트] {phase} 국면에서는 위 섹터들이 거시 사이클 문헌상 *교과서적*으로 함께 거론되는 동조 패턴이며, "
-                    f"이는 사실 기록일 뿐 추천이 아닙니다."
+                    f"[함께 거론되는 섹터] {sectors}. "
+                    f"'{phase}' 국면에서는 위 섹터들이 거시 사이클 문헌상 자주 함께 거론되는 동조 패턴 — "
+                    "사실 기록일 뿐 추천 정보가 아닙니다."
                 )
             return f"{block1}\n\n{block2}\n\n{block3}"
 
@@ -1589,19 +1645,18 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                 )
             else:
                 block1 = (
-                    f"[데이터 요약] 섹터별 PER 의 5년 평균 대비 위치 ('평균 대비 +X%' 형태).\n"
-                    f"평균 대비 가장 높은 위치: {high_str}.\n"
-                    f"평균 대비 가장 낮은 위치: {low_str}.\n"
-                    f"요약: 위 수치는 상대 위치 기록일 뿐입니다."
+                    f"[오늘 한눈에] 섹터별 PER이 각 섹터의 5년 평균에서 얼마나 떨어져 있는지를 본 결과입니다.\n"
+                    f"평균보다 높은 쪽: {high_str}.\n"
+                    f"평균보다 낮은 쪽: {low_str}."
                 )
                 block2 = (
-                    "[주요 변수 설명 — 왜 의미 있는지]\n"
-                    "  - PER 의 평균 대비 차이는 오늘의 주가/이익 비율을 *각 섹터 자체의 평소 범위* 안에서 표준화해 보여주기 때문에 "
-                    "절대 수준과 무관한 상대 위치 프레임이 됩니다."
+                    "[왜 이 결과] PER 자체의 절대 수준은 섹터마다 차이가 커서 그대로 비교하면 의미가 흐려집니다. "
+                    "그래서 각 섹터의 *자기 5년 평소 PER* 을 기준으로 오늘 위치를 표준화해 보여줍니다. "
+                    "같은 +50%라도 변동성 큰 섹터엔 흔하고, 안정 섹터엔 드문 거리입니다."
                 )
                 block3 = (
-                    "[인사이트] 이 프레임은 각 섹터가 *자기 평소 범위* 안에서 어디에 있는지를 사실로 기록합니다. "
-                    "상대 위치 기록일 뿐 고평가·저평가 판단이나 매수·매도 신호가 아닙니다."
+                    "[참고] 위 수치는 각 섹터가 자기 평소 범위 안에서 어디에 있는지의 상대 위치 기록입니다. "
+                    "고평가·저평가 판단이나 매수·매도 신호가 아닙니다."
                 )
             return f"{block1}\n\n{block2}\n\n{block3}"
 
@@ -1637,18 +1692,17 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                 )
             else:
                 block1 = (
-                    f"[데이터 요약] 1주일 섹터 모멘텀.\n"
-                    f"상위: {top_str}.\n"
-                    f"하위: {bot_str}.\n"
-                    f"요약: 순위는 과거 1주일 섹터 수익률 기준입니다."
+                    f"[오늘 한눈에] 최근 1주일 섹터별 수익률 순위입니다.\n"
+                    f"가장 많이 오른 섹터: {top_str}.\n"
+                    f"가장 많이 내린 섹터: {bot_str}."
                 )
                 block2 = (
-                    "[주요 변수 설명 — 왜 모델에 영향을 주는지]\n"
-                    "  - 1주 수익률 순위는 표준적인 단기 로테이션 지표로, 최근 1주간 또래 대비 더 움직인 섹터를 잡아내는 *실현 성과* 정보입니다."
+                    "[왜 이 결과] 1주 수익률 순위는 단기 자금이 어느 섹터로 쏠리고 어디서 빠졌는지를 그대로 보여주는 지표입니다. "
+                    "최근 5거래일 사이 또래 섹터 대비 더 움직인 곳이 위쪽, 덜 움직였거나 빠진 곳이 아래쪽에 자리합니다."
                 )
                 block3 = (
-                    "[인사이트] 상위 섹터가 현재 경기 국면과 정렬되는지/배반하는지가 *교과서적* 동조 또는 괴리 패턴이며, "
-                    "이는 사실 정보일 뿐 방향 예측을 포함하지 않습니다."
+                    "[참고] 위 순위는 *이미 실현된* 1주일 성과의 사실 기록입니다. "
+                    "현재 경기 국면과 어떻게 어우러지는지 비교용으로만 쓰이며, 향후 방향을 예측하지는 않습니다."
                 )
             return f"{block1}\n\n{block2}\n\n{block3}"
     except Exception as e:
@@ -1677,17 +1731,23 @@ def get_ai_explain(background_tasks: BackgroundTasks,
     now = time.time()
     cache_key = f'explain_{tab}_{lang}_{region}'             # region 별 캐시 분리
 
-    # 1차: in-memory cache (TTL 안)
-    with _explain_lock:
-        cached = _explain_cache.get(cache_key)
-        if cached and now < cached.get('expires', 0):
-            return {'explanation': _format_explain_blocks(cached['text']), 'tab': tab, 'cached': True}
+    # DISABLE_GROQ=true: 옛 LLM 캐시(in-memory/DB) 우회하고 매번 fresh fallback
+    disable_groq = os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
 
-    # 2차: DB cache (스케줄러 미리 적재)
-    try:
-        row = fetch_ai_explain(tab, lang, region)
-    except Exception as e:
-        print(f'[AI Explain {tab}/{lang}/{region}] DB read 실패 (계속 진행): {e}')
+    if not disable_groq:
+        # 1차: in-memory cache (TTL 안)
+        with _explain_lock:
+            cached = _explain_cache.get(cache_key)
+            if cached and now < cached.get('expires', 0):
+                return {'explanation': _format_explain_blocks(cached['text']), 'tab': tab, 'cached': True}
+
+        # 2차: DB cache (스케줄러 미리 적재)
+        try:
+            row = fetch_ai_explain(tab, lang, region)
+        except Exception as e:
+            print(f'[AI Explain {tab}/{lang}/{region}] DB read 실패 (계속 진행): {e}')
+            row = None
+    else:
         row = None
     if row and row.get('explanation'):
         formatted = _format_explain_blocks(row['explanation'])
@@ -1707,7 +1767,8 @@ def get_ai_explain(background_tasks: BackgroundTasks,
     # fallback 은 _explain_cache 에 *짧게* 저장하지 않는다 — 다음 요청은 BG 결과나 DB 를
     # 다시 확인하도록 두어, BG 가 끝나는 즉시 LLM 결과로 자연 교체되게 함.
     fallback = _fallback_ai_explain(tab, lang, region)
-    background_tasks.add_task(_bg_generate_explain, tab, lang, region)
+    if not disable_groq:
+        background_tasks.add_task(_bg_generate_explain, tab, lang, region)
     return {
         'explanation': fallback or err['no_data'],
         'tab': tab,

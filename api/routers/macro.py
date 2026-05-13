@@ -147,22 +147,27 @@ _VAL_SIG_PROMPT = """/no_think
 2. **원인 분석** — input 의 "_가장_영향_큰_점수" 의 원인을 raw 값(PER, 국채금리, VIX,
    하락폭)과 5년 평균을 비교해 한 문장
    (예: "주가수익비율 28배로 평소 대비 다소 높음, 국채금리 4.35%도 상대적으로 높은 수준이라 주식 매력도가 낮아진 상태").
-3. 보조 요인 한마디 + 신중한 액션 검토 제안 (관망 검토 / 분할 매수 검토 / 방어 비중 확대 검토 등).
+3. 보조 요인 한마디 + *현재 상태 기록* 한마디 (위치/구간/특성 묘사로 마무리).
+
+자문 가드 (절대 위반 금지):
+- 매수/매도/추천/관망/분할 매수/방어/공격/비중 확대/비중 축소/포지션/포트폴리오/타이밍 단어 금지
+- "~ 검토", "~ 검토 여지", "~ 고려" 같은 액션 제안 표현 금지
+- 미래 방향 추정("~상승할", "~하락할", "~이어질 가능성") 금지
 
 규칙:
-- **명사형 종결**: "~요/~다/~합니다" 금지. "~함/~임/~는 상태/~수준/~검토" 식 명사형으로 끝낼 것
-- **중립적·신중한 어투**: "~ 깎였어요/미루세요/매력적입니다" 같은 단언 금지.
-  "다소 ~한 수준/~ 검토 여지/~ 가능성 있음" 식 신중한 표현 사용
+- **명사형 종결**: "~요/~다/~합니다" 금지. "~함/~임/~는 상태/~수준/~위치" 식 명사형으로 끝낼 것
+- **중립적·신중한 어투**: 단언("~ 매력적입니다", "~ 매력 없음") 금지.
+  "~ 한 수준", "~ 위치", "~ 구간", "~ 상태", "~ 패턴" 식 상태 기록 표현만 사용
 - 공식·영문 약어(z, σ, ERP, composite) 금지. PER·VIX 정도는 한글 풀이 후 사용 가능
 - 마크다운·이모지 금지
 
-좋은 예시 (명사형 + 신중):
+좋은 예시 (명사형 + 상태 기록):
 "종합 점수 -0.63점, '다소 고평가' 영역. 주가수익비율 28배로 평소 대비 다소 높고
 국채금리 4.35%도 상대적으로 높은 수준이라 주식 매력도 점수가 낮아진 상태. 60일
-하락폭은 평소보다 작아 위기 신호 부재, 적극 매수보다는 관망 검토 여지."
+하락폭은 평소보다 작아 위기 신호 부재한 구간."
 
-나쁜 예시 (단언/~요체 — 피할 것):
-"종합 점수 -0.63점으로 다소 고평가입니다. PER 28배라 비싸진 시기예요. 분할 매수는 미루세요." """
+나쁜 예시 (단언/액션 제안 — 절대 피할 것):
+"종합 점수 -0.63점으로 다소 고평가입니다. 분할 매수 검토 여지." """
 
 _val_sig_cache = {'data': None, 'ts': 0}  # cache reload trigger 2026-05-10d kr-10y
 _VAL_SIG_TTL = 24 * 3600
@@ -245,7 +250,7 @@ def build_valuation_interpretation(today: dict, baselines: dict) -> str:
     except Exception as e:
         print(f'[valuation_signal] LLM 실패: {e}')
 
-    # 2) 룰베이스 fallback
+    # 2) 룰베이스 fallback — 자문 표현 0, 친근/이해 쉬운 톤
     label = today.get('label', '')
     per   = today.get('spy_per') or 0
     tnx_p = (today.get('tnx_yield') or 0) * 100
@@ -257,26 +262,49 @@ def build_valuation_interpretation(today: dict, baselines: dict) -> str:
     buffett_v = today.get('buffett_ratio')
     trend_v   = today.get('price_vs_ma200')
     if dom_name == '주식 매력도 점수':
-        cause = f"주가수익비율(PER) {per:.1f}배 + 국채금리 {tnx_p:.2f}% 조합으로 주식 매력도 점수가 5년 평균 대비 낮은 수준"
+        cause = (
+            f"주가수익비율(PER) {per:.1f}배와 국채금리 {tnx_p:.2f}% 조합이 점수를 가장 크게 끌었습니다. "
+            f"PER이 높을수록 같은 이익에 비해 가격이 비싼 구간이고, 국채금리가 높을수록 안전자산 수익이 좋아 주식의 상대 매력이 줄어드는 구조"
+        )
     elif dom_name == '공포 점수':
-        cause = f"공포지수(VIX) {vix_v:.1f}, 5년 평균 {m_vix:.1f} 대비 시장 분위기가 한쪽으로 치우친 상태"
+        cause = (
+            f"공포지수(VIX) {vix_v:.1f}, 5년 평균 {m_vix:.1f} 대비 시장 분위기가 한쪽으로 치우친 상태. "
+            f"VIX는 옵션 시장이 향후 변동성을 어떻게 보는지의 가격이라 위험 인식을 직접 보여줍니다"
+        )
     elif dom_name == 'CAPE 점수' and cape_v is not None:
-        cause = f"Shiller CAPE {cape_v:.1f}배 — 15년 분포 대비 구조적 밸류에이션이 두드러지는 수준"
+        cause = (
+            f"Shiller CAPE {cape_v:.1f}배 — 10년 평균 이익으로 계산한 장기 PER이 15년 분포에서 도드라진 위치. "
+            f"단기 이익 흔들림을 평활화한 지표라 구조적 밸류에이션 위치를 보여줍니다"
+        )
     elif dom_name == 'Buffett 점수' and buffett_v is not None:
-        cause = f"시가총액/GDP 비율 {buffett_v*100:.0f}% — 장기 균형 대비 영향이 큰 수준"
+        cause = (
+            f"시가총액/GDP 비율 {buffett_v*100:.0f}% — 한 나라 주식 시장 전체 규모가 경제 규모 대비 얼마나 크게 잡혀 있는지의 비율. "
+            f"장기 균형 수준과의 차이가 점수에 크게 반영되는 상태"
+        )
     elif dom_name == '추세 점수' and trend_v is not None:
-        cause = f"S&P500 200일선 대비 {trend_v*100:+.1f}% — 장기 추세선과의 괴리가 점수에 크게 반영"
+        cause = (
+            f"S&P500 200일 평균선 대비 현재 위치 {trend_v*100:+.1f}%. "
+            f"장기 추세선과 현재 가격 사이의 괴리가 점수에 크게 반영되고 있는 구간"
+        )
     elif dom_name == '장기 PER 점수':
-        cause = f"15년 PER 분포 대비 현재 수준이 종합 점수에 가장 크게 기여"
+        cause = (
+            f"15년 PER 분포 대비 현재 수준이 종합 점수에 가장 크게 기여하고 있는 상태. "
+            f"긴 기간 동안의 PER 위치를 한 줄로 표준화한 지표"
+        )
     else:
-        cause = f"최근 60일 하락폭 {dd_p:+.2f}%, 5년 평균 {m_dd:+.2f}% 대비 영향이 두드러지는 수준"
+        cause = (
+            f"최근 60일 고점 대비 하락폭 {dd_p:+.2f}%, 5년 평균 {m_dd:+.2f}% 대비 영향이 두드러지는 수준. "
+            f"단기 가격 충격 폭이 평소와 얼마나 다른지가 점수에 크게 반영된 구간"
+        )
     if '명확한 저평가' in label:
-        return f"종합 점수 {z_comp_now:+.2f}점, '명확한 저평가' 영역. {cause}. 분할 매수 검토 여지 있음."
-    if '다소 저평가' in label:
-        return f"종합 점수 {z_comp_now:+.2f}점, '다소 저평가' 영역. {cause}. 관심 종목 점진 매수 검토 여지."
-    if '명확한 고평가' in label:
-        return f"종합 점수 {z_comp_now:+.2f}점, '명확한 고평가' 영역. {cause}. 현금·채권 비중 확대 검토 권장."
-    return f"종합 점수 {z_comp_now:+.2f}점, '다소 고평가' 영역. {cause}. 관망 또는 방어 비중 확대 검토 여지."
+        regime = "주식이 5년 평균 대비 상대적으로 싸게 보이는 *명확한 저평가* 구간"
+    elif '다소 저평가' in label:
+        regime = "주식이 5년 평균 대비 다소 싸게 보이는 *다소 저평가* 구간"
+    elif '명확한 고평가' in label:
+        regime = "주식이 5년 평균 대비 상대적으로 비싸게 보이는 *명확한 고평가* 구간"
+    else:
+        regime = "주식이 5년 평균 대비 다소 비싸게 보이는 *다소 고평가* 구간"
+    return f"종합 점수 {z_comp_now:+.2f}점, {regime}. {cause}."
 
 
 @router.get('/valuation-signal')
@@ -297,9 +325,12 @@ def get_valuation_signal(
     now = _time.time()
     # region+days 별 캐시키 분리 (days 다른 호출은 별도 캐시)
     cache_key = f'data_{region}_{days}'
+    import os as _os_v
+    disable_groq = _os_v.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
     cached = _val_sig_cache.get(cache_key)
     cached_ts = _val_sig_cache.get(f'ts_{region}_{days}', 0)
-    if cached and (now - cached_ts) < _VAL_SIG_TTL:
+    # DISABLE_GROQ=true: in-memory cache 도 우회 — 매번 fresh rule-based fallback
+    if cached and (now - cached_ts) < _VAL_SIG_TTL and not disable_groq:
         return {**cached, 'cached': True}
 
     try:
@@ -315,8 +346,8 @@ def get_valuation_signal(
     if not today:
         return {'error': 'no data'}
 
-    # DB 에 사전 적재된 값 우선
-    interpretation = today.get('interpretation')
+    # DB 에 사전 적재된 값 우선 — 단, DISABLE_GROQ=true 면 옛 LLM 응답 무시하고 fresh rule-based 강제
+    interpretation = None if disable_groq else today.get('interpretation')
     baseline_snapshot = today.get('baseline_snapshot')
 
     # baseline snapshot — DB 의 stored snapshot 은 옛 cron 시점 weights 가 박혀 있을
