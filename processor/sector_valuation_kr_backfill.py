@@ -44,9 +44,8 @@ def backfill_sector_valuations_kr(months: int = 60) -> int:
     for ticker in SECTOR_ETF_KR.keys():
         per_today, pbr_today, sector_name = today_map.get(
             ticker, (None, None, SECTOR_ETF_KR[ticker]['en_name']))
-        if per_today is None and pbr_today is None:
-            print(f"[KR-backfill] {ticker} today PER/PBR 둘 다 None — skip")
-            continue
+        # PER/PBR null 인 ticker 도 row 적재 (per=null, pbr=null) — frontend "-" 표시 위해
+        # skip 하면 endpoint 응답에 누락되어 사용자 화면에서 ticker 자체 안 보임.
 
         try:
             df = _etf_ohlcv_dual_source(ticker, days)

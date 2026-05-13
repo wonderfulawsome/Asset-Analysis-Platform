@@ -70,7 +70,7 @@
     XLRE: '부동산',
     XLC:  '커뮤니케이션',
     XLP:  '필수소비재',
-    // KR — KODEX/TIGER 섹터 ETF
+    // KR — KODEX/TIGER 섹터 ETF (기존 10개)
     '139260': 'IT',
     '091160': '반도체',
     '300610': '게임',
@@ -81,6 +81,15 @@
     '117680': '철강',
     '341850': '리츠',
     '227560': '필수소비재',
+    // KR — 한국 특유 신규 8개 (2026-05-14)
+    '401170': '방산',
+    '305720': '2차전지',
+    '466920': '조선',
+    '244620': '바이오',
+    '228810': '미디어',
+    '117700': '건설',
+    '098560': '통신',
+    '445290': '로봇',
   };
   const krSector = (ticker, fallback) => SECTOR_KR[ticker] || fallback || ticker;
 
@@ -234,14 +243,8 @@
         sourceText = `PER 가중평균 = ETF 보유 종목별 PER 을 비중 가중평균. 10년 평균과 현재값 비교.`;
         rowsHtml = data.valuations.map(v => {
           const fgCol = colorByZ(v.per_z);
-          const histN = v.hist_n ?? 0;
-          const insufficient = histN < 36;
-          const warn = insufficient
-            ? `<span class="sv-data-warn">데이터 부족 (${histN}개월)</span>`
-            : '';
-          const nameClass = insufficient ? 'sv-name insufficient' : 'sv-name';
           return `
-            <div class="${nameClass}">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span>${warn}</div>
+            <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
             <div class="sv-cell" style="text-align:right;color:#9ca3af;">${fmtPer(v.per_mean)}</div>
             <div class="sv-cell" style="background:${fgCol};">${fmtPer(v.per)}</div>`;
         }).join('');

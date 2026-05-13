@@ -6,6 +6,13 @@ from __future__ import annotations
 
 import datetime as _dt
 
+# .env 자동 로드 (KRX_ID/KRX_PW 등 환경변수 의존)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 NEW_TICKERS = {
     '401170': 'K-방산',
     '305720': '2차전지산업',

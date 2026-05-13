@@ -347,17 +347,14 @@ def fetch_sector_etf_per_pbr_kr(today: date | None = None) -> list[dict]:
         pbr_val, pbr_cov = _weighted_avg(holdings, stock_fund, 'pbr')
         avg_cov = (per_cov + pbr_cov) / 2
 
-        # holdings/PER 이 전혀 없을 때만 KOSPI 평균 fallback.
-        # 낮은 coverage 라도 섹터별 대표 종목에서 산출된 PER 이 있으면 유지한다.
+        # 사용자 결정 (2026-05-14): KOSPI 평균 fallback 적재 X — 모든 ticker 가 같은 27.5 로
+        # 묶여 시각상 잘못된 정보 노출. coverage 0% 면 per/pbr=null 적재 + frontend "-" 표시.
         if per_val is None:
-            per_val = market_per
-            pbr_val = market_pbr
             fallback_count += 1
-            print(f'[sector_valuation_kr] {ticker} fallback (coverage {avg_cov*100:.0f}%)')
+            print(f'[sector_valuation_kr] {ticker} per_val None — null 적재 (coverage {avg_cov*100:.0f}%)')
         else:
             coverage_list.append(avg_cov)
-            if pbr_val is None:
-                pbr_val = market_pbr
+            # pbr_val 은 None 이면 그대로 None — KOSPI fallback X
 
         out.append({
             'date': today_str,
