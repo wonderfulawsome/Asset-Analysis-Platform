@@ -263,11 +263,11 @@ def _build_indicator_text(lang='ko', region: str = 'us'):
             elif ns_val > 0:
                 interp = '대체로 펀더멘털 반영 중'
             elif ns_val > -2:
-                interp = '주가와 펀더멘털 사이 괴리 존재 (감정적 시장)'
+                interp = '주가와 펀더멘털 사이 분리 존재'
             else:
-                interp = '주가와 펀더멘털이 크게 괴리됨 (감정 지배)'
-            lines.append(f"시장 이성 점수: {ns} → {interp}")
-            lines.append(f"  (양수일수록 이성적/펀더멘털 반영, 음수가 클수록 감정적/괴리)")
+                interp = '주가와 펀더멘털이 크게 분리됨'
+            lines.append(f"펀더멘털 반영도: {ns} → {interp}")
+            lines.append(f"  (양수일수록 정렬/펀더멘털 반영, 음수가 클수록 분리)")
     # 이상 탐지 (평소와의 거리 D²) — 신호 탭 crash/surge 폐기되고 anomaly 차트로 교체된 이후 정합 데이터 source.
     an = fetch_anomaly_current(region=region)
     if an:
@@ -749,7 +749,7 @@ def get_home_headline(lang: str = Query('ko'), region: str = Query('us')):
     try:
         full = _fallback_ai_summary(lang, region)
         lines = [l for l in (full or '').splitlines() if l.strip()]
-        head = '\n'.join(lines[:2]) if lines else (err.get('no_data') or '지표 동기화 후 표시됩니다.')
+        head = '\n'.join(lines[:2]) if lines else (err.get('no_data') or '지표 동기화 후 표시.')
         return {'summary': head, 'generated_at': _kst_now_str(),
                 'cached': False, 'source': 'fallback'}
     except Exception:
@@ -795,7 +795,7 @@ def get_ai_summary(background_tasks: BackgroundTasks,
         fallback = _fallback_ai_summary(lang, region)
     except Exception as e:
         print(f'[AI Summary] fallback error: {e}')
-        fallback = err.get('fail') or '현재 지표 기준으로 시장 상황을 점검 중입니다.'
+        fallback = err.get('fail') or '현재 지표 기준으로 시장 상황 점검 중.'
     # DISABLE_GROQ=true: 백그라운드 LLM 생성 등록 안 함 (LLM 호출 0 강제)
     if os.getenv('DISABLE_GROQ', '').lower() not in ('true', '1', 'yes'):
         background_tasks.add_task(_bg_generate_summary, lang, region)
@@ -1255,80 +1255,77 @@ def _fallback_ai_summary(lang: str, region: str) -> str:
         return "\n".join([line1, line2, line3, line4])
     except Exception:
         if lang == 'en':
-            return ("Today — indicators loading.\n"
-                    "Context — distribution position will appear once data syncs.")
-        return ("[오늘 한눈에] 지표 데이터 수집 중입니다.\n"
-                "[왜 이런 결과] 데이터 동기화 후 표시됩니다.\n"
-                "[현재 구간] 분석 준비 중입니다.")
+            return "Market snapshot loading — indicators syncing."
+        return "오늘 시장 스냅샷 수집 중. 지표 동기화 후 표시."
 
 
 # 기술 변수명 → (한국어 라벨, 의미, 왜 모델에 영향 주는지). LLM 미가용 fallback 에서 사용.
 # 한자 절대 미사용 — 한글/영문/숫자/기호만.
 _FEATURE_LABEL_KO = {
     'hy_spread':       ('하이일드 스프레드', '신용 위험 프리미엄',
-                        '회사채 위험이 커지면 자금 경색을 시사해 시장 스트레스 신호로 산입됩니다'),
+                        '회사채 위험이 커지면 자금 경색을 시사해 시장 스트레스 신호로 산입됨'),
     'vix_term':        ('VIX 텀 구조', '단기/장기 변동성 비',
-                        '단기 변동성이 장기보다 빠르게 오르면 임박한 위험 우려를 반영합니다'),
+                        '단기 변동성이 장기보다 빠르게 오르면 임박한 위험 우려를 반영'),
     'erp_zscore':      ('주식 위험 프리미엄 z-점수', '수익률에서 무위험 금리를 뺀 표준화값',
-                        '주식이 채권 대비 얼마나 비싸/싸 보이는지를 z-점수로 표준화하여 모델에 들어갑니다'),
+                        '주식이 채권 대비 얼마나 비싸/싸 보이는지를 z-점수로 표준화하여 모델에 들어감'),
     'fundamental_gap': ('펀더멘털 갭', '실적과 가격의 괴리',
-                        '실적 대비 가격이 멀어지면 펀더멘털과 분리된 움직임으로 해석되어 점수에 산입됩니다'),
+                        '실적 대비 가격이 멀어지면 펀더멘털과 분리된 움직임으로 해석되어 점수에 산입됨'),
     'residual_corr':   ('잔차 상관', '개별주 동조 강도',
-                        '개별주가 시장 평균을 빼고 나서도 함께 움직이면 군집·쏠림이 큰 상태로 평가됩니다'),
+                        '개별주가 시장 평균을 빼고 나서도 함께 움직이면 군집·쏠림이 큰 상태로 평가됨'),
     'dispersion':      ('종목 분산', '수익률 격차',
-                        '종목 간 수익률 격차가 클수록 단일 거시 요인에 휩쓸리는 정도가 줄어든 상태로 산입됩니다'),
+                        '종목 간 수익률 격차가 클수록 단일 거시 요인에 휩쓸리는 정도가 줄어든 상태로 산입됨'),
     'amihud':          ('유동성 비용', '체결 충격 비용',
-                        '체결 시 가격 충격이 클수록 유동성이 얕아진 상태를 반영합니다'),
+                        '체결 시 가격 충격이 클수록 유동성이 얕아진 상태를 반영'),
     'realized_vol':    ('실현 변동성', '실제 가격 진동',
-                        '실제로 관측된 가격 진동 크기로 시장 흔들림을 그대로 반영합니다'),
+                        '실제로 관측된 가격 진동 크기로 시장 흔들림을 그대로 반영'),
     'vix':             ('VIX', '공포 지수',
-                        '옵션 시장이 가격에 반영한 향후 변동성 기대치라 위험 인식을 직접 보여줍니다'),
+                        '옵션 시장이 가격에 반영한 향후 변동성 기대치라 위험 인식을 직접 보여주는 지표'),
     'rsi':             ('RSI', '상대 강도 지수',
-                        '상승/하락 폭의 비율로 단기 과열·과매도 정도를 수치화한 표준 모멘텀 지표입니다'),
+                        '상승/하락 폭의 비율로 단기 과열·과매도 정도를 수치화한 표준 모멘텀 지표'),
     'fear_greed':      ('공포탐욕지수', '심리 지표',
-                        '여러 시장 지표를 묶어 만든 종합 심리 점수로 군중 심리 위치를 표현합니다'),
+                        '여러 시장 지표를 묶어 만든 종합 심리 점수로 군중 심리 위치를 표현'),
     'credit_spread':   ('신용 스프레드', '회사채 위험 프리미엄',
-                        '회사채와 국채의 금리 차로, 자금 시장 신뢰도를 반영합니다'),
+                        '회사채와 국채의 금리 차로, 자금 시장 신뢰도를 반영'),
     'yield_curve':     ('수익률 곡선', '장단기 금리차',
-                        '장기 금리에서 단기 금리를 뺀 값으로, 경기 사이클 위치를 반영합니다'),
+                        '장기 금리에서 단기 금리를 뺀 값으로, 경기 사이클 위치를 반영'),
     # 거시경제(섹터) 탭 매크로 지표 ── US 10
     'pmi':             ('제조업 PMI', '50 기준 확장/수축',
-                        'PMI 가 50 이상이면 일반적으로 제조업 활동 확장 신호로 해석되어 경기 국면 분류 입력으로 쓰입니다'),
+                        'PMI 가 50 이상이면 일반적으로 제조업 활동 확장 신호로 해석되어 경기 국면 분류 입력으로 쓰임'),
     'yield_spread':    ('장단기 금리차', '10Y-3M 스프레드',
-                        '장기 금리에서 단기 금리를 뺀 값으로 경기 사이클 위치(역전 시 둔화·역전 해소 시 회복)를 반영합니다'),
+                        '장기 금리에서 단기 금리를 뺀 값으로 경기 사이클 위치(역전 시 둔화·역전 해소 시 회복)를 반영'),
     'anfci':           ('금융환경지수', '신용·유동성 통합 스트레스',
-                        '신용·유동성·위험 지표를 하나로 합친 값으로 자금시장 환경을 한 수치로 요약합니다'),
+                        '신용·유동성·위험 지표를 하나로 합친 값으로 자금시장 환경을 한 수치로 요약'),
     'icsa_yoy':        ('신규실업수당 청구 YoY', '고용 시장 변화',
-                        '일자리 손실 속도를 추적해 경기 둔화/확장의 단기 신호로 쓰입니다'),
+                        '일자리 손실 속도를 추적해 경기 둔화/확장의 단기 신호로 쓰임'),
     'permit_yoy':      ('주택 착공허가 YoY', '주거 투자 선행',
-                        '미래 건설 활동의 선행 지표로 거시 사이클 진입을 예고합니다'),
+                        '미래 건설 활동의 선행 지표로 거시 사이클 진입을 예고'),
     'real_retail_yoy': ('실질 소매판매 YoY', '가계 소비 모멘텀',
-                        '인플레이션 보정 후 가계 소비 흐름으로 경기 확장 강도를 반영합니다'),
+                        '인플레이션 보정 후 가계 소비 흐름으로 경기 확장 강도를 반영'),
     'capex_yoy':       ('설비투자 YoY', '기업 투자',
-                        '기업의 미래 생산 능력 확장 의지를 반영해 사이클 후반 강도 지표로 쓰입니다'),
+                        '기업의 미래 생산 능력 확장 의지를 반영해 사이클 후반 강도 지표로 쓰임'),
     'real_income_yoy': ('실질 가처분 소득 YoY', '가계 구매력',
-                        '인플레이션 보정 후 가계 소득 흐름으로 소비 여력의 기반을 보여줍니다'),
+                        '인플레이션 보정 후 가계 소득 흐름으로 소비 여력의 기반을 보여줌'),
     'pmi_chg3m':       ('PMI 3개월 변화', 'PMI 모멘텀',
-                        '단기 변화율로 사이클 전환점 신호를 잡아내는 보조 지표입니다'),
+                        '단기 변화율로 사이클 전환점 신호를 잡아내는 보조 지표'),
     'capex_yoy_chg3m': ('설비투자 3개월 변화', '투자 모멘텀',
-                        '기업 투자 흐름의 단기 변화율을 추적합니다'),
+                        '기업 투자 흐름의 단기 변화율을 추적'),
     # KR 8
     'kr_indpro_yoy':   ('한국 산업생산 YoY', '제조업 산출량',
-                        '한국 제조업 산출량의 전년 동기 대비 변화로 한국 사이클 위치를 반영합니다'),
+                        '한국 제조업 산출량의 전년 동기 대비 변화로 한국 사이클 위치를 반영'),
     'kr_yield_spread': ('한국 장단기 금리차', '사이클 위치',
-                        '한국 국채의 장단기 금리차로 한국 경기 사이클 위치를 반영합니다'),
+                        '한국 국채의 장단기 금리차로 한국 경기 사이클 위치를 반영'),
     'kr_credit_spread':('한국 신용 스프레드', '자금 시장 신뢰도',
-                        '한국 회사채-국채 금리차로 한국 자금시장 환경을 보여줍니다'),
+                        '한국 회사채-국채 금리차로 한국 자금시장 환경을 보여줌'),
     'kr_unemp_rate':   ('한국 실업률', '고용 여건',
-                        '한국 노동시장 여유 정도로 가계 구매력의 기반을 반영합니다'),
+                        '한국 노동시장 여유 정도로 가계 구매력의 기반을 반영'),
     'kr_permit_yoy':   ('한국 주택 착공허가 YoY', '주거 투자 선행',
-                        '한국 미래 건설 활동의 선행 지표입니다'),
+                        '한국 미래 건설 활동의 선행 지표'),
     'kr_retail_yoy':   ('한국 소매판매 YoY', '가계 소비',
-                        '한국 가계 소비 흐름의 전년 대비 변화입니다'),
+                        '한국 가계 소비 흐름의 전년 대비 변화'),
     'kr_capex_yoy':    ('한국 설비투자 YoY', '기업 투자',
-                        '한국 기업의 설비 투자 흐름입니다'),
+                        '한국 기업의 설비 투자 흐름'),
     'kr_cpi_yoy':      ('한국 소비자물가 YoY', '인플레이션',
-                        '한국 소비자물가 상승률로 통화정책·기업 마진과 연동됩니다'),
+                        '한국 소비자물가 상승률로 통화정책·기업 마진과 연동됨'),
 }
 _FEATURE_LABEL_EN = {
     'hy_spread':       ('high-yield spread', 'credit risk premium',
@@ -1471,39 +1468,28 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                     "no direction inferred."
                 )
             else:
-                zone = ('가격이 이익을 추월한 구간' if sign == 'bubble' else
-                        '이익이 가격을 추월한 구간' if sign == 'compress' else
-                        '가격과 이익이 비슷한 속도인 구간')
                 outpace_str = f"{_fmt_signed(outpace, 1)}%" if outpace is not None else '-'
-                block1 = (
-                    f"[오늘 한눈에] 최근 1년 동안 가격이 이익을 {outpace_str} 추월했으며, {zone}입니다.\n"
-                    f"이 격차는 10년 표본({stats.get('count')}개) 중 상위 {top_pct}% 위치입니다."
-                )
-                # 영향 큰 두 변수 (가격, 이익) 의 1년 변화율 풀이
-                if value is not None and outpace is not None:
-                    if sign == 'bubble':
-                        impact = (
-                            "주가는 빠르게 올랐는데 기업 이익은 그만큼 따라오지 못해 둘 사이 격차가 벌어진 상태"
-                            "다 보니, 자연스럽게 P/E 배수가 평소보다 확장되었습니다"
-                        )
-                    elif sign == 'compress':
-                        impact = (
-                            "기업 이익이 가격보다 빠르게 늘어 P/E 배수가 평소보다 압축된 상태로, "
-                            "가격이 이익을 충분히 반영하지 못하고 있는 구간입니다"
-                        )
-                    else:
-                        impact = (
-                            "가격과 이익이 비슷한 속도로 움직여 P/E 배수가 평소 범위 안에 머무는 균형 구간입니다"
-                        )
+                gap_str = f"{_fmt_signed(value, 4)}" if value is not None else '-'
+                bits = []
+                bits.append("① 입력 데이터")
+                bits.append(f"   - 최근 1년 가격이 이익을 추월한 정도: {outpace_str}")
+                bits.append(f"   - 펀더멘털 갭 (가격 log수익률 − 이익 log수익률): {gap_str}")
+                bits.append("② 분포 비교")
+                bits.append(f"   - 과거 10년 동안 매일 측정한 {stats.get('count')}개 표본을 수집")
+                bits.append(f"   - 오늘 값은 그 분포의 상위 {top_pct}% 위치 (낮을수록 드문 위치)")
+                bits.append(f"   - 표본 평균 {stats.get('mean')}, 중앙값 {stats.get('median')}, 범위 {stats.get('min')} ~ {stats.get('max')}")
+                bits.append("③ 결과 해석")
+                if sign == 'bubble':
+                    bits.append("   - 주가가 이익보다 빠르게 올라 둘 사이 격차가 벌어진 *가격 추월* 구간")
+                    bits.append("   - P/E 배수가 평소보다 확장된 상태로 이어짐")
+                elif sign == 'compress':
+                    bits.append("   - 이익이 가격보다 빠르게 늘어 둘 사이 격차가 좁아진 *이익 추월* 구간")
+                    bits.append("   - P/E 배수가 평소보다 압축된 상태로 이어짐")
                 else:
-                    impact = "데이터 동기화 후 영향 분석 표시됩니다"
-                block2 = f"[왜 이 결과] {impact}."
-                block3 = (
-                    f"[참고] 10년 분포에서 평균 {stats.get('mean')}, 중앙값 {stats.get('median')}, "
-                    f"범위 {stats.get('min')} ~ {stats.get('max')}. "
-                    f"오늘 위치(상위 {top_pct}%)는 사실 기록으로, 향후 방향은 알 수 없습니다."
-                )
-            return f"{block1}\n\n{block2}\n\n{block3}"
+                    bits.append("   - 가격과 이익이 비슷한 속도로 움직인 균형 구간")
+                    bits.append("   - P/E 배수가 평소 범위 안에 머문 상태")
+                body = "[결과 요인]\n" + "\n".join(bits)
+                return body
 
         if tab == 'signal':
             an = fetch_anomaly_current(region=region) or {}
@@ -1557,22 +1543,29 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                 )
             else:
                 d2_str = f"{d2}" if d2 is not None else '-'
-                block1 = (
-                    f"[오늘 한눈에] 시장 이탈도(D²) {d2_str}, 10년 분포 상위 {top_pct}% 위치입니다.\n"
-                    f"오늘 거리를 끌어올린 주된 변수: {contrib_str}."
-                )
-                # 변수 풀이 (왜 이 변수들이 거리를 키웠는지)
-                if why_lines and why_lines != '-':
-                    impact_lines = why_lines.replace('  - ', '- ')
-                    block2 = f"[왜 이 결과]\n{impact_lines}"
+                bits = []
+                bits.append("① 입력 데이터 (오늘 시장 변수 묶음)")
+                if top_n:
+                    for c in top_n:
+                        nm = _ko_feature(c.get('name', '?'), lang)
+                        contrib_val = _fmt_signed(c.get('contribution', 0), 2)
+                        bits.append(f"   - {nm} 기여도: {contrib_val}")
                 else:
-                    block2 = "[왜 이 결과] 데이터 동기화 후 영향 분석 표시됩니다."
-                block3 = (
-                    f"[참고] 비슷한 거리가 관측됐던 과거 시점: {knn_str}. "
-                    "거리 수치는 오늘 시장이 10년 평소 패턴과 얼마나 떨어졌는지의 사실 기록이며, "
-                    "이후 방향은 알 수 없습니다."
-                )
-            return f"{block1}\n\n{block2}\n\n{block3}"
+                    bits.append("   - 기여 데이터 수집 중")
+                bits.append("② 거리 계산")
+                bits.append(f"   - 모든 변수의 기여를 합쳐 오늘 시장이 평소 패턴과 떨어진 거리 산정 → D² = {d2_str}")
+                bits.append(f"③ 분포 비교")
+                bits.append(f"   - 10년 분포 내 상위 {top_pct}% 위치 (낮을수록 평소와 거리가 먼 드문 위치)")
+                bits.append(f"   - 90일 분위 {pct_90d} (단기 비교용 보조 위치)")
+                if top_n:
+                    bits.append("④ 변수 의미 풀이")
+                    for c in top_n:
+                        why = _ko_feature_why(c.get('name', '?'), lang)
+                        bits.append(f"   - {why}")
+                if knn_str and knn_str != '-':
+                    bits.append(f"⑤ 비슷한 거리가 관측된 과거 시점: {knn_str}")
+                body = "[결과 요인]\n" + "\n".join(bits)
+                return body
 
         if tab == 'sector':
             sc = fetch_sector_cycle_latest(region=region) or {}
@@ -1608,29 +1601,88 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                     f"macro-cycle literature — a co-occurrence record, not a recommendation."
                 )
             else:
-                block1 = (
-                    f"[오늘 한눈에] 현재 경기 국면은 '{phase}'으로 분류됩니다.\n"
-                    f"이 판단의 근거가 된 매크로 지표: {macro_str}."
-                )
-                # 매크로 지표가 어떻게 국면 분류에 영향을 주는지 풀이
-                impact_bits = []
-                if 'pmi' in str(ms).lower() or 'PMI' in macro_str:
-                    impact_bits.append("제조업 PMI는 50을 기준으로 확장(>50)/수축(<50)을 가른 신호")
-                if '금리차' in macro_str or 'yield' in macro_str.lower():
-                    impact_bits.append("장단기 금리차는 경기 사이클 위치(역전 시 둔화·정상화 시 회복)를 비춥니다")
-                if '금융환경' in macro_str:
-                    impact_bits.append("금융환경지수는 자금 시장의 스트레스 정도를 한 수치로 요약합니다")
-                if '실업' in macro_str:
-                    impact_bits.append("실업청구 변화는 고용 시장의 단기 흐름을 보여줍니다")
-                if not impact_bits:
-                    impact_bits.append("위 매크로 지표들의 조합이 현재 경기 국면 분류 결과에 영향을 주었습니다")
-                block2 = "[왜 이 결과] " + ". ".join(impact_bits) + "."
-                block3 = (
-                    f"[함께 거론되는 섹터] {sectors}. "
-                    f"'{phase}' 국면에서는 위 섹터들이 거시 사이클 문헌상 자주 함께 거론되는 동조 패턴 — "
-                    "사실 기록일 뿐 추천 정보가 아닙니다."
-                )
-            return f"{block1}\n\n{block2}\n\n{block3}"
+                bits = []
+                bits.append("① 매크로 지표별 수치 + 그 값이 나온 이유")
+                # macro_snapshot 의 각 키별 수치 + 의미 + 실물 원인 풀이
+                ms_items = list(ms.items())[:4] if isinstance(ms, dict) else []
+                for k, v in ms_items:
+                    label = _ko_feature(k, lang)
+                    kl = (k or '').lower()
+                    if 'pmi' in kl and 'chg' not in kl:
+                        try:
+                            fv = float(v)
+                            sig = '확장 신호' if fv >= 50 else '수축 신호'
+                            cause = (
+                                "제조업체 구매담당자 설문(신규 주문·생산·고용·납기·재고 5항목)에서 *증가* 응답이 *감소* 응답보다 많아 50을 넘긴 결과"
+                                if fv >= 50 else
+                                "제조업 신규 주문·생산·고용 등에서 *감소* 응답 비중이 더 커서 50 아래로 내려간 결과"
+                            )
+                        except Exception:
+                            sig = '확장/수축 신호'
+                            cause = "제조업 구매담당자 설문 응답 비중에서 도출됨"
+                        bits.append(f"   - {label}: {v} ({sig}) — {cause}")
+                    elif 'yield' in kl or '금리차' in label:
+                        try:
+                            fv = float(v)
+                            sig = '정상' if fv >= 0 else '역전 (둔화 신호)'
+                            cause = (
+                                "장기 채권 수익률이 단기 채권 수익률보다 높아 정상 곡선 유지. 시장이 향후 성장·인플레이션을 가격에 반영한 결과"
+                                if fv >= 0 else
+                                "단기 금리가 장기보다 높은 역전 상태. 중앙은행 단기 인상 + 미래 성장 둔화 우려가 동시 반영된 결과"
+                            )
+                        except Exception:
+                            sig = '경기 사이클 위치 반영'
+                            cause = "장기·단기 채권 수익률 차이로 산출"
+                        bits.append(f"   - {label}: {v} ({sig}) — {cause}")
+                    elif 'anfci' in kl or '금융환경' in label:
+                        try:
+                            fv = float(v)
+                            sig = '완화 쪽' if fv < 0 else '긴축·스트레스 쪽'
+                            cause = (
+                                "신용 스프레드 좁고 유동성 풍부, 위험 자산 가격이 견조해 종합 스트레스가 음수로 떨어진 결과"
+                                if fv < 0 else
+                                "신용 스프레드 확대 + 변동성 상승 등이 합쳐져 자금 시장 스트레스가 양수로 올라간 결과"
+                            )
+                        except Exception:
+                            sig = '자금 시장 환경'
+                            cause = "신용·유동성·위험 지표를 합쳐 산출"
+                        bits.append(f"   - {label}: {v} ({sig}) — {cause}")
+                    elif 'icsa' in kl or '실업' in label:
+                        try:
+                            fv = float(v)
+                            sig = '고용 개선' if fv < 0 else '고용 약화'
+                            cause = (
+                                "신규 실업수당 청구 건수가 작년 같은 기간보다 줄어든 상태로, 해고 감소·노동 수요 견조가 반영된 결과"
+                                if fv < 0 else
+                                "신규 실업수당 청구 건수가 작년 같은 기간보다 늘어난 상태로, 해고 증가·채용 둔화가 반영된 결과"
+                            )
+                        except Exception:
+                            sig = '고용 시장 흐름'
+                            cause = "주간 신규 실업수당 청구 건수의 전년 동기 대비 변화율"
+                        bits.append(f"   - {label}: {v} ({sig}) — {cause}")
+                    elif 'permit' in kl or '착공' in label:
+                        bits.append(f"   - {label}: {v} — 주택 건설 인허가 건수의 전년 대비 변화로, 부동산 경기·미래 건설 투자 의지를 반영")
+                    elif 'retail' in kl or '소매' in label:
+                        bits.append(f"   - {label}: {v} — 인플레이션 보정 후 소매 판매액 변화로, 가계 실질 소비 흐름을 반영")
+                    elif 'capex' in kl or '설비' in label:
+                        bits.append(f"   - {label}: {v} — 기업 설비 투자 흐름으로, 미래 생산 능력 확장 의지를 반영")
+                    elif 'income' in kl or '소득' in label:
+                        bits.append(f"   - {label}: {v} — 인플레이션 보정 후 가계 가처분 소득 흐름으로, 향후 소비 여력의 기반을 반영")
+                    elif 'indpro' in kl or '산업생산' in label:
+                        bits.append(f"   - {label}: {v} — 한국 제조업 생산량의 전년 동기 대비 변화율로, 실물 경기 흐름을 반영")
+                    elif 'cpi' in kl or '물가' in label:
+                        bits.append(f"   - {label}: {v} — 소비자물가 전년 대비 상승률로, 통화정책·기업 마진과 연동")
+                    else:
+                        bits.append(f"   - {label}: {v}")
+                bits.append("② HMM 분류 과정")
+                bits.append("   - 위 매크로 지표를 잠재 상태 모델(HMM)에 입력")
+                bits.append("   - 회복·확장·둔화·침체 4국면 중 가장 가능성 높은 상태 선택")
+                bits.append("③ 결과")
+                bits.append(f"   - 분류된 경기 사이클: '{phase}' 국면")
+                if sectors and sectors != '-':
+                    bits.append(f"   - 해당 국면에서 거시 문헌상 자주 함께 거론되는 섹터: {sectors}")
+                body = "[결과 요인]\n" + "\n".join(bits)
+                return body
 
         if tab == 'sector-val':
             from api.routers.sector_cycle import get_valuation
@@ -1665,21 +1717,19 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                     "It is a relative-position record, not an over/undervaluation judgment, and not a buy/sell signal."
                 )
             else:
-                block1 = (
-                    f"[오늘 한눈에] 섹터별 PER이 각 섹터의 5년 평균에서 얼마나 떨어져 있는지를 본 결과입니다.\n"
-                    f"평균보다 높은 쪽: {high_str}.\n"
-                    f"평균보다 낮은 쪽: {low_str}."
-                )
-                block2 = (
-                    "[왜 이 결과] PER 자체의 절대 수준은 섹터마다 차이가 커서 그대로 비교하면 의미가 흐려집니다. "
-                    "그래서 각 섹터의 *자기 5년 평소 PER* 을 기준으로 오늘 위치를 표준화해 보여줍니다. "
-                    "같은 +50%라도 변동성 큰 섹터엔 흔하고, 안정 섹터엔 드문 거리입니다."
-                )
-                block3 = (
-                    "[참고] 위 수치는 각 섹터가 자기 평소 범위 안에서 어디에 있는지의 상대 위치 기록입니다. "
-                    "고평가·저평가 판단이나 매수·매도 신호가 아닙니다."
-                )
-            return f"{block1}\n\n{block2}\n\n{block3}"
+                bits = []
+                bits.append("① 입력 데이터")
+                bits.append("   - 각 섹터 ETF 의 *현재 PER* 과 *최근 5년 평균 PER* 두 값")
+                bits.append("② 표준화 계산")
+                bits.append("   - 평균 대비 차이(%) = (오늘 PER − 5년 평균 PER) / 5년 평균 PER × 100")
+                bits.append("   - 절대 수준 차이를 제거하고 *각 섹터 자기 평소 범위* 안의 위치로 변환")
+                bits.append("③ 상·하위 추출")
+                bits.append(f"   - 평균보다 높은 쪽: {high_str}")
+                bits.append(f"   - 평균보다 낮은 쪽: {low_str}")
+                bits.append("④ 해석")
+                bits.append("   - 같은 +50%라도 변동성 큰 섹터엔 흔하고, 안정 섹터엔 드문 위치 — *상대 위치 기록*")
+                body = "[결과 요인]\n" + "\n".join(bits)
+                return body
 
         if tab == 'sector-mom':
             from processor.feature7_sector_momentum import compute_sector_momentum
@@ -1712,20 +1762,18 @@ def _fallback_ai_explain(tab: str, lang: str, region: str) -> str:
                     "textbook co-occurrence/divergence pattern — informational only, no direction inferred."
                 )
             else:
-                block1 = (
-                    f"[오늘 한눈에] 최근 1주일 섹터별 수익률 순위입니다.\n"
-                    f"가장 많이 오른 섹터: {top_str}.\n"
-                    f"가장 많이 내린 섹터: {bot_str}."
-                )
-                block2 = (
-                    "[왜 이 결과] 1주 수익률 순위는 단기 자금이 어느 섹터로 쏠리고 어디서 빠졌는지를 그대로 보여주는 지표입니다. "
-                    "최근 5거래일 사이 또래 섹터 대비 더 움직인 곳이 위쪽, 덜 움직였거나 빠진 곳이 아래쪽에 자리합니다."
-                )
-                block3 = (
-                    "[참고] 위 순위는 *이미 실현된* 1주일 성과의 사실 기록입니다. "
-                    "현재 경기 국면과 어떻게 어우러지는지 비교용으로만 쓰이며, 향후 방향을 예측하지는 않습니다."
-                )
-            return f"{block1}\n\n{block2}\n\n{block3}"
+                bits = []
+                bits.append("① 입력 데이터")
+                bits.append("   - 각 섹터 ETF 의 최근 5거래일(1주) 수익률")
+                bits.append("② 순위 계산")
+                bits.append("   - 수익률 기준 내림차순 정렬 → 상/하위 추출")
+                bits.append("③ 결과")
+                bits.append(f"   - 가장 많이 오른 섹터: {top_str}")
+                bits.append(f"   - 가장 많이 내린 섹터: {bot_str}")
+                bits.append("④ 지표 의미")
+                bits.append("   - 1주 수익률 순위는 단기 자금이 어느 섹터로 쏠리고 어디서 빠졌는지 그대로 보여주는 지표 — *이미 실현된* 성과 기록")
+                body = "[결과 요인]\n" + "\n".join(bits)
+                return body
     except Exception as e:
         print(f'[AI Explain {tab}/{lang}/{region}] fallback error: {e}')
 

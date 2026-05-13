@@ -44,10 +44,10 @@ const I18N = {
     'holdings.loadError': '데이터를 불러올 수 없습니다', // 로드 에러
 
     // ── Noise vs Signal ──
-    'nr.fundamental': '감정적',                    // 갭바 좌측 (음수 영역)
-    'nr.price': '이성적',                          // 갭바 우측 (양수 영역)
-    'nr.match': '감정적',                          // 갭바 하단 좌측
-    'nr.gap': '이성적',                            // 갭바 하단 우측
+    'nr.fundamental': '분리',                      // 갭바 좌측 (음수 영역)
+    'nr.price': '정렬',                            // 갭바 우측 (양수 영역)
+    'nr.match': '분리',                            // 갭바 하단 좌측
+    'nr.gap': '정렬',                              // 갭바 하단 우측
 
     // ── NR 국면명 (API 응답 한글 → 표시용) ──
     'nr.phase.fundamental': '펀더멘털 반영',      // 국면 1
@@ -56,10 +56,10 @@ const I18N = {
     'nr.phase.sentiment': '센티멘트 지배',        // 국면 4
 
     // ── NR 국면 설명 ──
-    'nr.sub.fundamental': '시장이 이성적으로 움직이는 중',         // 국면 1 설명
-    'nr.sub.weakFundamental': '시장이 이성적으로 움직이는 중',     // 국면 2 설명
-    'nr.sub.weakSentiment': '시장이 감정적으로 움직이는 중', // 국면 3 설명
-    'nr.sub.sentiment': '시장이 감정적으로 움직이는 중',    // 국면 4 설명
+    'nr.sub.fundamental': '주가가 펀더멘털과 잘 정렬된 구간',          // 국면 1 설명
+    'nr.sub.weakFundamental': '주가가 펀더멘털과 어느 정도 정렬된 구간', // 국면 2 설명
+    'nr.sub.weakSentiment': '주가와 펀더멘털 사이 약한 분리 구간',     // 국면 3 설명
+    'nr.sub.sentiment': '주가와 펀더멘털 사이 큰 분리 구간',         // 국면 4 설명
 
     // ── NR 뱃지 ──
     'nr.badge.stable': '안정',                    // 안정 뱃지
@@ -68,7 +68,7 @@ const I18N = {
     'nr.badge.danger': '위험',                    // 위험 뱃지
 
     // ── 섹션 라벨 ──
-    'section.nrChart': '시장 이성 점수 추이 (3개월)', // NR 차트 라벨
+    'section.nrChart': '펀더멘털 반영도 추이 (3개월)', // NR 차트 라벨
     'section.myHoldings': 'My Holdings',           // 보유종목 섹션
     'section.csChart': '방향성 예측 추이 (3개월)',    // CS 차트 라벨
 
@@ -162,8 +162,8 @@ const I18N = {
 
     // ── 차트 / 공통 ──
     'chart.noData': '데이터 없음',                // 데이터 없음
-    'chart.yTop': '이성적',                        // Y축 상단 (양수)
-    'chart.yBottom': '감정적',                     // Y축 하단 (음수)
+    'chart.yTop': '정렬',                          // Y축 상단 (양수)
+    'chart.yBottom': '분리',                       // Y축 하단 (음수)
 
     // ── 캔들스틱 차트 탭 ──
     'chart.daily': '일봉',
@@ -198,8 +198,8 @@ const I18N = {
     'detail.mlLabel': '머신러닝 학습 지표',        // 상세페이지 서브타이틀
     'detail.noData': '데이터 없음',               // 데이터 없음
     'detail.currentPhase': '현재 국면',           // 현재 국면
-    'detail.noiseScore': '시장 이성 점수:',        // 시장 이성 점수
-    'detail.noiseComposition': '시장 이성 점수 구성', // 점수 구성
+    'detail.noiseScore': '펀더멘털 반영도:',       // 펀더멘털 반영도
+    'detail.noiseComposition': '펀더멘털 반영도 구성', // 점수 구성
     'detail.currentIndicators': '현재 지표 수치',  // 현재 지표
     'detail.usedIndicators': '분석에 사용된 지표',  // 사용 지표
     'detail.shapTitle': 'SHAP 기여도',            // SHAP 제목
@@ -496,7 +496,7 @@ const I18N = {
     'featDesc.amihud': '거래량 대비 가격 충격. 유동성이 마르면 소수 거래로 가격이 왜곡되어 펀더멘털에서 이탈하기 쉬움',
     'featDesc.vix_term': 'VIX 선물 원월물-근월물 차이. 역전되면 "지금 당장"의 공포가 극심해 심리 주도 장세',
     'featDesc.hy_spread': '정크본드 스프레드. 신용시장 공포가 주식까지 전이되면 펀더멘털과 무관하게 일괄 매도 발생',
-    'featDesc.realized_vol': '실제 주가 변동 크기. 변동성이 높은 구간은 투자자들이 이성보다 감정으로 거래하는 전형적 노이즈 국면',
+    'featDesc.realized_vol': '실제 주가 변동 크기. 변동성이 높은 구간은 펀더멘털보다 단기 노이즈가 가격을 흔드는 전형적 패턴',
 
     // ── 햄버거 메뉴 / About 페이지 ──
     'menu.title': '메뉴',

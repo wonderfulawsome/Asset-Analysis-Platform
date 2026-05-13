@@ -263,37 +263,37 @@ def build_valuation_interpretation(today: dict, baselines: dict) -> str:
     trend_v   = today.get('price_vs_ma200')
     if dom_name == '주식 매력도 점수':
         cause = (
-            f"주가수익비율(PER) {per:.1f}배와 국채금리 {tnx_p:.2f}% 조합이 점수를 가장 크게 끌었습니다. "
+            f"주가수익비율(PER) {per:.1f}배와 국채금리 {tnx_p:.2f}% 조합이 점수를 가장 크게 끈 변수. "
             f"PER이 높을수록 같은 이익에 비해 가격이 비싼 구간이고, 국채금리가 높을수록 안전자산 수익이 좋아 주식의 상대 매력이 줄어드는 구조"
         )
     elif dom_name == '공포 점수':
         cause = (
             f"공포지수(VIX) {vix_v:.1f}, 5년 평균 {m_vix:.1f} 대비 시장 분위기가 한쪽으로 치우친 상태. "
-            f"VIX는 옵션 시장이 향후 변동성을 어떻게 보는지의 가격이라 위험 인식을 직접 보여줍니다"
+            f"VIX는 옵션 시장이 향후 변동성을 어떻게 보는지의 가격이라 위험 인식을 직접 보여주는 지표"
         )
     elif dom_name == 'CAPE 점수' and cape_v is not None:
         cause = (
             f"Shiller CAPE {cape_v:.1f}배 — 10년 평균 이익으로 계산한 장기 PER이 15년 분포에서 도드라진 위치. "
-            f"단기 이익 흔들림을 평활화한 지표라 구조적 밸류에이션 위치를 보여줍니다"
+            f"단기 이익 흔들림을 평활화한 지표라 구조적 밸류에이션 위치를 그대로 노출"
         )
     elif dom_name == 'Buffett 점수' and buffett_v is not None:
         cause = (
             f"시가총액/GDP 비율 {buffett_v*100:.0f}% — 한 나라 주식 시장 전체 규모가 경제 규모 대비 얼마나 크게 잡혀 있는지의 비율. "
-            f"장기 균형 수준과의 차이가 점수에 크게 반영되는 상태"
+            f"장기 균형 수준과의 차이가 점수에 크게 반영된 상태"
         )
     elif dom_name == '추세 점수' and trend_v is not None:
         cause = (
             f"S&P500 200일 평균선 대비 현재 위치 {trend_v*100:+.1f}%. "
-            f"장기 추세선과 현재 가격 사이의 괴리가 점수에 크게 반영되고 있는 구간"
+            f"장기 추세선과 현재 가격 사이의 괴리가 점수에 크게 반영된 구간"
         )
     elif dom_name == '장기 PER 점수':
         cause = (
-            f"15년 PER 분포 대비 현재 수준이 종합 점수에 가장 크게 기여하고 있는 상태. "
+            f"15년 PER 분포 대비 현재 수준이 종합 점수에 가장 크게 기여한 상태. "
             f"긴 기간 동안의 PER 위치를 한 줄로 표준화한 지표"
         )
     else:
         cause = (
-            f"최근 60일 고점 대비 하락폭 {dd_p:+.2f}%, 5년 평균 {m_dd:+.2f}% 대비 영향이 두드러지는 수준. "
+            f"최근 60일 고점 대비 하락폭 {dd_p:+.2f}%, 5년 평균 {m_dd:+.2f}% 대비 영향이 두드러진 수준. "
             f"단기 가격 충격 폭이 평소와 얼마나 다른지가 점수에 크게 반영된 구간"
         )
     if '명확한 저평가' in label:

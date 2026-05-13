@@ -85,7 +85,7 @@
           </div>
           <div class="about-card">
             <div class="about-card-title">시황</div>
-            <div class="about-card-body">시장 심리·요약·보유종목 손익. Noise vs Signal 갭바로 "이성적 vs 감정적" 국면 표시.</div>
+            <div class="about-card-body">시장 심리·요약·보유종목 손익. Noise vs Signal 갭바로 "정렬 vs 분리" 국면 표시.</div>
           </div>
           <div class="about-card">
             <div class="about-card-title">펀더멘털</div>
@@ -150,7 +150,7 @@
           <div class="about-card">
             <div class="about-card-title">실현 변동성</div>
             <div class="about-card-meta">최근 가격의 실제 변동 크기</div>
-            <div class="about-card-body">높은 구간은 감정 거래 비중 증가 — 전형적 노이즈 국면.</div>
+            <div class="about-card-body">높은 구간은 단기 노이즈 거래 비중 증가 — 펀더멘털 분리 신호.</div>
           </div>
           <div class="about-card">
             <div class="about-card-title">장단기 금리차</div>
@@ -195,7 +195,7 @@
           <div class="about-card about-card-wide">
             <div class="about-card-title">HMM (Hidden Markov Model)</div>
             <ul class="about-spec">
-              <li><b>동기</b> — 시장 국면(이성·노이즈)이나 섹터 순환을 관측 불가능한 잠재 상태로 모델링.</li>
+              <li><b>동기</b> — 시장 국면(펀더멘털 정렬·분리)이나 섹터 순환을 관측 불가능한 잠재 상태로 모델링.</li>
               <li><b>입력</b> — 펀더멘털 HMM(4-state) = 8피처 일별 벡터, 섹터 HMM = 매크로 지표.</li>
               <li><b>출력</b> — 현재 국면·전이 확률. 펀더멘털 탭의 4국면 분류, 거시경제 탭의 섹터 순환.</li>
               <li><b>한계</b> — 상태 수(K) 는 사전 고정. 라벨은 분석가 해석 — 모델 자체는 숫자 클러스터만 제공.</li>

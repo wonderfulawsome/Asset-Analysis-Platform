@@ -3,19 +3,19 @@ var _csData = null;
 var _nrData = null;
 var _fgData = null;  // 공포탐욕 데이터 캐시 (인사이트 연동용)
 
-// ── 시장 이성 점수 인사이트 — 양수=이성적, 음수=감정적 (단순 2분할) ──
+// ── 펀더멘털 반영도 인사이트 — 양수=정렬, 음수=분리 (단순 2분할) ──
 function _buildFgNoiseInsight(noiseScore) {
   if (noiseScore == null) return '';
   const fgPart = _fgData ? `심리 지수 ${_fgData.score} · ` : '';
 
   let tag, msg, color, tagColor;
   if (noiseScore >= 0) {
-    tag = '이성적 상태';
+    tag = '정렬 상태';
     msg = `${fgPart}펀더멘털과 주가 흐름이 잘 일치하는 구간`;
     color = '#22C55E';
     tagColor = '#4ADE80';
   } else {
-    tag = '감정적 상태';
+    tag = '분리 상태';
     msg = `${fgPart}펀더멘털과 주가 사이 괴리가 두드러진 구간`;
     color = '#EF4444';
     tagColor = '#F87171';
@@ -24,7 +24,7 @@ function _buildFgNoiseInsight(noiseScore) {
   return `<div class="nr-insight" style="margin-top:12px;padding:10px 12px;border-radius:8px;background:${color}08;border-left:3px solid ${color}">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
       <span style="font-size:11px;font-weight:700;color:${tagColor};padding:2px 8px;border:1px solid ${color}30;border-radius:3px">${tag}</span>
-      <span style="font-size:10px;color:var(--sub2)">시장 이성 점수 ${noiseScore >= 0 ? '+' : ''}${noiseScore.toFixed(1)}</span>
+      <span style="font-size:10px;color:var(--sub2)">펀더멘털 반영도 ${noiseScore >= 0 ? '+' : ''}${noiseScore.toFixed(1)}</span>
     </div>
     <div style="font-size:12px;color:var(--sub);line-height:1.5">${msg}</div>
   </div>`;
@@ -375,18 +375,16 @@ document.getElementById('btn-edit-holdings').addEventListener('click', showHoldi
 // ── AI 시장 요약 + 탭 해설 ──
 let _aiSummaryLoaded = false;
 
-// 시황 AI 해설 — 4줄 고정 순서: idx 0=심리, 1=평소 이탈도, 2=펀더멘털, 3=종합
-// LLM 이 종합 라인을 "펀더멘털..." 로 잘못 시작하는 경우가 있어 idx 기반 매핑이 키워드 매칭보다 안정적.
-// 키워드 매칭은 줄 수가 4 가 아닐 때 폴백으로만 사용.
+// 시황 AI 해설 — 스토리형 1단락 (한 줄). 키워드 매칭 기반 단일 아이콘 부여.
+// 옛 4줄 구조 호환 위해 _aiIconSet/_aiTitlesByIdx 는 유지.
 const _aiIconSet = [
-  { keys: ['심리','공포','탐욕','sentiment','fear','greed'],            icon: '◇', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
-  { keys: ['평소 이탈도','이탈도','이상도','direction','deviation'],     icon: '↗', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
-  { keys: ['펀더멘털','noise','괴리','반영','이성','signal','rationality'], icon: '◉', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
-  { keys: ['종합','판단','결론','핵심','overall','insight','인사이트'],    icon: '■', bg: '#FF8C00',               color: '#000' },
+  { keys: ['오늘 시장','심리','공포','탐욕','sentiment','fear','greed'],                                                       icon: '◇', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
+  { keys: ['시장 이탈도','평소 이탈도','이탈도','이상도','direction','deviation'],                                              icon: '↗', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
+  { keys: ['펀더멘털 반영도','펀더멘털','noise','괴리','반영','signal','rationality'],                                          icon: '◉', bg: 'rgba(255,140,0,0.10)', color: '#FF8C00' },
+  { keys: ['경기국면','경기 국면','경기 사이클','사이클','국면','cycle','phase','종합','판단','결론','overall'],                icon: '■', bg: '#FF8C00',               color: '#000' },
 ];
-// 4줄 고정 순서에 강제 매핑할 한국어 타이틀 (LLM 이 4번째를 "펀더멘털 — " 로 잘못 시작해도
-// 프론트는 idx 3 에 "종합" 라벨을 부여하여 표시 일관성 유지)
-const _aiTitlesByIdx = ['시장 심리', '평소 이탈도', '펀더멘털', '종합'];
+// 옛 4줄 구조 호환용 — 스토리형(1줄) 모드엔 사용 X
+const _aiTitlesByIdx = ['심리', '시장 이탈도', '펀더멘털 반영도', '경기국면'];
 
 function _cleanEmoji(str) {
   let s = str
@@ -395,7 +393,7 @@ function _cleanEmoji(str) {
     .replace(/\s{2,}/g, ' ')
     .trim();
   // 제목 키워드가 내용과 붙어있으면 강제로 " — " 삽입
-  const titles = ['시장 심리', '방향성', '펀더멘털', '종합판단', '종합 판단'];
+  const titles = ['심리', '시장 이탈도', '펀더멘털 반영도', '경기국면', '경기 국면', '시장 심리', '방향성', '펀더멘털', '종합판단', '종합 판단'];
   for (const t of titles) {
     const idx = s.indexOf(t);
     if (idx !== -1) {
@@ -430,7 +428,7 @@ function _buildLineHtml(clean, icon, textContent, idx, totalLines) {
   let sep = content.match(/^(.+?)\s*[—]\s*(.+)$/);
   // 2차: 키워드 기반 강제 분리 (LLM이 구분자를 안 넣었을 때)
   if (!sep) {
-    const titleKeys = ['시장 심리','평소 이탈도','펀더멘털','종합','종합판단','종합 판단','방향성'];
+    const titleKeys = ['심리','시장 이탈도','펀더멘털 반영도','경기국면','경기 국면','시장 심리','평소 이탈도','펀더멘털','종합','종합판단','종합 판단','방향성'];
     for (const tk of titleKeys) {
       const idx = content.indexOf(tk);
       if (idx !== -1) {
@@ -511,7 +509,7 @@ async function loadAiSummary() {
         // 제목/내용 분리 (1차: — 구분자, 2차: 키워드 fallback)
         let sep = clean.match(/^(.+?)\s*[—]\s*(.+)$/);
         if (!sep) {
-          const titleKeys = ['시장 심리','평소 이탈도','펀더멘털','종합','종합판단','종합 판단','방향성'];
+          const titleKeys = ['심리','시장 이탈도','펀더멘털 반영도','경기국면','경기 국면','시장 심리','평소 이탈도','펀더멘털','종합','종합판단','종합 판단','방향성'];
           for (const tk of titleKeys) {
             const idx = clean.indexOf(tk);
             if (idx !== -1 && clean.slice(idx + tk.length).trim()) {
@@ -832,9 +830,9 @@ async function loadRegime() {
 
   _nrData = data;  // 상세페이지용 캐시
 
-  // 카드 제목 region 분기 (US: Noise vs Signal, KR: 시장 이성 점수)
+  // 카드 제목 region 분기 (US: Noise vs Signal, KR: 펀더멘털 반영도)
   const titleEl = document.getElementById('nr-card-title');
-  if (titleEl) titleEl.textContent = isKrRegime ? '시장 이성 점수' : 'Noise vs Signal';
+  if (titleEl) titleEl.textContent = isKrRegime ? '펀더멘털 반영도' : 'Noise vs Signal';
 
   const container = document.getElementById('regime-card');
   const nrIcon = NR_ICON[name] || { icon: 'cloud', color: '#999', softBg: 'rgba(0,0,0,0.05)' };
