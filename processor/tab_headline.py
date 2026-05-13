@@ -379,12 +379,26 @@ def precompute_tab_headlines(region: str) -> bool:
         return False
 
 
+_LIVE_TTL = 60                                                    # in-memory live cache TTL (초)
+_live_cache: dict = {}                                            # {region: (payload, ts)}
+
+
 def fetch_tab_headlines(region: str) -> Optional[dict]:
-    """endpoint 용 — app_cache 우선, miss 시 live compute 폴백."""
+    """endpoint 용 — 항상 live compute (TTL 60초 in-memory 캐시만 사용).
+
+    사용자 요청 (2026-05-13): app_cache (스케줄러 적재, 최대 3시간 stale 가능) 우회.
+    매 endpoint 호출 시 compute_all 직접 실행 → raw 데이터(light pipeline 10분 갱신)가
+    즉시 헤드라인에 반영. 동시 다중 요청 보호용 in-memory TTL 60초 캐시만 유지.
+    pipeline 비용 무관 — Step 18 (precompute_tab_headlines) 는 그대로 두되 endpoint 가 의존 X.
+    """
+    import time as _t
     region = _norm_region(region)
-    cached = fetch_app_cache(_cache_key(region))
-    if cached and isinstance(cached, dict):
-        return {**cached, 'cached': True}
+    now = _t.time()
+    cached = _live_cache.get(region)
+    if cached and (now - cached[1]) < _LIVE_TTL:
+        return {**cached[0], 'cached': True, 'source': 'live_ttl'}
     payload = compute_all(region)
     payload['cached'] = False
+    payload['source'] = 'live'
+    _live_cache[region] = (payload, now)
     return payload
