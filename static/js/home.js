@@ -387,8 +387,9 @@
     const dEl = document.getElementById('market-valuation-decompose');
     const hEl = document.getElementById('market-valuation-history');
     const iEl = document.getElementById('market-valuation-interpretation');
-    fEl.textContent = '로딩 중...';
-    [gEl, dEl, hEl, iEl].forEach(el => el && (el.innerHTML = ''));
+    // 다른 탭과 동일한 loading-placeholder + spinner 사용 (재진입 시에도 일관 표시)
+    const _SPIN = '<div class="loading-placeholder"><div class="loading-spinner sm"></div></div>';
+    [fEl, gEl, dEl, hEl, iEl].forEach(el => el && (el.innerHTML = _SPIN));
     try {
       const url = (typeof window.withRegion === 'function')
         ? window.withRegion('/api/macro/valuation-signal?days=2520')
