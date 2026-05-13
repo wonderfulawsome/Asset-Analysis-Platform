@@ -16,16 +16,26 @@ import pandas as pd
 # 한국 섹터 ETF 는 ticker = 6자리 종목코드 (문자열).
 # kr_name 은 화면 표시용 한국어, en_name 은 LLM 입력용 영문.
 SECTOR_ETF_KR = {
-    '139260': {'kr_name': 'IT',          'en_name': 'Technology',     'us_proxy': 'XLK'},   # TIGER 200 IT
-    '091160': {'kr_name': '반도체',       'en_name': 'Semiconductor',  'us_proxy': 'SOXX'},  # KODEX 반도체
-    '300610': {'kr_name': '게임산업',     'en_name': 'Software/Game',  'us_proxy': 'IGV'},   # KODEX 게임산업
-    '091170': {'kr_name': '은행',        'en_name': 'Financials',     'us_proxy': 'XLF'},   # KODEX 은행
-    '139250': {'kr_name': '에너지화학',    'en_name': 'Energy/Chemical','us_proxy': 'XLE'},   # TIGER 200 에너지화학
-    '266420': {'kr_name': '헬스케어',     'en_name': 'Healthcare',     'us_proxy': 'XLV'},   # KODEX 헬스케어
-    '091180': {'kr_name': '자동차',       'en_name': 'Auto',           'us_proxy': 'XLY'},   # KODEX 자동차
-    '117680': {'kr_name': '철강',        'en_name': 'Steel/Materials','us_proxy': 'XLB'},   # KODEX 철강
-    '341850': {'kr_name': '리츠',        'en_name': 'REIT',           'us_proxy': 'XLRE'},  # TIGER 리츠부동산인프라
-    '227560': {'kr_name': '필수소비재',    'en_name': 'Staples',        'us_proxy': 'XLP'},   # TIGER 200 생활소비재
+    # ── 기존 10개 (listed_date 추가) ──
+    '139260': {'kr_name': 'IT',          'en_name': 'Technology',     'us_proxy': 'XLK',  'listed_date': '2008-04-30'},
+    '091160': {'kr_name': '반도체',       'en_name': 'Semiconductor',  'us_proxy': 'SOXX', 'listed_date': '2006-06-27'},
+    '300610': {'kr_name': '게임산업',     'en_name': 'Software/Game',  'us_proxy': 'IGV',  'listed_date': '2018-07-24'},
+    '091170': {'kr_name': '은행',        'en_name': 'Financials',     'us_proxy': 'XLF',  'listed_date': '2006-06-27'},
+    '139250': {'kr_name': '에너지화학',    'en_name': 'Energy/Chemical','us_proxy': 'XLE',  'listed_date': '2011-04-06'},
+    '266420': {'kr_name': '헬스케어',     'en_name': 'Healthcare',     'us_proxy': 'XLV',  'listed_date': '2016-09-23'},
+    '091180': {'kr_name': '자동차',       'en_name': 'Auto',           'us_proxy': 'XLY',  'listed_date': '2006-06-27'},
+    '117680': {'kr_name': '철강',        'en_name': 'Steel/Materials','us_proxy': 'XLB',  'listed_date': '2009-10-30'},
+    '341850': {'kr_name': '리츠',        'en_name': 'REIT',           'us_proxy': 'XLRE', 'listed_date': '2019-07-19'},
+    '227560': {'kr_name': '필수소비재',    'en_name': 'Staples',        'us_proxy': 'XLP',  'listed_date': '2015-08-17'},
+    # ── 신규 8개 (한국 특유 섹터, 2026-05-14 추가) ──
+    '401170': {'kr_name': 'K-방산',       'en_name': 'Defense',        'us_proxy': 'ITA',  'listed_date': '2024-04-30'},
+    '305720': {'kr_name': '2차전지산업',   'en_name': 'Battery',        'us_proxy': 'LIT',  'listed_date': '2018-09-12'},
+    '466920': {'kr_name': '조선해운',     'en_name': 'Shipbuilding',   'us_proxy': 'SEA',  'listed_date': '2023-09-15'},
+    '244620': {'kr_name': '바이오',       'en_name': 'Biotech',        'us_proxy': 'XBI',  'listed_date': '2016-05-13'},
+    '228810': {'kr_name': '미디어컨텐츠',  'en_name': 'Media/Content',  'us_proxy': 'XLC',  'listed_date': '2015-10-07'},
+    '117700': {'kr_name': '건설',        'en_name': 'Construction',   'us_proxy': 'ITB',  'listed_date': '2009-10-30'},
+    '098560': {'kr_name': '통신서비스',   'en_name': 'Telecom',        'us_proxy': 'XLC',  'listed_date': '2008-12-12'},
+    '445290': {'kr_name': 'K-로봇액티브', 'en_name': 'Robotics',       'us_proxy': 'BOTZ', 'listed_date': '2023-03-21'},
 }
 
 # KR 사용자 자주 보유 ETF — sector_cycle.holding_perf 산출용 (US 의 ALL_HOLDINGS 등가)
