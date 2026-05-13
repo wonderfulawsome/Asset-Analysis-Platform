@@ -146,10 +146,14 @@ def _headline_signal(region: str) -> str:
         return f"시장이 평소 모습에서 벗어난 정도가 상위 {top_pct}% 수준. 최근 10년 중 약 {freq_days}영업일에 한 번꼴로 나타나는 매우 드문 구간이다."
     elif top_pct <= 10:
         return f"시장이 평소에서 벗어난 정도가 상위 {top_pct}% 수준. 최근 10년 중 약 {freq_days}영업일에 한 번꼴로 나타나는 드문 구간이다."
-    elif top_pct <= 30:
+    elif top_pct < 45:
         return f"시장이 평소에서 벗어난 정도가 상위 {top_pct}% 수준. 평소보다 약간 다른 구간이다."
-    else:
+    elif top_pct <= 55:
         return f"시장이 평소 모습에 가까운 상태 (10년 분포 상위 {top_pct}% 수준). 큰 이탈 없는 정상 구간이다."
+    elif top_pct <= 70:
+        return f"시장이 평소보다 잔잔한 상태 (10년 분포 상위 {top_pct}% 수준). 변동성 낮은 안정 구간이다."
+    else:
+        return f"시장이 매우 잔잔한 상태 (10년 분포 상위 {top_pct}% 수준). 평소보다 훨씬 안정적인 흔한 구간이다."
 
 
 # ── 룰 5: 거시경제 / 섹터 사이클 — "경기 위치 + 시장 변동성" ────
@@ -224,6 +228,14 @@ def _headline_sector_val(region: str) -> str:
 # ── 룰 7: 섹터 모멘텀 — "이번 달 가장 많이 오른/내린 섹터" ──────
 def _headline_sector_mom(region: str) -> str:
     payload = fetch_app_cache(f"momentum_{_norm_region(region)}")
+    if not payload or not isinstance(payload, dict) or not (payload.get('momentum') or []):
+        # 캐시 miss → live compute (sector_cycle.py 의 compute 함수 직접 호출)
+        try:
+            from api.routers.sector_cycle import compute_sector_momentum  # 지연 임포트
+            payload = compute_sector_momentum(region=_norm_region(region))
+        except Exception as e:
+            print(f"[tab_headline] sector_mom live compute 실패: {e}")
+            return "섹터 모멘텀 데이터 준비 중."
     if not payload or not isinstance(payload, dict):
         return "섹터 모멘텀 데이터 준비 중."
     mom = payload.get('momentum') or []
