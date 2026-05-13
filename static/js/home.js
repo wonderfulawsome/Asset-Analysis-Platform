@@ -234,8 +234,14 @@
         sourceText = `PER 가중평균 = ETF 보유 종목별 PER 을 비중 가중평균. 10년 평균과 현재값 비교.`;
         rowsHtml = data.valuations.map(v => {
           const fgCol = colorByZ(v.per_z);
+          const histN = v.hist_n ?? 0;
+          const insufficient = histN < 36;
+          const warn = insufficient
+            ? `<span class="sv-data-warn">데이터 부족 (${histN}개월)</span>`
+            : '';
+          const nameClass = insufficient ? 'sv-name insufficient' : 'sv-name';
           return `
-            <div class="sv-name">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span></div>
+            <div class="${nameClass}">${krSector(v.ticker, v.sector_name)} <span style="color:#9ca3af;font-size:10px;">${v.ticker}</span>${warn}</div>
             <div class="sv-cell" style="text-align:right;color:#9ca3af;">${fmtPer(v.per_mean)}</div>
             <div class="sv-cell" style="background:${fgCol};">${fmtPer(v.per)}</div>`;
         }).join('');
