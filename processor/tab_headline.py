@@ -25,11 +25,10 @@ from database.repositories import (                               # DB fetch 함
 )
 
 # ── 탭 키 정의 (frontend div id 와 1:1 매핑) ─────────────────────
+# AI차트/시황 은 자체 카드 위계가 충분 → 헤드라인 박스 제외 (사용자 결정 2026-05-13).
 TAB_KEYS = [
-    'chart',                                                      # AI차트
-    'market',                                                     # 시황
     'fundamental',                                                # 펀더멘털
-    'signal',                                                     # 평소 이탈도 (시장 이탈도)
+    'signal',                                                     # 시장 이탈도
     'sector',                                                     # 거시경제 / 섹터 사이클
     'sector-val',                                                 # 섹터 밸류에이션
     'sector-mom',                                                 # 섹터 모멘텀
@@ -100,28 +99,36 @@ def _headline_market(region: str) -> str:
     return f"{idx_name} 오늘 {ret_f:+.2f}% 움직였어요. {speed}이에요."
 
 
-# ── 룰 3: 펀더멘털 — "실적과 주가가 얼마나 정합/괴리되어 있는지" ──
+# ── 룰 3: 펀더멘털 — "실적 대비 주가 괴리 강도 + 풀이" ──
 def _headline_fundamental(region: str) -> str:
     reg = fetch_noise_regime_current(region=region)               # Noise 국면 1행
     if not reg:
         return "펀더멘털 국면 데이터 준비 중."
-    score = reg.get('noise_score')                                # 내부 라벨 결정용
+    score = reg.get('noise_score')                                # 괴리 강도 (음수=괴리, 양수=정합)
+    fv = reg.get('feature_values') or {}                          # 8 피처 단위값
     try:
         s = float(score) if score is not None else 0.0
     except (TypeError, ValueError):
         s = 0.0
-    # noise_score 를 *실생활 표현* 으로 풀이 (점수 자체는 노출 X)
+    # fundamental_gap = 실적 대비 주가 괴리 (절댓값 ≈ 표준편차 단위)
+    gap = fv.get('fundamental_gap')
+    try:
+        g = abs(float(gap)) if gap is not None else None
+    except (TypeError, ValueError):
+        g = None
+    gap_phrase = f"(실적-주가 갭 {g:.2f}σ)" if g is not None else ""
+    # noise_score 4분위 → 풀이
     if s > 1:
-        return "실적과 주가가 잘 맞물려 움직이는 정합 구간이에요. 펀더멘털이 가격에 충분히 반영되고 있어요."
+        return f"실적과 주가가 잘 맞물려 움직이는 정합 강한 구간{gap_phrase}. 펀더멘털이 가격에 충분히 반영된 상태이다."
     elif s > 0:
-        return "실적과 주가가 대체로 함께 움직이는 정합 구간이에요. 큰 괴리는 보이지 않아요."
+        return f"실적과 주가가 대체로 정합한 구간{gap_phrase}. 큰 괴리 없는 정상 상태이다."
     elif s > -2:
-        return "실적 대비 주가가 약간 따로 움직이는 약한 괴리 구간이에요."
+        return f"실적 대비 주가가 약간 따로 움직이는 약한 괴리 구간{gap_phrase}. 펀더멘털과 가격이 부분적으로 분리된 상태이다."
     else:
-        return "실적과 주가가 크게 따로 움직이는 큰 괴리 구간이에요. 펀더멘털보다 심리가 가격을 더 끌고 있어요."
+        return f"실적과 주가가 크게 따로 움직이는 큰 괴리 구간{gap_phrase}. 펀더멘털보다 심리가 가격을 끌고 가는 상태이다."
 
 
-# ── 룰 4: 평소 이탈도 — "오늘이 평소 모습에서 얼마나 벗어나 있는지" ──
+# ── 룰 4: 평소 이탈도 — "평소 대비 이탈 강도 percentile + 빈도 풀이" ──
 def _headline_signal(region: str) -> str:
     an = fetch_anomaly_current(region=region)                     # anomaly_daily 1행
     if not an:
@@ -134,15 +141,15 @@ def _headline_signal(region: str) -> str:
     except (TypeError, ValueError):
         return "시장 이탈도 데이터 파싱 실패."
     # 출현 빈도 풀이 (top_pct % × 252 거래일 ≈ 1년 중 몇 영업일)
-    freq_days = max(1, round(top_pct * 252 / 100))                # 평균 출현 영업일 수
+    freq_days = max(1, round(top_pct * 252 / 100))
     if top_pct <= 5:
-        return f"평소 시장 모습과 매우 다른 드문 구간이에요. 최근 10년 기준 상위 {top_pct}% (약 {freq_days}영업일에 한 번꼴) 빈도로만 나타나요."
+        return f"시장이 평소 모습에서 벗어난 정도가 상위 {top_pct}% 수준. 최근 10년 중 약 {freq_days}영업일에 한 번꼴로 나타나는 매우 드문 구간이다."
     elif top_pct <= 10:
-        return f"평소와 다른 드문 구간이에요. 최근 10년 기준 상위 {top_pct}% 빈도로 나타나요."
+        return f"시장이 평소에서 벗어난 정도가 상위 {top_pct}% 수준. 최근 10년 중 약 {freq_days}영업일에 한 번꼴로 나타나는 드문 구간이다."
     elif top_pct <= 30:
-        return f"평소보다 약간 벗어나 있는 구간이에요. 최근 10년 기준 상위 {top_pct}% 빈도로 관찰돼요."
+        return f"시장이 평소에서 벗어난 정도가 상위 {top_pct}% 수준. 평소보다 약간 다른 구간이다."
     else:
-        return f"오늘 시장은 평소와 비슷한 모습이에요. (10년 분포 상위 {top_pct}% 수준)"
+        return f"시장이 평소 모습에 가까운 상태 (10년 분포 상위 {top_pct}% 수준). 큰 이탈 없는 정상 구간이다."
 
 
 # ── 룰 5: 거시경제 / 섹터 사이클 — "경기 위치 + 시장 변동성" ────
@@ -157,28 +164,28 @@ def _headline_sector(region: str) -> str:
     phase = sc.get('phase_name', '?')
     # 경기국면 풀이 (4단계 회복/확장/둔화/침체)
     phase_meaning = {
-        '회복': '경기가 바닥을 지나 회복 흐름에 들어선',
+        '회복': '경기가 바닥을 지나 회복 흐름에 들어선 회복',
         '확장': '경기가 본격적으로 좋아지는 확장',
-        '둔화': '경기 상승세가 꺾여 둔화되는',
+        '둔화': '경기 상승세가 꺾여 둔화되는 둔화',
         '침체': '경기가 바닥권에 머무는 침체',
-    }.get(phase, f'{phase}')
+    }.get(phase, phase)
     vix = macro.get('vix')
     vix_name = 'VIX(공포지수)' if region == 'us' else 'VKOSPI(공포지수)'
     base = _VIX_BASELINE[_norm_region(region)]
     if vix is None:
-        return f"지금은 {phase_meaning} 국면이에요."
+        return f"{phase_meaning} 국면. 변동성 데이터 부재 상태이다."
     try:
         v = float(vix)
     except (TypeError, ValueError):
-        return f"지금은 {phase_meaning} 국면이에요."
+        return f"{phase_meaning} 국면. 변동성 파싱 실패 상태이다."
     diff_pct = (v - base) / base * 100                            # 평소 대비 변동 %
     if diff_pct > 30:
-        vstate = f"시장 불안감도 평소보다 훨씬 큽니다 ({vix_name} {v:.1f})"
+        vstate = f"{vix_name} {v:.1f}로 평소({base:.0f}) 대비 +{diff_pct:.0f}% 높은 시장 불안감"
     elif diff_pct < -20:
-        vstate = f"시장은 안정적이에요 ({vix_name} {v:.1f}, 평소보다 낮음)"
+        vstate = f"{vix_name} {v:.1f}로 평소({base:.0f}) 대비 {diff_pct:.0f}% 낮은 안정적 시장"
     else:
-        vstate = f"시장 불안감은 평소 수준이에요 ({vix_name} {v:.1f})"
-    return f"지금은 {phase_meaning} 국면. {vstate}."
+        vstate = f"{vix_name} {v:.1f}로 평소({base:.0f}) 수준의 변동성"
+    return f"{vstate}. {phase_meaning} 국면이다."
 
 
 # ── 룰 6: 섹터 밸류에이션 — "비싼 섹터 / 싼 섹터" ──────────────
@@ -203,15 +210,15 @@ def _headline_sector_val(region: str) -> str:
             lows.append((label, zf))
     n_high, n_low = len(highs), len(lows)
     if n_high == 0 and n_low == 0:
-        return "10년 평균 대비 모든 섹터가 평소 가격대에 있어요. 특별히 비싸거나 싼 섹터는 없어요."
+        return "10년 평균 대비 가격 차이 큰 섹터 0개. 모든 섹터가 평소 가격대에 있는 정상 상태이다."
     parts = []
     if n_high:
         top = max(highs, key=lambda x: x[1])
-        parts.append(f"평소보다 비싼 섹터 {n_high}개 (가장 비싼 곳: {top[0]})")
+        parts.append(f"평소보다 비싼 섹터 {n_high}개 (1σ↑, 최고 {top[0]})")
     if n_low:
         bot = min(lows, key=lambda x: x[1])
-        parts.append(f"평소보다 싼 섹터 {n_low}개 (가장 싼 곳: {bot[0]})")
-    return "지난 10년 평균과 비교했을 때 " + ", ".join(parts) + "."
+        parts.append(f"평소보다 싼 섹터 {n_low}개 (1σ↓, 최저 {bot[0]})")
+    return "10년 평균 대비 " + ", ".join(parts) + " 상태이다."
 
 
 # ── 룰 7: 섹터 모멘텀 — "이번 달 가장 많이 오른/내린 섹터" ──────
@@ -227,22 +234,21 @@ def _headline_sector_mom(region: str) -> str:
     top_name = top.get('sector_name') or top.get('ticker') or '?'
     top_r = top.get('return_1m')
     if top_r is None:
-        return f"이번 달 가장 강한 섹터는 {top_name}이에요."
+        return f"이번 달 1위 섹터 {top_name} 상태이다."
     try:
         top_rf = float(top_r)
     except (TypeError, ValueError):
-        return f"이번 달 가장 강한 섹터는 {top_name}이에요."
-    msg = f"이번 한 달 동안 가장 많이 오른 섹터는 {top_name} ({top_rf:+.1f}%)"
-    if bot is not None:
-        bot_name = bot.get('sector_name') or bot.get('ticker') or '?'
-        bot_r = bot.get('return_1m')
-        if bot_r is not None:
-            try:
-                bot_rf = float(bot_r)
-                msg += f", 가장 부진한 섹터는 {bot_name} ({bot_rf:+.1f}%)"
-            except (TypeError, ValueError):
-                pass
-    return msg + "이에요."
+        return f"이번 달 1위 섹터 {top_name} 상태이다."
+    if bot is None:
+        return f"이번 한 달 1위 섹터 {top_name} ({top_rf:+.1f}%) 상태이다."
+    bot_name = bot.get('sector_name') or bot.get('ticker') or '?'
+    bot_r = bot.get('return_1m')
+    try:
+        bot_rf = float(bot_r) if bot_r is not None else 0.0
+        spread = abs(top_rf - bot_rf)
+        return f"1위 {top_name} {top_rf:+.1f}% vs 꼴찌 {bot_name} {bot_rf:+.1f}%, 섹터 간 격차 {spread:.0f}%p의 양극화 구간이다."
+    except (TypeError, ValueError):
+        return f"이번 한 달 1위 섹터 {top_name} ({top_rf:+.1f}%) 상태이다."
 
 
 # ── 룰 8: 시장 밸류 (ERP/Fed Model) — "현 주가가 평소 평균보다 비싼지" ──
@@ -260,21 +266,21 @@ def _headline_market_valuation(region: str) -> str:
         return f"현 시장 밸류 평가: '{label}'."
     # z_comp 를 사용자 친화 표현 "평소 평균 대비 비싼/싼" 으로 풀이
     if zf >= 1.0:
-        return f"현 주가 수준은 평소 평균보다 *싼* 편이에요 ({label})."
+        return f"종합 점수 {zf:+.2f}σ, 평소 평균보다 싼 수준의 '{label}' 영역이다."
     elif zf >= 0.3:
-        return f"현 주가 수준은 평소 평균보다 약간 싼 편이에요 ({label})."
+        return f"종합 점수 {zf:+.2f}σ, 평소 평균보다 약간 싼 수준의 '{label}' 영역이다."
     elif zf >= -0.3:
-        return f"현 주가 수준은 평소 평균과 비슷해요 ({label})."
+        return f"종합 점수 {zf:+.2f}σ, 평소 평균과 비슷한 수준의 '{label}' 영역이다."
     elif zf >= -1.0:
-        return f"현 주가 수준은 평소 평균보다 약간 비싼 편이에요 ({label})."
+        return f"종합 점수 {zf:+.2f}σ, 평소 평균보다 약간 비싼 수준의 '{label}' 영역이다."
     else:
-        return f"현 주가 수준은 평소 평균보다 *많이 비싼* 편이에요 ({label})."
+        return f"종합 점수 {zf:+.2f}σ, 평소 평균보다 많이 비싼 수준의 '{label}' 영역이다."
 
 
 # ── 디스패처 ──────────────────────────────────────────────────
+# AI차트(_headline_chart) / 시황(_headline_market) 함수는 정의만 유지하고 디스패치 X
+# (사용자 결정: 헤드라인 박스를 차트/시황 탭에서 제외 — 다른 카드가 같은 정보 노출).
 _RULES = {                                                        # 탭 키 → 룰 함수 매핑
-    'chart':            _headline_chart,
-    'market':           _headline_market,
     'fundamental':      _headline_fundamental,
     'signal':           _headline_signal,
     'sector':           _headline_sector,

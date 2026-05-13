@@ -2612,7 +2612,8 @@ window.recordTabSwitch = function(tabIdxOrName) {
 // region toggle 은 location.reload() 트리거 → 자동 재실행.
 (function initTabHeadlines() {
   // 탭 키 목록 (백엔드 TAB_KEYS 와 1:1 매핑, 순서 무관)
-  const TAB_KEYS = ['chart', 'market', 'fundamental', 'signal', 'sector',
+  // chart/market 제외 — 해당 탭은 자체 카드가 충분히 명확 (사용자 결정 2026-05-13)
+  const TAB_KEYS = ['fundamental', 'signal', 'sector',
                     'sector-val', 'sector-mom', 'market-valuation'];
 
   // 한 탭 div 에 텍스트 채움 + loading 클래스 제거
