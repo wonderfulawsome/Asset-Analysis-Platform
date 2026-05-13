@@ -325,13 +325,8 @@ def get_valuation_signal(
     now = _time.time()
     # region+days 별 캐시키 분리 (days 다른 호출은 별도 캐시)
     cache_key = f'data_{region}_{days}'
-    import os as _os_v
-    disable_groq = _os_v.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
-    cached = _val_sig_cache.get(cache_key)
-    cached_ts = _val_sig_cache.get(f'ts_{region}_{days}', 0)
-    # DISABLE_GROQ=true: in-memory cache 도 우회 — 매번 fresh rule-based fallback
-    if cached and (now - cached_ts) < _VAL_SIG_TTL and not disable_groq:
-        return {**cached, 'cached': True}
+    # 사용자 요청 (2026-05-13): in-memory cache + DB interpretation 모두 우회 — 항상 fresh rule-based
+    # Railway/local 환경 무관 동일 응답 보장.
 
     try:
         today = fetch_valuation_signal_latest(region=region)
@@ -346,8 +341,8 @@ def get_valuation_signal(
     if not today:
         return {'error': 'no data'}
 
-    # DB 에 사전 적재된 값 우선 — 단, DISABLE_GROQ=true 면 옛 LLM 응답 무시하고 fresh rule-based 강제
-    interpretation = None if disable_groq else today.get('interpretation')
+    # DB 의 옛 LLM interpretation 항상 무시 → 매번 fresh rule-based build_valuation_interpretation 호출
+    interpretation = None
     baseline_snapshot = today.get('baseline_snapshot')
 
     # baseline snapshot — DB 의 stored snapshot 은 옛 cron 시점 weights 가 박혀 있을

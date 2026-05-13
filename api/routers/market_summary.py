@@ -821,38 +821,13 @@ def get_ai_summary(background_tasks: BackgroundTasks,
     lang = lang if lang in ('ko', 'en') else 'ko'
     region = _norm_region(region)
     err = _ERR_MSGS[lang]
-    key = _cache_key(lang, region)
-    now = time.time()
-    # DISABLE_GROQ=true: 옛 LLM 캐시(in-memory/DB) 완전 무시하고 매번 fresh fallback 으로
-    disable_groq = os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
-    if not disable_groq:
-        # 1차: in-memory cache hit
-        with _ai_lock:
-            c = _ai_cache.get(key)
-            if c and c['summary'] and now < c['expires']:
-                return {'summary': c['summary'], 'generated_at': c['generated_at'], 'cached': True}
-        # 2차: DB (app_cache) hit
-        try:
-            payload = fetch_app_cache(_ai_summary_cache_key(lang, region))
-            if payload and payload.get('summary'):
-                with _ai_lock:
-                    _ai_cache[key] = {
-                        'summary': payload['summary'],
-                        'generated_at': payload.get('generated_at'),
-                        'expires': now + _AI_TTL,
-                    }
-                return {**payload, 'cached': True, 'source': 'app_cache'}
-        except Exception as e:
-            print(f'[AI Summary] DB read 실패 (계속 진행): {e}')
-    # 3차: cache miss → 즉시 fallback 응답 + 백그라운드 LLM 생성 (다음 요청용 캐시)
+    # 사용자 요청 (2026-05-13): ai-summary 항상 rule-based fallback 사용 — Railway/local 동일.
+    # 옛 LLM 캐시 (in-memory + DB app_cache) 및 백그라운드 LLM 생성 모두 우회.
     try:
         fallback = _fallback_ai_summary(lang, region)
     except Exception as e:
         print(f'[AI Summary] fallback error: {e}')
         fallback = err.get('fail') or '현재 지표 기준으로 시장 상황 점검 중.'
-    # DISABLE_GROQ=true: 백그라운드 LLM 생성 등록 안 함 (LLM 호출 0 강제)
-    if os.getenv('DISABLE_GROQ', '').lower() not in ('true', '1', 'yes'):
-        background_tasks.add_task(_bg_generate_summary, lang, region)
     return {'summary': fallback, 'generated_at': _kst_now_str(),
             'cached': False, 'source': 'fallback'}
 
@@ -1850,48 +1825,9 @@ def get_ai_explain(background_tasks: BackgroundTasks,
     err = _EXPLAIN_ERR[lang]
     if tab not in _EXPLAIN_PROMPTS['ko']:
         return {'explanation': err['bad_tab'], 'error': True}
-
-    now = time.time()
-    cache_key = f'explain_{tab}_{lang}_{region}'             # region 별 캐시 분리
-
-    # DISABLE_GROQ=true: 옛 LLM 캐시(in-memory/DB) 우회하고 매번 fresh fallback
-    disable_groq = os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes')
-
-    if not disable_groq:
-        # 1차: in-memory cache (TTL 안)
-        with _explain_lock:
-            cached = _explain_cache.get(cache_key)
-            if cached and now < cached.get('expires', 0):
-                return {'explanation': _format_explain_blocks(cached['text']), 'tab': tab, 'cached': True}
-
-        # 2차: DB cache (스케줄러 미리 적재)
-        try:
-            row = fetch_ai_explain(tab, lang, region)
-        except Exception as e:
-            print(f'[AI Explain {tab}/{lang}/{region}] DB read 실패 (계속 진행): {e}')
-            row = None
-    else:
-        row = None
-    if row and row.get('explanation'):
-        formatted = _format_explain_blocks(row['explanation'])
-        with _explain_lock:
-            _explain_cache[cache_key] = {
-                'text': formatted,
-                'expires': now + _EXPLAIN_TTL,
-            }
-        return {
-            'explanation': formatted,
-            'tab': tab,
-            'cached': True,
-            'generated_at': row.get('generated_at'),
-        }
-
-    # 3차: cache miss → fallback 즉시 응답 + 백그라운드 LLM 생성 등록 (다음 요청용 캐시).
-    # fallback 은 _explain_cache 에 *짧게* 저장하지 않는다 — 다음 요청은 BG 결과나 DB 를
-    # 다시 확인하도록 두어, BG 가 끝나는 즉시 LLM 결과로 자연 교체되게 함.
+    # 사용자 요청 (2026-05-13): ai-explain 항상 rule-based fallback — Railway/local 동일.
+    # 옛 LLM 캐시 (in-memory + DB ai_explain_cache) 및 백그라운드 LLM 생성 모두 우회.
     fallback = _fallback_ai_explain(tab, lang, region)
-    if not disable_groq:
-        background_tasks.add_task(_bg_generate_explain, tab, lang, region)
     return {
         'explanation': fallback or err['no_data'],
         'tab': tab,
