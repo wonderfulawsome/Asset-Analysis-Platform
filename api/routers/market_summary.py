@@ -807,7 +807,8 @@ def _build_home_brief(lang: str, region: str) -> str:
         ns_phrase = "펀더멘털-주가 갭 데이터 수집 중"
 
     # 1~2문장 조합
-    return f"{ret_phrase}, {rsi_phrase}. {ns_phrase}."
+    # 두 줄 — 줄1: 지수 수익률 + RSI, 줄2: 펀더멘털-주가 갭 위치
+    return f"{ret_phrase}, {rsi_phrase}.\n{ns_phrase}."
 
 
 @router.get('/ai-summary')                                   # GET /api/market-summary/ai-summary
