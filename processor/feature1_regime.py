@@ -50,11 +50,11 @@ FEATURE_NAMES = [
     'realized_vol',
 ]
 
-# KR 7-feature: DART annual_ni 통합으로 fundamental_gap 정상 산출 → 학습에 포함.
+# KR 7-feature: realized_vol (펀더 무관) 제거 + per_zscore_5y (절대 PER) 추가.
 # vix_term 만 여전히 평탄 (VKOSPI 단일값) → 제외.
 FEATURE_NAMES_KR = [
     'fundamental_gap', 'erp_zscore', 'residual_corr', 'dispersion',
-    'amihud', 'hy_spread', 'realized_vol',
+    'amihud', 'hy_spread', 'per_zscore_5y',
 ]
 
 # noise_score 가중치 — 양수 = 감정성 (옛 컨벤션, DB 저장용 / repo 단에서 부호 반전)
@@ -68,16 +68,16 @@ NOISE_WEIGHTS_US = [
     ('amihud',          0.5, False),
     ('vix_term',        2.0, False),
     ('hy_spread',       1.5, False),
-    ('realized_vol',    2.0, False),
+    ('realized_vol',    0.0, False),  # 사용자 결정 2026-05-16: 펀더멘털-주가 괴리와 무관 → 가중치 0
 ]
 NOISE_WEIGHTS_KR = [
-    ('fundamental_gap', 0.5, True),   # abs — DART annual_ni 시계열 통합 후 활성화
-    ('erp_zscore',      0.3, True),   # abs — US 와 동일 (fundamental_gap 활성 후 원복)
+    ('fundamental_gap', 0.5, True),   # abs — PER 12개월 변화율
+    ('erp_zscore',      0.3, True),   # abs — 주식 위험 프리미엄 z-점수
     ('residual_corr',   1.0, False),
     ('dispersion',      0.0, False),
     ('amihud',          0.5, False),
     ('hy_spread',       1.5, False),
-    ('realized_vol',    4.0, False),  # 2.0 → 4.0 (vix_term 2.0 흡수)
+    ('per_zscore_5y',   0.5, True),   # abs — PER 절대 수준 5년 z-score (사용자 결정 2026-05-16: realized_vol 대체)
 ]
 
 MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'models')
@@ -373,9 +373,10 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
     # 기준 날짜 인덱스: SPY 수익률의 최근 N일 (영업일 기준)
     spy_dates = spy_ret.dropna().index[-days:]     # 최근 N 영업일
 
-    # 월별 피처(fundamental_gap, erp_zscore)를 일별로 forward-fill — KR 은 fundamental_gap 미사용
+    # 월별 피처(fundamental_gap, erp_zscore, per_zscore_5y)를 일별로 forward-fill
     fg_monthly = features_monthly['fundamental_gap'] if 'fundamental_gap' in features_monthly.columns else None
     ez_monthly = features_monthly['erp_zscore']       # 월별 ERP Z-score
+    pz_monthly = features_monthly['per_zscore_5y'] if 'per_zscore_5y' in features_monthly.columns else None  # KR 신규 (2026-05-16)
 
     # ⑥ vix_term 일별 시계열 (US: VIX/VIX3M, KR: VKOSPI/VKOSPI 60D)
     # 빈 Series 도 DatetimeIndex 보장 — RangeIndex 와 Timestamp 비교 시 TypeError 회피
@@ -468,7 +469,14 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
             spy_before = spy_ret[spy_ret.index <= date].iloc[-20:]  # 20일 SPY 수익률
             rv_val = float(spy_before.std() * np.sqrt(252)) if len(spy_before) > 0 else 0.0  # 연율화 변동성
 
-            # 피처 벡터 구성 — region 따라 8(US) / 6(KR)
+            # ⑨ per_zscore_5y: 월별 forward-fill (KR 신규, 2026-05-16)
+            if pz_monthly is not None:
+                pz_before = pz_monthly[pz_monthly.index <= date]
+                pz_val = float(pz_before.iloc[-1]) if len(pz_before) > 0 else 0.0
+            else:
+                pz_val = 0.0
+
+            # 피처 벡터 구성 — region 따라 8(US) / 7(KR)
             full_values = {
                 'fundamental_gap': fg_val,
                 'erp_zscore':      ez_val,
@@ -478,6 +486,7 @@ def backfill_noise_regime(bundle: dict, model_bundle: dict, days: int = 60,
                 'vix_term':        vt_val,
                 'hy_spread':       hy_val,
                 'realized_vol':    rv_val,
+                'per_zscore_5y':   pz_val,
             }
             feat_vec = np.array([[full_values[n] for n in feat_names]])  # (1, n_features)
 

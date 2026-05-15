@@ -144,17 +144,26 @@
     return { text: '평소에 매우 가까움', color: '#1d4ed8', desc: '10년 중 하위 20%' };
   }
 
-  async function loadAnomaly() {
+  // 기본 기간 = 10Y (2520 거래일). 토글로 252(1Y)/21(1M) 변경 가능.
+  let _anomalyDays = 2520;
+
+  async function loadAnomaly(days) {
     // an-summary 카드는 사용자 요청으로 제거됨 — sumEl 없음.
+    if (typeof days === 'number') _anomalyDays = days;
     const chartEl = document.getElementById('an-chart');
     const contribEl = document.getElementById('an-contribs');
     const knnEl = document.getElementById('an-knn');
+
+    // 차트 위에 기간 토글 attach (1회만, 클릭 시 재호출)
+    if (chartEl && typeof window.attachPeriodToggle === 'function') {
+      window.attachPeriodToggle(chartEl, _anomalyDays, function(p) { loadAnomaly(p); });
+    }
 
     try {
       const _wr = (typeof window.withRegion === 'function') ? window.withRegion : (u => u);
       const [curRes, histRes] = await Promise.all([
         fetch(_wr('/api/anomaly/current')),
-        fetch(_wr('/api/anomaly/history?days=2520')),
+        fetch(_wr('/api/anomaly/history?days=' + _anomalyDays)),
       ]);
       const cur = await curRes.json();
       const hist = await histRes.json();

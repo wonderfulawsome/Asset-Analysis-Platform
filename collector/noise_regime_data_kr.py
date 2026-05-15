@@ -514,6 +514,18 @@ def compute_monthly_features_kr(
         realized_vol_monthly = amihud_monthly * 0
     realized_vol_monthly.name = 'realized_vol'
 
+    # ── ⑧ per_zscore_5y ── KOSPI PER 의 5년 rolling z-score (절대 PER 수준)
+    # fundamental_gap (= PER 12개월 변화율) 와 보완. 사용자 결정 2026-05-16: 절대 PER 수준 추가.
+    if 'P' in shiller_kr.columns and 'E' in shiller_kr.columns:
+        sh_per = shiller_kr['P'] / shiller_kr['E'].clip(lower=0.01)
+        # 5년 = 60 months rolling. min_periods=12 (1년) 로 조기 시작.
+        per_rm = sh_per.rolling(60, min_periods=12).mean()
+        per_rs = sh_per.rolling(60, min_periods=12).std()
+        per_zscore_5y_monthly = ((sh_per - per_rm) / per_rs).dropna()
+    else:
+        per_zscore_5y_monthly = amihud_monthly * 0
+    per_zscore_5y_monthly.name = 'per_zscore_5y'
+
     # ── 병합 ──
     all_series = {
         'fundamental_gap': fundamental_gap,
@@ -524,6 +536,7 @@ def compute_monthly_features_kr(
         'vix_term': vix_term,
         'hy_spread': hy_spread_monthly,
         'realized_vol': realized_vol_monthly,
+        'per_zscore_5y': per_zscore_5y_monthly,
     }
     features = pd.DataFrame({k: _strip_tz(v) for k, v in all_series.items()})
     # 100% NaN 컬럼 자동 제거 — 외부 API (ECOS/yfinance VKOSPI 등) 실패한 피처는 차원에서 빠짐.

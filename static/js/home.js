@@ -390,7 +390,9 @@
   // ─────────────────────────────────────────────────────────────
   // 시장 밸류 (ERP / Fed Model) 페이지
   // ─────────────────────────────────────────────────────────────
-  async function loadMarketValuation() {
+  let _mvDays = 2520;
+  async function loadMarketValuation(days) {
+    if (typeof days === 'number') _mvDays = days;
     const fEl = document.getElementById('market-valuation-formula');
     const gEl = document.getElementById('market-valuation-gauge');
     const dEl = document.getElementById('market-valuation-decompose');
@@ -399,10 +401,14 @@
     // 다른 탭과 동일한 loading-placeholder + spinner 사용 (재진입 시에도 일관 표시)
     const _SPIN = '<div class="loading-placeholder"><div class="loading-spinner sm"></div></div>';
     [fEl, gEl, dEl, hEl, iEl].forEach(el => el && (el.innerHTML = _SPIN));
+    // history 차트 위에 기간 토글 attach (1회만)
+    if (hEl && typeof window.attachPeriodToggle === 'function') {
+      window.attachPeriodToggle(hEl, _mvDays, function(p) { loadMarketValuation(p); });
+    }
     try {
       const url = (typeof window.withRegion === 'function')
-        ? window.withRegion('/api/macro/valuation-signal?days=2520')
-        : '/api/macro/valuation-signal?days=2520';
+        ? window.withRegion('/api/macro/valuation-signal?days=' + _mvDays)
+        : '/api/macro/valuation-signal?days=' + _mvDays;
       const r = await fetch(url);
       const d = await r.json();
       if (d.error || !d.today) {

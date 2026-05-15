@@ -3,6 +3,32 @@ var _csData = null;
 var _nrData = null;
 var _fgData = null;  // 공포탐욕 데이터 캐시 (인사이트 연동용)
 
+// ── 그래프 기간 토글 (공통) — 10Y/1Y/1M 칩, 차트 위에 동적 삽입 ──
+// 사용: window.attachPeriodToggle(chartEl, currentDays, onChange) — chartEl 부모 노드 위에 한 번 삽입.
+window.attachPeriodToggle = function(chartEl, currentDays, onChange) {
+  if (!chartEl || !chartEl.parentNode) return null;
+  // 이미 있으면 active 상태만 갱신
+  let toggle = chartEl.parentNode.querySelector(':scope > .period-toggle[data-target="' + (chartEl.id || '') + '"]');
+  if (toggle) {
+    toggle.querySelectorAll('.pt-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.period) === currentDays));
+    return toggle;
+  }
+  toggle = document.createElement('div');
+  toggle.className = 'period-toggle';
+  toggle.dataset.target = chartEl.id || '';
+  const mk = (d, label) => `<button class="pt-btn ${currentDays === d ? 'active' : ''}" data-period="${d}">${label}</button>`;
+  toggle.innerHTML = mk(2520, '10년') + mk(252, '1년');
+  toggle.addEventListener('click', function(e) {
+    const btn = e.target.closest('.pt-btn');
+    if (!btn) return;
+    const p = parseInt(btn.dataset.period);
+    toggle.querySelectorAll('.pt-btn').forEach(b => b.classList.toggle('active', b === btn));
+    try { onChange(p); } catch (err) { console.error('[period-toggle] onChange 실패:', err); }
+  });
+  chartEl.parentNode.insertBefore(toggle, chartEl);
+  return toggle;
+};
+
 // ── 펀더멘털 반영도 인사이트 — 양수=정렬, 음수=분리 (단순 2분할) ──
 function _buildFgNoiseInsight(noiseScore) {
   if (noiseScore == null) return '';
@@ -93,7 +119,7 @@ function getCSFeatureDesc() {                     // CS 피처 설명 사전 생
 }
 
 // NR 피처 키 목록
-const NR_FEATURE_KEYS = ['fundamental_gap','erp_zscore','residual_corr','dispersion','amihud','vix_term','hy_spread','realized_vol'];
+const NR_FEATURE_KEYS = ['fundamental_gap','erp_zscore','residual_corr','dispersion','amihud','vix_term','hy_spread','realized_vol','per_zscore_5y'];
 // 동적 getter: 매번 현재 언어의 번역을 반환
 function getNRFeatureDesc() {                     // NR 피처 설명 사전 생성
   const obj = {};
@@ -1782,12 +1808,19 @@ function renderDualLineChart(containerId, labels, crashVals, surgeVals) {
   svg.addEventListener('touchend', () => setTimeout(hideTip, 1500), { passive: true });
 }
 
-// ── 펀더멘털 반영도 (fundamental_gap) — 펀더멘털 탭 hero + 10년 차트 ──
+// ── 펀더멘털 반영도 (fundamental_gap) — 펀더멘털 탭 hero + 차트 (10Y/1Y/1M 토글) ──
 // noise_score (이성/감정 종합점수) 대신 fundamental_gap 1개 피처 raw + 분포 위치 표시.
-async function loadFundamentalGap() {
+let _fgDays = 2520;
+async function loadFundamentalGap(days) {
+  if (typeof days === 'number') _fgDays = days;
+  // 차트 위에 기간 토글 attach (1회만, 클릭 시 재호출)
+  const chartEl = document.getElementById('nr-chart');
+  if (chartEl && typeof window.attachPeriodToggle === 'function') {
+    window.attachPeriodToggle(chartEl, _fgDays, function(p) { loadFundamentalGap(p); });
+  }
   let data;
   try {
-    const res = await fetch('/api/regime/fundamental-gap?days=2520');
+    const res = await fetch('/api/regime/fundamental-gap?days=' + _fgDays);
     data = await res.json();
   } catch (e) { console.error('loadFundamentalGap error:', e); return; }
   if (!data || !data.current) return;

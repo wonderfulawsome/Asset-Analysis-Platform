@@ -487,6 +487,7 @@ const I18N = {
     'feat.vix_term': 'VIX 기간구조',
     'feat.hy_spread': '하이일드 스프레드',
     'feat.realized_vol': '실현 변동성',
+    'feat.per_zscore_5y': 'PER Z점수 (5년)',
 
     // ── NR 피처 설명 ──
     'featDesc.fundamental_gap': 'Shiller CAPE 기반 적정가 대비 괴리. 괴리가 크면 시장이 펀더멘털이 아닌 투자심리로 움직이는 구간',
@@ -497,6 +498,7 @@ const I18N = {
     'featDesc.vix_term': 'VIX 선물 원월물-근월물 차이. 역전되면 "지금 당장"의 공포가 극심해 심리 주도 장세',
     'featDesc.hy_spread': '정크본드 스프레드. 신용시장 공포가 주식까지 전이되면 펀더멘털과 무관하게 일괄 매도 발생',
     'featDesc.realized_vol': '실제 주가 변동 크기. 변동성이 높은 구간은 펀더멘털보다 단기 노이즈가 가격을 흔드는 전형적 패턴',
+    'featDesc.per_zscore_5y': 'KOSPI PER 의 5년 평균 대비 표준편차 위치. 절대 PER 수준이 평소보다 비싼지/싼지를 측정 — 펀더멘털 갭(변화율)과 보완 관계',
 
     // ── 햄버거 메뉴 / About 페이지 ──
     'menu.title': '메뉴',
@@ -1000,6 +1002,7 @@ const I18N = {
     'feat.vix_term': 'VIX Term Structure',
     'feat.hy_spread': 'HY Spread',
     'feat.realized_vol': 'Realized Volatility',
+    'feat.per_zscore_5y': 'PER Z-Score (5Y)',
 
     // ── NR Feature Descriptions ──
     'featDesc.fundamental_gap': 'Divergence from Shiller CAPE fair value. Large gaps mean sentiment, not fundamentals, drives prices',
@@ -1010,6 +1013,7 @@ const I18N = {
     'featDesc.vix_term': 'VIX futures front-back spread. Inversion = extreme immediate fear, sentiment-driven market',
     'featDesc.hy_spread': 'Junk bond spread. When credit fear spills to equities, indiscriminate selling regardless of fundamentals',
     'featDesc.realized_vol': 'Actual price fluctuation. High-volatility periods indicate emotion-driven trading, a classic noise regime',
+    'featDesc.per_zscore_5y': 'KOSPI PER position vs 5-year average (std-dev units). Measures absolute PER level — complements fundamental_gap (change rate)',
 
     // ── Hamburger menu / About page ──
     'menu.title': 'Menu',
