@@ -887,7 +887,7 @@ async function loadRegime() {
   const card = container.closest('.fc-regime') || container.closest('.card');
   if (card && !card.classList.contains('card-tappable')) {
     card.classList.add('card-tappable');
-    card.addEventListener('click', () => openDetail('Noise vs Signal', renderNoiseDetail)); // 제목은 영문 고정
+    card.addEventListener('click', () => openDetail('펀더멘털 갭 추이', renderNoiseDetail)); // 사용자 결정 2026-05-16: ML 결과물 제거, fundamental_gap raw 시계열만
   }
 }
 
@@ -2260,50 +2260,112 @@ function renderCrashSurgeDetail(body) {
 }
 
 // ── Noise vs Signal 상세 ──
-function renderNoiseDetail(body) {
-  if (!_nrData) { body.innerHTML = `<p style="color:var(--sub)">${t('detail.noData')}</p>`; return; }
-  const d = _nrData;
+// 펀더멘털 갭 detail — fundamental_gap raw 시계열만 표시 (사용자 결정 2026-05-16: ML 결과물 제거)
+// 10년/1년 토글 + 분포 위치 + 정의 설명. HMM noise_score / contributions / 7피처 grid 제거.
+let _fgDetailDays = 2520;
+async function renderNoiseDetail(body) {
+  body.innerHTML = '<div class="loading-placeholder"><div class="loading-spinner sm"></div></div>';
+  try {
+    const _wr = (typeof window.withRegion === 'function') ? window.withRegion : (u => u);
+    const r = await fetch(_wr('/api/regime/fundamental-gap?days=' + _fgDetailDays));
+    const d = await r.json();
+    if (!d || !d.current) {
+      body.innerHTML = '<p style="color:var(--sub);text-align:center;padding:40px">데이터 없음</p>';
+      return;
+    }
+    const cur = d.current;
+    const series = d.series || [];
+    const stats = d.stats || {};
+    const value = cur.value;
+    const topPct = cur.top_pct;
+    const sign = cur.sign;
+    const phaseLabel = sign === 'bubble' ? '가격이 이익을 추월' : sign === 'compress' ? '가격이 이익을 따라가지 못함' : '균형 (펀더멘털 반영 중)';
+    const phaseColor = sign === 'bubble' ? '#FF8C00' : sign === 'compress' ? '#3B82F6' : '#10B981';
+    const pricePct = (Math.exp(value) - 1) * 100;
 
-  const nrIcon = NR_ICON[d.regime_name] || { color: '#999' };
-  body.innerHTML = `<div style="text-align:center;margin-bottom:16px">
-    <div style="font-size:14px;color:var(--sub);font-weight:600">${t('detail.currentPhase')}</div>
-    <div style="font-size:24px;font-weight:800;color:${nrIcon.color};display:flex;align-items:center;justify-content:center;gap:8px">${nrIcon.icon ? lucideIcon(nrIcon.icon, 28, 1.8) : ''} ${tNrPhase(d.regime_name)}</div>
-    <div style="font-size:13px;color:var(--sub);margin-top:4px">${t('detail.noiseScore')} ${d.noise_score?.toFixed(4) ?? '--'}</div>
-  </div>
-  <div style="margin:0 0 16px;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,rgba(255,140,0,0.08),rgba(255,140,0,0.02));border:1px solid rgba(255,140,0,0.15)">
-    <div style="font-family:'SF Mono',Consolas,monospace;font-size:10px;font-weight:700;color:#FF8C00;letter-spacing:1px;margin-bottom:6px">ML MODEL INFO</div>
-    <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--sub)">
-      <span>기준일 <b style="color:var(--text)">${d.date}</b></span>
-      <span>모델 <b style="color:#FF8C00">4-State HMM</b></span>
-    </div>
-  </div>`;
+    body.innerHTML = `
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:14px;color:var(--sub);font-weight:600">펀더멘털 갭 (가격-이익 12개월 변화율 차이)</div>
+        <div style="font-size:32px;font-weight:800;color:${phaseColor};margin-top:8px">${value >= 0 ? '+' : ''}${value.toFixed(4)}</div>
+        <div style="font-size:13px;color:var(--sub);margin-top:6px">${phaseLabel} · 10년 분포 ${sign === 'compress' ? '하위' : '상위'} ${(sign === 'compress' ? 100 - topPct : topPct).toFixed(1)}%</div>
+        <div style="font-size:11px;color:var(--sub2);margin-top:4px">가격이 이익 대비 ${pricePct >= 0 ? '+' : ''}${pricePct.toFixed(0)}% (1년 누적)</div>
+      </div>
+      <div id="nr-detail-chart" style="margin:16px 0"></div>
+      <div style="margin:16px 0;padding:12px 14px;border-radius:8px;background:rgba(255,140,0,0.05);border-left:3px solid #FF8C00;font-size:12px;color:var(--sub);line-height:1.6">
+        <div style="font-weight:700;color:#FF8C00;margin-bottom:4px">정의</div>
+        fundamental_gap = log(P_t / P_{t−12}) − log(E_t / E_{t−12})<br>
+        가격 12개월 log 변화율 − 이익 12개월 log 변화율 = log(PER 12개월 변화).<br>
+        양수 = 가격이 이익보다 빠르게 상승 (P/E 확장), 0 근처 = 균형 반영, 음수 = 가격이 이익을 따라가지 못함 (P/E 압축).
+      </div>
+      <div style="margin:0;padding:12px 14px;border-radius:8px;background:rgba(255,255,255,0.03);font-size:12px;color:var(--sub);line-height:1.7">
+        <div style="font-weight:700;color:var(--text);margin-bottom:6px">10년 분포 통계</div>
+        평균 <b>${(stats.mean ?? 0).toFixed(3)}</b> · 중앙값 <b>${(stats.median ?? 0).toFixed(3)}</b><br>
+        범위 <b>${(stats.min ?? 0).toFixed(3)}</b> ~ <b>${(stats.max ?? 0).toFixed(3)}</b><br>
+        표본 <b>${stats.count}</b>일
+      </div>
+    `;
 
-  // 피처 기여도
-  if (d.feature_contributions && d.feature_contributions.length > 0) {
-    const maxAbs = Math.max(...d.feature_contributions.map(c => Math.abs(c.contribution)), 0.001);
-    body.innerHTML += `<div class="feat-section-title">${t('detail.noiseComposition')}</div>`;
-    const items = d.feature_contributions.map(c => ({ name: c.name, value: c.contribution }));
-    renderBarChart(body, items, maxAbs, getNRFeatureDesc());
-  }
-
-  // 현재 지표 수치 (2열 그리드 + 화살표)
-  renderFeatureValuesGrid(body, d.feature_values, getNRFeatureDesc());
-
-  // 피처 데이터 없을 때 안내
-  if (!d.feature_contributions && !d.feature_values) {
-    body.innerHTML += `<div style="text-align:center;padding:24px 0;color:var(--sub);font-size:13px;line-height:1.6">
-      ${t('detail.noFeature').replace('\n', '<br>')}
-    </div>`;
-  }
-
-  // 분석에 사용된 지표
-  const allItems = [
-    ...(d.feature_contributions || []),
-    ...Object.keys(d.feature_values || {}).map(k => ({ name: k })),
-  ];
-  if (allItems.length > 0) {
-    body.innerHTML += `<div class="feat-section-title">${t('detail.usedIndicators')}</div>`;
-    renderDescCards(body, allItems, getNRFeatureDesc());
+    // 시계열 SVG 차트
+    const chartEl = document.getElementById('nr-detail-chart');
+    if (chartEl) {
+      // 토글 attach (10년/1년)
+      if (typeof window.attachPeriodToggle === 'function') {
+        window.attachPeriodToggle(chartEl, _fgDetailDays, function(p) {
+          _fgDetailDays = p;
+          renderNoiseDetail(body);
+        });
+      }
+      // 월별 downsample
+      const byMonth = {};
+      series.forEach(s => { byMonth[s.date.slice(0,7)] = s; });
+      const monthly = Object.values(byMonth).sort((a,b) => a.date.localeCompare(b.date));
+      if (monthly.length < 2) {
+        chartEl.innerHTML += '<div style="text-align:center;padding:20px;color:var(--sub);font-size:12px">시계열 데이터 부족</div>';
+        return;
+      }
+      const points = monthly.map(r => ({ label: r.date, value: r.value }));
+      const vals = points.map(p => p.value);
+      const dMin = Math.min(...vals), dMax = Math.max(...vals);
+      const W = Math.max(chartEl.clientWidth || 360, 320);
+      const H = 240;
+      const pad = { top: 14, right: 14, bottom: 24, left: 44 };
+      const cW = W - pad.left - pad.right;
+      const cH = H - pad.top - pad.bottom;
+      const span = (dMax - dMin) || 1;
+      const yMin = Math.min(dMin - span * 0.08, -0.05);
+      const yMax = Math.max(dMax + span * 0.08, 0.05);
+      const yRange = yMax - yMin || 1;
+      const xStep = points.length > 1 ? cW / (points.length - 1) : 0;
+      let pathD = '';
+      points.forEach((p, i) => {
+        const x = pad.left + i * xStep;
+        const y = pad.top + (yMax - p.value) / yRange * cH;
+        pathD += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ',' + y.toFixed(1) + ' ';
+      });
+      // 마지막 점 (오늘)
+      const lastX = pad.left + (points.length - 1) * xStep;
+      const lastY = pad.top + (yMax - points[points.length - 1].value) / yRange * cH;
+      const zeroY = pad.top + (yMax / yRange) * cH;
+      // 시작/끝 라벨
+      const startDate = points[0].label;
+      const endDate = points[points.length - 1].label;
+      const chartSvg = `
+        <svg width="${W}" height="${H}" style="display:block">
+          <line x1="${pad.left}" y1="${zeroY}" x2="${W - pad.right}" y2="${zeroY}" stroke="rgba(255,255,255,0.2)" stroke-dasharray="3 3"/>
+          <path d="${pathD}" fill="none" stroke="${phaseColor}" stroke-width="1.8"/>
+          <circle cx="${lastX}" cy="${lastY}" r="3.5" fill="${phaseColor}"/>
+          <text x="${pad.left - 4}" y="${pad.top + 4}" font-size="9" fill="#9ca3af" text-anchor="end">${yMax.toFixed(2)}</text>
+          <text x="${pad.left - 4}" y="${pad.top + cH}" font-size="9" fill="#9ca3af" text-anchor="end">${yMin.toFixed(2)}</text>
+          <text x="${pad.left - 4}" y="${zeroY + 3}" font-size="9" fill="#6b7280" text-anchor="end">0</text>
+          <text x="${pad.left}" y="${H - 6}" font-size="9" fill="#9ca3af">${startDate}</text>
+          <text x="${W - pad.right}" y="${H - 6}" font-size="9" fill="#9ca3af" text-anchor="end">${endDate}</text>
+        </svg>
+      `;
+      // chartSvg 를 토글 다음에 append (토글 element 보존)
+      chartEl.insertAdjacentHTML('beforeend', chartSvg);
+    }
+  } catch (e) {
+    body.innerHTML = `<p style="color:#ef4444;text-align:center;padding:40px">로드 실패: ${e.message || e}</p>`;
   }
 }
 
