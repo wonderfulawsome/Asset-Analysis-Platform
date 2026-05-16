@@ -86,6 +86,12 @@ CREATE TABLE IF NOT EXISTS sector_macro_raw (
     capex_yoy_chg3m  DOUBLE PRECISION,
     cpi_yoy          DOUBLE PRECISION,                              -- 2026-05-07: CPIAUCSL YoY
     ism_pmi          DOUBLE PRECISION,                              -- 2026-05-07: NAPM (참고용, NULL 허용)
+    unrate           DOUBLE PRECISION,                              -- 2026-05-13: 실업률 (%)
+    hy_oas           DOUBLE PRECISION,                              -- 2026-05-13: 하이일드 OAS (%p)
+    vix              DOUBLE PRECISION,                              -- 2026-05-13: VIX 월평균
+    sahm             DOUBLE PRECISION,                              -- 2026-05-16: Sahm Rule 침체신호
+    loan_tighten     DOUBLE PRECISION,                              -- 2026-05-16: 은행 대출기준 강화 %
+    cfnai            DOUBLE PRECISION,                              -- 2026-05-16: 시카고 연준 국가활동지수
     created_at       TIMESTAMPTZ DEFAULT NOW()
 );
 

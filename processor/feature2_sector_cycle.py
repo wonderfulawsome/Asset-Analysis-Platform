@@ -20,6 +20,10 @@ FEATURE_COLS_US = [
     'unrate',                                                 # 실업률 절댓값
     'hy_oas',                                                 # 하이일드 OAS 스프레드 (신용 위험)
     'vix',                                                    # VIX (시장 스트레스)
+    # 2026-05-16 추가 (회복→둔화 보수화용 leading indicators)
+    'sahm',                                                   # Sahm Rule 실시간 침체신호 (>=0.5 침체)
+    'loan_tighten',                                           # 은행 대출기준 강화 % (신용경색 leading)
+    'cfnai',                                                  # 시카고 연준 국가활동지수 (85지표 종합)
 ]
 # KR 12종 + derived 2종 (총 14컬럼) — 4-state HMM 학습용
 FEATURE_COLS_KR = [

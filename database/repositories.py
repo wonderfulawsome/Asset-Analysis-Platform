@@ -230,9 +230,10 @@ def fetch_sector_macro_history(limit: int = 120, region: str = 'us') -> list[dic
     response = (
         client.table("sector_macro_raw")
         .select(
-            # US 8 + derived 2
+            # US 8 + derived 2 + 2026-05-13 leading 3 + 2026-05-16 leading 3
             "date,pmi,yield_spread,anfci,icsa_yoy,permit_yoy,real_retail_yoy,"
-            "capex_yoy,real_income_yoy,pmi_chg3m,capex_yoy_chg3m,"
+            "capex_yoy,real_income_yoy,pmi_chg3m,capex_yoy_chg3m,cpi_yoy,ism_pmi,"
+            "unrate,hy_oas,vix,sahm,loan_tighten,cfnai,"
             # KR 12 + derived 2 (sparse — region='us' 행은 NULL, region='kr' 행은 KR 채워짐)
             "kr_indpro_yoy,kr_yield_spread,kr_credit_spread,"
             "kr_unemp_yoy,kr_unemp_rate,kr_permit_yoy,kr_retail_yoy,"
@@ -448,17 +449,44 @@ def fetch_crash_surge_current(region: str = 'us') -> Optional[dict]:
 
 
 def fetch_crash_surge_history(days: int = 30, region: str = 'us') -> list[dict]:
-    """최근 N건의 crash/surge 히스토리를 날짜 내림차순으로 조회합니다."""
+    """최근 N건의 crash/surge 히스토리를 날짜 내림차순으로 조회합니다.
+    days≤1000 은 단일 쿼리 (전체 컬럼).
+    days>1000 은 경량 컬럼만 (date/crash_score/crash_grade/surge_score/surge_grade/net_score) +
+    1000행씩 페이지네이션 — shap/feature JSON 까지 fetch 하면 페이로드 MB 단위 늘어남.
+    """
     client = get_client()
-    response = (
-        client.table("crash_surge_result")
-        .select("*")
-        .eq("region", region)
-        .order("date", desc=True)
-        .limit(days)
-        .execute()
-    )
-    return [_parse_json_fields(r, _CS_JSON_FIELDS) for r in response.data]
+    if days <= 1000:
+        response = (
+            client.table("crash_surge_result")
+            .select("*")
+            .eq("region", region)
+            .order("date", desc=True)
+            .limit(days)
+            .execute()
+        )
+        return [_parse_json_fields(r, _CS_JSON_FIELDS) for r in response.data]
+
+    # 페이지네이션 — 경량 컬럼만, 내림차순 정렬 유지
+    light_cols = "date,region,crash_score,crash_grade,surge_score,surge_grade,net_score"
+    all_rows: list[dict] = []
+    page = 1000
+    offset = 0
+    while offset < days:
+        end = min(offset + page, days) - 1
+        resp = (
+            client.table("crash_surge_result")
+            .select(light_cols)
+            .eq("region", region)
+            .order("date", desc=True)
+            .range(offset, end)
+            .execute()
+        )
+        batch = resp.data or []
+        all_rows.extend(batch)
+        if len(batch) < (end - offset + 1):
+            break
+        offset += page
+    return all_rows
 
 
 def _fetch_all_pages(table: str, select: str, order_col: str = "date",

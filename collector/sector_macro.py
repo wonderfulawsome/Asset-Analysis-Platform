@@ -26,6 +26,10 @@ FRED_SERIES = {
     'UNRATE':       'unrate',          # 실업률 (%) — 침체 leading indicator
     'BAMLH0A0HYM2': 'hy_oas',          # 하이일드 OAS 스프레드 (%p) — 신용 위험 / 침체 leading
     'VIXCLS':       'vix',             # VIX 변동성지수 — 시장 스트레스 leading
+    # 2026-05-16 추가 (사용자 결정: 회복→둔화 보수화용 leading indicator 보강)
+    'SAHMREALTIME': 'sahm',            # Sahm Rule 실시간 침체신호 (>= 0.5 시 침체 진입)
+    'DRTSCILM':     'loan_tighten',    # 은행 대출기준 강화 % (분기, 신용경색 leading)
+    'CFNAI':        'cfnai',           # 시카고 연준 국가활동지수 (85개 지표 종합 coincident)
 }
 
 _fred_session = requests.Session()                       # FRED 전용 세션 (TCP 연결 재사용)
@@ -135,6 +139,18 @@ def fetch_sector_macro() -> pd.DataFrame:
     df_vix = raw['VIXCLS'].resample('MS').mean()
     df_vix = df_vix[['vix']].dropna()
 
+    # ── SAHMREALTIME: 월별 절댓값, Sahm Rule 침체신호 (>=0.5 침체 진입) ──
+    df_sahm = raw['SAHMREALTIME'].copy()
+    df_sahm = df_sahm[['sahm']].dropna()
+
+    # ── DRTSCILM (은행 대출기준 강화 %): 분기 → 월별 ffill, 신용경색 leading ──
+    df_loan = raw['DRTSCILM'].resample('MS').last().ffill(limit=3)
+    df_loan = df_loan[['loan_tighten']].dropna()
+
+    # ── CFNAI (시카고 연준 국가활동지수): 월별 절댓값, 85개 지표 종합 coincident ──
+    df_cfnai = raw['CFNAI'].copy()
+    df_cfnai = df_cfnai[['cfnai']].dropna()
+
     ### 각 지표의 전년대비 변화율 계산
 
     # ── 최종 관측일 추출 (ffill 전, 데이터 신선도 표시용) ──
@@ -144,6 +160,7 @@ def fetch_sector_macro() -> pd.DataFrame:
         'real_retail_yoy': df_rrsfs, 'capex_yoy': df_capex,
         'real_income_yoy': df_income, 'cpi_yoy': df_cpi,
         'unrate': df_unrate, 'hy_oas': df_hyoas, 'vix': df_vix,
+        'sahm': df_sahm, 'loan_tighten': df_loan, 'cfnai': df_cfnai,
     }
     last_obs_dates = {}
     for col, src in _obs_sources.items():
@@ -170,12 +187,26 @@ def fetch_sector_macro() -> pd.DataFrame:
              .join(df_cpi,    how='outer')
              .join(df_unrate, how='outer')
              .join(df_hyoas,  how='outer')
-             .join(df_vix,    how='outer'))
+             .join(df_vix,    how='outer')
+             .join(df_sahm,   how='outer')
+             .join(df_loan,   how='outer')
+             .join(df_cfnai,  how='outer'))
     # ISM PMI 결합 (선택적 — NULL 허용, HMM 피처에 포함하지 않음)
     if df_ism is not None:
         macro = macro.join(df_ism, how='left')
     macro = macro.resample('MS').last()                    # 월초 기준 리샘플링 → 마지막 값 사용
     macro = macro.ffill(limit=3)                          # 지연 지표를 최대 3개월까지 앞값으로 채움
+    # 2026-05-16 신규 leading 3종 + hy_oas: 시리즈 시작점/FRED CSV 응답 길이 제한으로
+    # leading NaN 발생 → 옛 행 dropna 되면 학습 데이터 급감.
+    # sahm/loan_tighten/cfnai 는 의미적으로 0 = 중립(침체신호 없음/규제 중립/추세 수준).
+    # hy_oas 는 FRED CSV 가 최근 ~3년치만 반환하는 제한이 있어 leading NaN 을 컬럼 median 으로 채움 (옛 평탄 가정).
+    for col in ('sahm', 'loan_tighten', 'cfnai'):
+        if col in macro.columns:
+            macro[col] = macro[col].fillna(0.0)
+    if 'hy_oas' in macro.columns:
+        med = macro['hy_oas'].median()
+        if pd.notna(med):
+            macro['hy_oas'] = macro['hy_oas'].fillna(med)
     macro = macro.dropna(subset=[c for c in macro.columns if c != 'ism_pmi'])  # ism_pmi는 NULL 허용
 
     # ── 파생 피처: 3개월 변화량 ──
@@ -211,6 +242,10 @@ def to_sector_macro_records(df: pd.DataFrame) -> list[dict]:
             'capex_yoy_chg3m':  round(float(row['capex_yoy_chg3m']), 4),
             'cpi_yoy':          round(float(row['cpi_yoy']), 4),
         })
+        # 2026-05-16 추가 leading indicators (NaN 허용 — 시리즈 부재 시 컬럼 누락)
+        for col in ('unrate', 'hy_oas', 'vix', 'sahm', 'loan_tighten', 'cfnai'):
+            if col in row.index and pd.notna(row.get(col)):
+                records[-1][col] = round(float(row[col]), 4)
         # ISM PMI (선택적 — NAPM 미지원 시 NULL)
         if 'ism_pmi' in row.index and pd.notna(row.get('ism_pmi')):
             records[-1]['ism_pmi'] = round(float(row['ism_pmi']), 4)
