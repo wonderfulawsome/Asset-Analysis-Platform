@@ -29,7 +29,300 @@
   </script>
   <!-- Pretendard 웹폰트 CDN -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-  <link rel="stylesheet" href="/static/css/main.css?v=140">
+  <link rel="stylesheet" href="/static/css/main.css?v=141">
+  <style>
+    /* AI차트 — Coinbase Prices style 목록 (다크 모드 친화) */
+    .ai-chart-list-view { padding: 12px 8px 16px; }
+    .ai-chart-list-view .cb-top {
+      display: grid; grid-template-columns: auto 1fr auto auto;
+      align-items: center; gap: 10px;
+      padding: 6px 10px 14px;
+    }
+    .ai-chart-list-view .cb-top button {
+      background: none; border: 0; cursor: pointer; color: var(--text);
+      width: 36px; height: 36px;
+      display: flex; align-items: center; justify-content: center;
+      font-family: inherit; padding: 0;
+      border-radius: 10px;
+    }
+    .ai-chart-list-view .cb-top button:hover { background: var(--sep); }
+    .ai-chart-list-view .cb-top button svg { width: 22px; height: 22px; }
+    .ai-chart-list-view .cb-grid-ico {
+      display: grid; grid-template-columns: repeat(3, 4px); gap: 3px;
+    }
+    .ai-chart-list-view .cb-grid-ico i {
+      width: 4px; height: 4px; background: currentColor; border-radius: 1px; display: block;
+    }
+    .ai-chart-list-view .cb-search {
+      background: var(--card); border: 1px solid var(--sep);
+      border-radius: 999px; padding: 8px 16px;
+      display: flex; align-items: center; gap: 8px;
+      color: var(--sub); font-size: 14px; font-weight: 500;
+      flex: 1; min-width: 0;
+    }
+    .ai-chart-list-view .cb-search svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .ai-chart-list-view .cb-search input {
+      background: transparent; border: 0; outline: none;
+      color: var(--text); font: inherit; flex: 1; min-width: 0;
+      padding: 2px 0;
+    }
+    .ai-chart-list-view .cb-search input::placeholder { color: var(--sub); }
+    .ai-chart-list-view .cb-tk.aichart-filtered { display: none; }
+    .ai-chart-list-view .cb-no-result {
+      padding: 20px 16px; text-align: center; color: var(--sub); font-size: 13px;
+    }
+    .ai-chart-list-view .cb-prices-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 8px 14px 12px;
+    }
+    .ai-chart-list-view .cb-prices-head h2 {
+      font-size: 26px; font-weight: 800; letter-spacing: -0.03em;
+      color: var(--text);
+    }
+    .ai-chart-list-view .cb-filter-pill {
+      background: var(--card); border: 1px solid var(--sep); cursor: pointer;
+      font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text);
+      padding: 8px 14px; border-radius: 999px;
+      display: inline-flex; align-items: center; gap: 6px;
+    }
+    .ai-chart-list-view .cb-filter-pill::after { content: '▾'; font-size: 10px; color: var(--sub); margin-left: 4px; }
+    .ai-chart-list-view .cb-sort-wrap { position: relative; }
+    .ai-chart-list-view .cb-sort-menu {
+      position: absolute; top: calc(100% + 6px); right: 0;
+      background: var(--bg); border: 1px solid var(--sep); border-radius: 12px;
+      list-style: none; padding: 4px; margin: 0;
+      min-width: 140px; z-index: 30;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    }
+    .ai-chart-list-view .cb-sort-menu[hidden] { display: none; }
+    .ai-chart-list-view .cb-sort-menu li {
+      padding: 9px 14px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      color: var(--text); cursor: pointer; user-select: none;
+    }
+    .ai-chart-list-view .cb-sort-menu li:hover { background: var(--card); }
+    .ai-chart-list-view .cb-sort-menu li.on {
+      background: var(--accent, #FF8C00); color: #fff;
+    }
+
+    .ai-chart-list-view .cb-ticker-list { padding: 2px 0 10px; }
+    .ai-chart-list-view .cb-tk {
+      display: grid; grid-template-columns: auto 1fr auto auto;
+      align-items: center; gap: 12px;
+      padding: 12px 14px; cursor: pointer;
+      border-radius: 10px;
+      transition: background 0.15s;
+    }
+    .ai-chart-list-view .cb-tk:hover { background: var(--card); }
+    .ai-chart-list-view .cb-ico {
+      width: 44px; height: 44px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-weight: 800; font-size: 13px;
+      letter-spacing: -0.02em;
+    }
+    .ai-chart-list-view .cb-nm { display: flex; flex-direction: column; line-height: 1.2; }
+    .ai-chart-list-view .cb-nm .cb-t {
+      font-size: 15.5px; font-weight: 800; color: var(--text); letter-spacing: -0.01em;
+    }
+    .ai-chart-list-view .cb-nm .cb-s { font-size: 12.5px; font-weight: 500; color: var(--sub); margin-top: 2px; }
+    .ai-chart-list-view .cb-spark { width: 80px; height: 34px; }
+    .ai-chart-list-view .cb-price {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+    }
+    .ai-chart-list-view .cb-price .cb-p {
+      font-size: 14.5px; font-weight: 700; color: var(--text); font-feature-settings: 'tnum';
+    }
+    .ai-chart-list-view .cb-price .cb-d {
+      font-size: 12px; font-weight: 700;
+      padding: 3px 8px; border-radius: 6px;
+      display: inline-flex; align-items: center; gap: 2px;
+    }
+    .ai-chart-list-view .cb-price .cb-d.up { color: #0BA66D; background: rgba(11,166,109,0.16); }
+    .ai-chart-list-view .cb-price .cb-d.down { color: #E0394A; background: rgba(224,57,74,0.18); }
+
+    .ai-chart-list-view .cb-see-all {
+      padding: 14px 14px 4px; display: flex; justify-content: center;
+    }
+    .ai-chart-list-view .cb-see-all button {
+      background: var(--card); border: 1px solid var(--sep); cursor: pointer;
+      font-family: inherit; font-size: 14px; font-weight: 700; color: var(--text);
+      padding: 14px 0; width: 100%; border-radius: 999px;
+    }
+    .ai-chart-list-view .cb-see-all button:hover { background: var(--sep); }
+
+    .ai-chart-back {
+      background: none; border: 0; cursor: pointer; color: var(--text);
+      font-family: inherit; font-size: 14px; font-weight: 700;
+      padding: 10px 12px; margin: 4px 0 8px;
+      border-radius: 10px;
+    }
+    .ai-chart-back:hover { background: var(--card); }
+
+    .ai-chart-list-view .cb-tk.aichart-hidden { display: none; }
+
+    /* ── list ↔ detail 전환 애니메이션 ─────────────────────────────── */
+    @keyframes aiSlideInRight {
+      from { opacity: 0; transform: translateX(28px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes aiSlideOutLeft {
+      from { opacity: 1; transform: translateX(0); }
+      to   { opacity: 0; transform: translateX(-28px); }
+    }
+    @keyframes aiSlideInLeft {
+      from { opacity: 0; transform: translateX(-28px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes aiSlideOutRight {
+      from { opacity: 1; transform: translateX(0); }
+      to   { opacity: 0; transform: translateX(28px); }
+    }
+    .ai-anim-in-right  { animation: aiSlideInRight 240ms cubic-bezier(.2,.7,.2,1) both; }
+    .ai-anim-in-left   { animation: aiSlideInLeft  240ms cubic-bezier(.2,.7,.2,1) both; }
+    .ai-anim-out-left  { animation: aiSlideOutLeft 180ms cubic-bezier(.4,0,1,1) both; }
+    .ai-anim-out-right { animation: aiSlideOutRight 180ms cubic-bezier(.4,0,1,1) both; }
+
+    /* ── 디자인 사양 키프레임 (home-a.html) ─────────────────────── */
+    @keyframes ai-fade-up   { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    @keyframes ai-scale-in  { from { opacity: 0; transform: scale(0.85); } to { opacity: 1; transform: scale(1); } }
+    @keyframes ai-line-draw { from { stroke-dashoffset: 600; } to { stroke-dashoffset: 0; } }
+    @keyframes ai-pulse-dot { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.3); opacity: 0.6; } }
+
+    /* ── List view: row stagger + sparkline line-draw ───────────── */
+    @keyframes ai-spark-draw { from { stroke-dashoffset: 200; } to { stroke-dashoffset: 0; } }
+    .ai-chart-list-view .cb-tk {
+      animation: ai-fade-up .45s cubic-bezier(.2,.7,.2,1) both;
+    }
+    .ai-chart-list-view .cb-tk .cb-spark polyline {
+      stroke-dasharray: 200;
+      stroke-dashoffset: 200;
+      animation: ai-spark-draw 2.2s cubic-bezier(.4,.0,.2,1) forwards;
+    }
+
+    /* ── Detail view: 디자인 캐스케이드 (replay 클래스로 재트리거) ─ */
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip {
+      animation: ai-fade-up .4s cubic-bezier(.2,.7,.2,1) both;
+    }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(1)  { animation-delay: .04s; }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(2)  { animation-delay: .08s; }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(3)  { animation-delay: .12s; }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(4)  { animation-delay: .16s; }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(5)  { animation-delay: .20s; }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(6)  { animation-delay: .24s; }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(7)  { animation-delay: .28s; }
+    .ai-chart-detail-view.aiv-replay .chart-ticker-chips .chart-tk-chip:nth-child(8)  { animation-delay: .32s; }
+    .ai-chart-detail-view.aiv-replay .chart-price-header {
+      animation: ai-fade-up .5s cubic-bezier(.2,.7,.2,1) both;
+    }
+    .ai-chart-detail-view.aiv-replay .chart-top-stats .stat-cell {
+      animation: ai-fade-up .45s cubic-bezier(.2,.7,.2,1) both;
+    }
+    .ai-chart-detail-view.aiv-replay .chart-top-stats .stat-cell:nth-child(1) { animation-delay: .16s; }
+    .ai-chart-detail-view.aiv-replay .chart-top-stats .stat-cell:nth-child(2) { animation-delay: .22s; }
+    .ai-chart-detail-view.aiv-replay .chart-top-stats .stat-cell:nth-child(3) { animation-delay: .28s; }
+    .ai-chart-detail-view.aiv-replay .chart-interval-bar {
+      animation: ai-fade-up .45s cubic-bezier(.2,.7,.2,1) both .12s;
+    }
+    .ai-chart-detail-view.aiv-replay .chart-similar-controls {
+      animation: ai-fade-up .5s cubic-bezier(.2,.7,.2,1) both .18s;
+    }
+    .ai-chart-detail-view.aiv-replay .card.chart-combined {
+      animation: ai-fade-up .55s cubic-bezier(.2,.7,.2,1) both .15s;
+    }
+    /* 동적 SVG: chart.js 가 #candle-chart 안에 rect/polyline 생성 시점에서 애니메이션이 자연 발동 */
+    .ai-chart-detail-view.aiv-replay #candle-chart rect {
+      animation: ai-scale-in .4s cubic-bezier(.2,.7,.2,1) both;
+      transform-origin: center bottom;
+    }
+    .ai-chart-detail-view.aiv-replay #candle-chart rect:nth-child(3n)   { animation-delay: .05s; }
+    .ai-chart-detail-view.aiv-replay #candle-chart rect:nth-child(3n+1) { animation-delay: .12s; }
+    .ai-chart-detail-view.aiv-replay #candle-chart rect:nth-child(3n+2) { animation-delay: .20s; }
+    .ai-chart-detail-view.aiv-replay #candle-chart polyline,
+    .ai-chart-detail-view.aiv-replay #candle-chart path.ma-line {
+      stroke-dasharray: 800;
+      stroke-dashoffset: 800;
+      animation: ai-line-draw 1.3s cubic-bezier(.2,.7,.2,1) forwards .4s;
+    }
+    .ai-chart-detail-view.aiv-replay #volume-chart rect {
+      animation: ai-scale-in .35s cubic-bezier(.2,.7,.2,1) both;
+      transform-origin: center bottom;
+    }
+    .ai-chart-detail-view.aiv-replay #volume-chart rect:nth-child(odd)  { animation-delay: .10s; }
+    .ai-chart-detail-view.aiv-replay #volume-chart rect:nth-child(even) { animation-delay: .18s; }
+    .ai-chart-detail-view.aiv-replay .chart-range-section {
+      animation: ai-fade-up .5s cubic-bezier(.2,.7,.2,1) both .3s;
+    }
+    .ai-chart-detail-view .chart-range-section .range-marker,
+    .ai-chart-detail-view .chart-range-section .range-track-marker,
+    .ai-chart-detail-view .chart-range-section .range-current-marker {
+      animation: ai-pulse-dot 2s ease-in-out infinite;
+      transform-origin: center;
+    }
+    .ai-chart-detail-view.aiv-replay .disclaimer {
+      animation: ai-fade-up .5s cubic-bezier(.2,.7,.2,1) both .7s;
+    }
+
+    /* ── 유사 패턴 카드 열기 애니메이션 ─────────────────────────── */
+    /* host innerHTML 매 토글마다 wipe/rewrite → 자연 재트리거 */
+    #similar-cards-host > div {
+      animation: ai-fade-up .45s cubic-bezier(.2,.7,.2,1) both;
+    }
+    #similar-cards-host > div:nth-child(1) { animation-delay: .00s; }
+    #similar-cards-host > div:nth-child(2) { animation-delay: .10s; }
+    #similar-cards-host > div:nth-child(3) { animation-delay: .20s; }
+    #similar-cards-host > div:nth-child(4) { animation-delay: .30s; }
+    #similar-cards-host > div:nth-child(5) { animation-delay: .40s; }
+    #similar-cards-host > div:nth-child(6) { animation-delay: .50s; }
+    #similar-cards-host > div:nth-child(7) { animation-delay: .60s; }
+    /* 미니 SVG path: 매칭 실선만 좌→우 line-draw (후속 점선은 inline dasharray 보존 위해 제외) */
+    #similar-cards-host > div svg path:not([stroke-dasharray]) {
+      stroke-dasharray: 600;
+      stroke-dashoffset: 600;
+      animation: ai-line-draw 1.1s cubic-bezier(.2,.7,.2,1) forwards;
+    }
+    #similar-cards-host > div:nth-child(1) svg path:not([stroke-dasharray]) { animation-delay: .25s; }
+    #similar-cards-host > div:nth-child(2) svg path:not([stroke-dasharray]) { animation-delay: .35s; }
+    #similar-cards-host > div:nth-child(3) svg path:not([stroke-dasharray]) { animation-delay: .45s; }
+    #similar-cards-host > div:nth-child(4) svg path:not([stroke-dasharray]) { animation-delay: .55s; }
+    #similar-cards-host > div:nth-child(5) svg path:not([stroke-dasharray]) { animation-delay: .65s; }
+    #similar-cards-host > div:nth-child(6) svg path:not([stroke-dasharray]) { animation-delay: .75s; }
+    #similar-cards-host > div:nth-child(7) svg path:not([stroke-dasharray]) { animation-delay: .85s; }
+    /* 후속(점선) path 는 부모 fade-up 으로 자연 등장 + inline dasharray="3,3" 점선 유지 */
+
+    /* 요약 박스 (summary) 숫자 카운트업 느낌 — fade-up 으로 대체 */
+
+    @media (prefers-reduced-motion: reduce) {
+      #similar-cards-host > div { animation: none !important; }
+      #similar-cards-host > div svg path:not([stroke-dasharray]) {
+        animation: none !important;
+        stroke-dasharray: 0 !important;
+        stroke-dashoffset: 0 !important;
+      }
+    }
+
+    /* ── card press feedback ──────────────────────────────────── */
+    .ai-chart-list-view .cb-tk {
+      transition: transform 120ms ease, background 160ms ease;
+    }
+    .ai-chart-list-view .cb-tk:active {
+      transform: scale(0.985);
+      background: var(--sep);
+    }
+
+    /* ── back button hover/press ──────────────────────────────── */
+    .ai-chart-back { transition: background 140ms ease, transform 120ms ease; }
+    .ai-chart-back:active { transform: translateX(-2px); }
+
+    /* ── reduced motion: 모션 사용자 설정 존중 ─────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      .ai-chart-list-view *, .ai-chart-detail-view * {
+        animation: none !important;
+        transition: none !important;
+      }
+      .ai-chart-list-view .cb-tk .cb-spark polyline { stroke-dashoffset: 0 !important; }
+      .ai-chart-detail-view #candle-chart polyline,
+      .ai-chart-detail-view #candle-chart path.ma-line { stroke-dashoffset: 0 !important; }
+    }
+  </style>
   <!-- Tailwind CDN 제거: preflight 가 body 의 margin:0 auto 를 덮어써 홈 뷰가 좌측 정렬됨.
        홈 뷰는 home.css 자체 grid 로 처리하므로 Tailwind 없이도 동작 -->
   <link rel="stylesheet" href="/static/css/home.css?v=18">
@@ -489,6 +782,39 @@
     <!-- ═══ 차트 탭 ═══ -->
     <main class="content" id="tab-chart">
 
+      <!-- AI차트 목록 뷰 — Coinbase 스타일 ticker list -->
+      <div id="ai-chart-list-view" class="ai-chart-list-view">
+        <header class="cb-top">
+          <button class="cb-grid-btn" type="button" aria-label="홈" onclick="window.showHome && window.showHome()">
+            <span class="cb-grid-ico" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          </button>
+          <label class="cb-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input id="ai-search-input" type="search" placeholder="Search" autocomplete="off" />
+          </label>
+        </header>
+        <div class="cb-prices-head">
+          <h2>지수 · 종목</h2>
+          <div class="cb-sort-wrap">
+            <button class="cb-filter-pill" type="button" id="ai-sort-trigger" aria-haspopup="listbox" aria-expanded="false">시가총액</button>
+            <ul class="cb-sort-menu" id="ai-sort-menu" role="listbox" hidden>
+              <li role="option" data-sort="mcap" class="on">시가총액</li>
+              <li role="option" data-sort="value">거래대금</li>
+              <li role="option" data-sort="up">상승률</li>
+              <li role="option" data-sort="down">하락률</li>
+            </ul>
+          </div>
+        </div>
+        <div class="cb-ticker-list" id="ai-chart-cb-list">
+          <div class="loading-placeholder"><div class="loading-spinner sm"></div></div>
+        </div>
+        <div class="cb-see-all"><button type="button" id="ai-chart-see-all">모두 보기</button></div>
+      </div>
+
+      <!-- 상세 뷰 (기존 차트 ticker bar 등) — 카드 클릭 시 .ai-chart-detail-show 클래스로 전환 -->
+      <div id="ai-chart-detail-view" class="ai-chart-detail-view" style="display:none;">
+      <button class="ai-chart-back" type="button" id="ai-chart-back">← 목록</button>
+
       <!-- 티커 선택 -->
       <div class="chart-ticker-bar fade-target">
         <div id="chart-ticker-chips" class="chart-ticker-chips"></div>
@@ -543,6 +869,7 @@
       <!-- 면책 문구 -->
       <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
 
+      </div><!-- /ai-chart-detail-view -->
     </main>
 
     <!-- ═══ 섹터 밸류에이션 탭 ═══ -->
@@ -590,7 +917,6 @@
     <!-- ═══ 상승·하락 신호 탭 (crash_surge regressor 결과 시각화) ═══ -->
     <main class="content" id="tab-crash-surge" style="display:none;">
       <h2 class="page-title">상승·하락 신호</h2>
-      <div class="tab-headline-box loading" id="headline-crash-surge"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
 
       <!-- ① hero — 오늘의 상승-하락 net_score -->
       <section class="card fade-target" id="cs-summary"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></section>
@@ -659,10 +985,10 @@
     // localStorage('lang') 가 'en' 으로 남아 있을 수 있어 강제로 'ko' 동기화.
     try { if (localStorage.getItem('lang') !== 'ko') localStorage.setItem('lang', 'ko'); } catch (e) {}
   </script>
-  <script src="/static/js/chart.js?v=35"></script>
-  <script src="/static/js/main.js?v=163"></script>
+  <script src="/static/js/chart.js?v=37"></script>
+  <script src="/static/js/main.js?v=164"></script>
   <script src="/static/js/sector.js?v=9"></script>
-  <script src="/static/js/home.js?v=53"></script>
+  <script src="/static/js/home.js?v=65"></script>
   <script src="/static/js/anomaly.js?v=22"></script>
   <script src="/static/js/menu.js?v=2"></script>
 </body>

@@ -25,6 +25,7 @@
   // 사용자 환경에서 train_kr_crash_surge / train_kr_sector_cycle 1회 실행 + 매일 스케줄러 자동 적재.
   const KR_SUPPORTED_TILES = new Set([
     'ai-chart', 'market', 'fundamental', 'market-valuation', 'signal', 'macro', 'sector-val', 'sector-mom',
+    'crash-surge',
   ]);
 
   function _isKrMode() {
@@ -112,20 +113,404 @@
     document.getElementById('back-to-home').hidden = false;
     document.body.classList.add('with-back');
     // main.js switchTab 은 TAB_IDS 5개만 토글하므로 sector-val/mom/market-valuation 은 직접 hide
-    ['tab-sector-val', 'tab-sector-mom', 'tab-market-valuation'].forEach(id => {
+    ['tab-sector-val', 'tab-sector-mom', 'tab-market-valuation', 'tab-crash-surge'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.style.display = 'none';
     });
     // 기존 탭 트리거 — main.js 가 처리
     const tabBtn = document.querySelector(`.tab[data-idx="${idx}"]`);
     if (tabBtn) tabBtn.click();
-    // 차트가 home active 상태에서 0 폭으로 그려졌을 가능성 → next tick 에 재렌더
+    // AI차트 (idx 0) — 기본 list 뷰로 진입
     if (idx === 0) {
-      setTimeout(() => {
-        if (typeof loadCandleChart === 'function') loadCandleChart();
-      }, 60);
+      showAiChartList();
     }
   }
+
+  // ─── AI차트 (tab-chart) — Coinbase 스타일 list ↔ detail 토글 ──────
+  // 본 프로젝트 AI차트 모델 학습 종목 = chart.py CHART_TICKERS (ETF 16종)
+  const AI_TICKERS_US = [
+    { t:'SPY',  s:'SPDR S&P 500',      ico:'SPY',  bg:'#FDEBDC', fg:'#C44A12' },
+    { t:'QQQ',  s:'Invesco QQQ',       ico:'QQQ',  bg:'#EDE9FE', fg:'#7C3AED' },
+    { t:'DIA',  s:'Dow Jones ETF',     ico:'DIA',  bg:'#D1FAE5', fg:'#047857' },
+    { t:'IWM',  s:'Russell 2000',      ico:'IWM',  bg:'#E0E7FF', fg:'#4338CA' },
+    { t:'VTI',  s:'Vanguard Total',    ico:'VTI',  bg:'#FCE7F3', fg:'#BE185D' },
+    { t:'VOO',  s:'Vanguard S&P 500',  ico:'VOO',  bg:'#DBEAFE', fg:'#1D4ED8' },
+    { t:'SOXX', s:'iShares Semi',      ico:'SOX',  bg:'#DCFCE7', fg:'#16A34A' },
+    { t:'SMH',  s:'VanEck Semi',       ico:'SMH',  bg:'#FED7AA', fg:'#EA580C' },
+    { t:'XLK',  s:'Tech Sector',       ico:'XLK',  bg:'#DBEAFE', fg:'#2563EB' },
+    { t:'XLF',  s:'Financial Sector',  ico:'XLF',  bg:'#DCFCE7', fg:'#16A34A' },
+    { t:'XLE',  s:'Energy Sector',     ico:'XLE',  bg:'#FFEDD5', fg:'#EA580C' },
+    { t:'XLV',  s:'Health Sector',     ico:'XLV',  bg:'#CFFAFE', fg:'#0891B2' },
+    { t:'ARKK', s:'ARK Innovation',    ico:'ARK',  bg:'#FAE8FF', fg:'#A21CAF' },
+    { t:'GLD',  s:'SPDR Gold',         ico:'GLD',  bg:'#FEF9C3', fg:'#CA8A04' },
+    { t:'TLT',  s:'20+Y T-Bond',       ico:'TLT',  bg:'#E0F2FE', fg:'#0369A1' },
+    { t:'SCHD', s:'Schwab Dividend',   ico:'SCH',  bg:'#D1FAE5', fg:'#059669' },
+  ];
+  const AI_TICKERS_KR = [
+    { t:'069500', s:'KODEX 200',           ico:'200', bg:'#FDEBDC', fg:'#C44A12' },
+    { t:'232080', s:'TIGER 코스닥150',     ico:'KQ',  bg:'#EDE9FE', fg:'#7C3AED' },
+    { t:'229200', s:'KODEX 코스닥150',     ico:'KQ',  bg:'#D1FAE5', fg:'#047857' },
+    { t:'091160', s:'KODEX 반도체',        ico:'반',  bg:'#E0E7FF', fg:'#4338CA' },
+    { t:'139260', s:'TIGER 200 IT',        ico:'IT',  bg:'#FCE7F3', fg:'#BE185D' },
+    { t:'091170', s:'KODEX 은행',          ico:'은',  bg:'#DBEAFE', fg:'#1D4ED8' },
+    { t:'266420', s:'KODEX 헬스케어',      ico:'헬',  bg:'#CFFAFE', fg:'#0891B2' },
+    { t:'139250', s:'TIGER 200 에너지화학', ico:'에', bg:'#FFEDD5', fg:'#EA580C' },
+    { t:'091180', s:'KODEX 자동차',        ico:'차',  bg:'#DCFCE7', fg:'#16A34A' },
+    { t:'117680', s:'KODEX 철강',          ico:'철',  bg:'#FEF9C3', fg:'#CA8A04' },
+    { t:'341850', s:'TIGER 리츠부동산',    ico:'리',  bg:'#FAE8FF', fg:'#A21CAF' },
+  ];
+  function getAiTickers() {
+    return (typeof window.getRegion === 'function' && window.getRegion() === 'kr') ? AI_TICKERS_KR : AI_TICKERS_US;
+  }
+
+  let _aiListBuilt = false;
+  let _aiListRegion = null;
+
+  function _aiClearAnimClasses(el) {
+    if (!el) return;
+    el.classList.remove('ai-anim-in-right', 'ai-anim-in-left', 'ai-anim-out-left', 'ai-anim-out-right');
+  }
+  function _aiPlayAnim(el, cls) {
+    if (!el) return Promise.resolve();
+    _aiClearAnimClasses(el);
+    // 강제 reflow → 동일 animation 재실행 가능
+    void el.offsetWidth;
+    el.classList.add(cls);
+    return new Promise(res => {
+      const done = () => { el.removeEventListener('animationend', done); res(); };
+      el.addEventListener('animationend', done);
+      setTimeout(done, 400); // safety fallback
+    });
+  }
+
+  function showAiChartList(force) {
+    const list = document.getElementById('ai-chart-list-view');
+    const detail = document.getElementById('ai-chart-detail-view');
+    const region = (typeof window.getRegion === 'function') ? window.getRegion() : 'us';
+    const needBuild = force || !_aiListBuilt || _aiListRegion !== region;
+    const detailVisible = detail && detail.style.display !== 'none';
+
+    const reveal = () => {
+      if (list) {
+        list.style.display = '';
+        _aiPlayAnim(list, 'ai-anim-in-left');
+        if (needBuild) {
+          _aiListBuilt = true;
+          _aiListRegion = region;
+          buildAiChartList();
+        }
+      }
+    };
+
+    if (detailVisible) {
+      _aiPlayAnim(detail, 'ai-anim-out-right').then(() => {
+        detail.style.display = 'none';
+        _aiClearAnimClasses(detail);
+        reveal();
+      });
+    } else {
+      if (detail) detail.style.display = 'none';
+      reveal();
+    }
+  }
+
+  function showAiChartDetail(ticker) {
+    const list = document.getElementById('ai-chart-list-view');
+    const detail = document.getElementById('ai-chart-detail-view');
+    const listVisible = list && list.style.display !== 'none';
+
+    const reveal = () => {
+      if (detail) {
+        detail.style.display = '';
+        _aiPlayAnim(detail, 'ai-anim-in-right');
+        // 디자인 사양 캐스케이드 (chips/price/strip/chart-card 등) 재트리거
+        detail.classList.remove('aiv-replay');
+        void detail.offsetWidth;
+        detail.classList.add('aiv-replay');
+      }
+      // chart.js renderTickerChips: class="chart-tk-chip" data-tk="${ticker}"
+      const chip = document.querySelector(`.chart-tk-chip[data-tk="${ticker}"]`);
+      if (chip) { chip.click(); return; }
+      if (typeof window.selectChartTicker === 'function') window.selectChartTicker(ticker);
+    };
+
+    if (listVisible) {
+      _aiPlayAnim(list, 'ai-anim-out-left').then(() => {
+        list.style.display = 'none';
+        _aiClearAnimClasses(list);
+        reveal();
+      });
+    } else {
+      if (list) list.style.display = 'none';
+      reveal();
+    }
+  }
+
+  const AI_LIST_INITIAL = 10;
+  let _aiListExpanded = false;
+  let _aiSortMode = 'mcap';  // 'mcap' | 'value' | 'up' | 'down'
+  const _aiMetrics = {};      // ticker → { last, pct, value, mcap }
+  const AI_SORT_LABEL = { mcap: '시가총액', value: '거래대금', up: '상승률', down: '하락률' };
+  // 시가총액 추정용 룩업 (단위: 십억 $, KR 십억 ₩). 정확값 아님 — 상대 정렬용.
+  const AI_MCAP_HINT = {
+    // US ETF AUM (B$, 2025 근사)
+    SPY: 600, VOO: 580, QQQ: 320, VTI: 480, DIA: 38, IWM: 65,
+    SOXX: 16, SMH: 24, XLK: 75, XLF: 50, XLE: 38, XLV: 38,
+    ARKK: 7, GLD: 78, TLT: 47, SCHD: 65,
+    // KR ETF AUM (B₩ 근사)
+    '069500': 8000, '232080': 2500, '229200': 2200, '091160': 1800,
+    '139260': 1500, '091170': 1200, '266420': 900, '139250': 1000,
+    '091180': 800, '117680': 600, '341850': 700,
+  };
+  function _sortedTickers() {
+    const tickers = getAiTickers().slice();
+    const mode = _aiSortMode;
+    tickers.sort((a, b) => {
+      const ma = _aiMetrics[a.t] || {};
+      const mb = _aiMetrics[b.t] || {};
+      if (mode === 'mcap') {
+        return (AI_MCAP_HINT[b.t] || 0) - (AI_MCAP_HINT[a.t] || 0);
+      }
+      if (mode === 'value') {
+        return (mb.value || 0) - (ma.value || 0);
+      }
+      if (mode === 'up') {
+        return (mb.pct ?? -Infinity) - (ma.pct ?? -Infinity);
+      }
+      if (mode === 'down') {
+        return (ma.pct ?? Infinity) - (mb.pct ?? Infinity);
+      }
+      return 0;
+    });
+    return tickers;
+  }
+
+  async function buildAiChartList() {
+    const list = document.getElementById('ai-chart-cb-list');
+    if (!list) return;
+    const tickers = _sortedTickers();
+    list.innerHTML = tickers.map((t, i) => {
+      const hidden = !_aiListExpanded && i >= AI_LIST_INITIAL ? ' aichart-hidden' : '';
+      return `
+      <a class="cb-tk${hidden}" data-ticker="${t.t}" data-idx="${i}" style="animation-delay:${Math.min((i + 1) * 60, 600)}ms;">
+        <span class="cb-ico" style="background:${t.bg};color:${t.fg}">${t.ico}</span>
+        <span class="cb-nm"><span class="cb-t">${t.s}</span><span class="cb-s">${t.t}</span></span>
+        <svg class="cb-spark" id="ai-sp-${t.t}" viewBox="0 0 80 34" preserveAspectRatio="none"><polyline fill="none" stroke="${t.fg}" stroke-width="1.8" points=""/></svg>
+        <span class="cb-price"><span class="cb-p" id="ai-p-${t.t}">—</span><span class="cb-d" id="ai-d-${t.t}">—</span></span>
+      </a>`;
+    }).join('');
+    _updateSeeAllLabel();
+    // ticker = chart.py CHART_TICKERS (US ETF or KR ETF code) — 직접 호출
+    let _doneCount = 0;
+    const _total = tickers.length;
+    tickers.forEach(async (t) => {
+      try {
+        const r = await fetch('/api/chart/ohlc?ticker=' + encodeURIComponent(t.t) + '&interval=1d');
+        const j = await r.json();
+        const c = j.candles || [];
+        if (c.length < 2) return;
+        const last = Number(c[c.length-1].c);
+        const prev = Number(c[c.length-2].c);
+        const pct = (last - prev) / prev * 100;
+        const vol = Number(c[c.length-1].v) || 0;
+        _aiMetrics[t.t] = { last, pct, value: last * vol };
+        const pEl = document.getElementById('ai-p-' + t.t);
+        const dEl = document.getElementById('ai-d-' + t.t);
+        if (pEl) pEl.textContent = last.toLocaleString(undefined, { maximumFractionDigits: 2 });
+        if (dEl) {
+          const up = pct >= 0;
+          dEl.className = 'cb-d ' + (up ? 'up' : 'down');
+          dEl.textContent = (up ? '↗ ' : '↘ ') + Math.abs(pct).toFixed(2) + '%';
+        }
+        const recent = c.slice(-30).map(x => Number(x.c)).filter(v => isFinite(v));
+        if (recent.length >= 2) {
+          const lo = Math.min(...recent), hi = Math.max(...recent), span = (hi - lo) || 1;
+          const w = 80, h = 34, pad = 2;
+          const pts = recent.map((v, i) => {
+            const x = pad + (w - pad*2) * i / (recent.length - 1);
+            const y = pad + (h - pad*2) - ((v - lo) / span) * (h - pad*2);
+            return x.toFixed(1) + ',' + y.toFixed(1);
+          }).join(' ');
+          const sp = document.querySelector('#ai-sp-' + t.t + ' polyline');
+          if (sp) {
+            sp.setAttribute('points', pts);
+            // 비동기 fetch → row stagger 완료 후 sparkline 시각 draw 발동
+            // 행 idx 기반 delay 로 위→아래 순차. row fade-up 끝나는 즈음 시작.
+            const row = sp.closest('.cb-tk');
+            const idx = row ? Number(row.dataset.idx || 0) : 0;
+            const delayMs = 200 + Math.min(idx * 50, 500);
+            // 인라인 shorthand 로 전체 애니메이션 재정의 → 매번 재트리거
+            sp.style.animation = 'none';
+            void sp.getBoundingClientRect();
+            sp.style.animation = `ai-spark-draw 1.3s cubic-bezier(.2,.7,.2,1) ${delayMs}ms forwards`;
+          }
+        }
+      } catch(_) {}
+      finally {
+        _doneCount++;
+        // 모든 fetch 완료 → 정렬 모드가 metric 의존(value/up/down) 이면 재정렬
+        if (_doneCount >= _total && (_aiSortMode === 'value' || _aiSortMode === 'up' || _aiSortMode === 'down')) {
+          _reorderAiList();
+        }
+      }
+    });
+  }
+
+  let _aiSearchQuery = '';
+  function _applyAiSearchFilter() {
+    const list = document.getElementById('ai-chart-cb-list');
+    if (!list) return;
+    const q = _aiSearchQuery.trim().toLowerCase();
+    const rows = list.querySelectorAll('.cb-tk');
+    let shown = 0;
+    rows.forEach(row => {
+      const tk = (row.getAttribute('data-ticker') || '').toLowerCase();
+      const nm = (row.querySelector('.cb-t')?.textContent || '').toLowerCase();
+      const match = !q || tk.includes(q) || nm.includes(q);
+      row.classList.toggle('aichart-filtered', !match);
+      if (match) shown++;
+    });
+    // 검색 중에는 모두 보기 / 접기 무시하고 매치된 것 전부 노출
+    if (q) {
+      rows.forEach(row => row.classList.remove('aichart-hidden'));
+    } else {
+      // 검색 해제 시 expand 상태에 맞춰 hidden 복원
+      rows.forEach((row, i) => {
+        const idx = Number(row.dataset.idx);
+        row.classList.toggle('aichart-hidden', !_aiListExpanded && idx >= AI_LIST_INITIAL);
+      });
+    }
+    // 결과 없음 메시지
+    let empty = list.querySelector('.cb-no-result');
+    if (q && shown === 0) {
+      if (!empty) {
+        empty = document.createElement('div');
+        empty.className = 'cb-no-result';
+        list.appendChild(empty);
+      }
+      empty.textContent = `"${_aiSearchQuery}" 결과 없음`;
+    } else if (empty) {
+      empty.remove();
+    }
+    // see-all 버튼은 검색 중에는 숨김
+    const seeAllBtn = document.getElementById('ai-chart-see-all');
+    if (seeAllBtn) {
+      const total = getAiTickers().length;
+      seeAllBtn.style.display = q ? 'none' : (total > AI_LIST_INITIAL ? '' : 'none');
+    }
+  }
+
+  // DOM 재생성 없이 row 순서만 재배치 (애니메이션 부담 ↓)
+  function _reorderAiList() {
+    const list = document.getElementById('ai-chart-cb-list');
+    if (!list) return;
+    const sorted = _sortedTickers();
+    sorted.forEach((t, i) => {
+      const row = list.querySelector(`.cb-tk[data-ticker="${t.t}"]`);
+      if (!row) return;
+      list.appendChild(row);
+      row.dataset.idx = i;
+      row.classList.toggle('aichart-hidden', !_aiListExpanded && i >= AI_LIST_INITIAL);
+    });
+  }
+
+  function _updateSeeAllLabel() {
+    const btn = document.getElementById('ai-chart-see-all');
+    if (!btn) return;
+    const total = getAiTickers().length;
+    if (total <= AI_LIST_INITIAL) {
+      btn.style.display = 'none';
+      return;
+    }
+    btn.style.display = '';
+    btn.textContent = _aiListExpanded ? '접기' : `모두 보기 (${total})`;
+  }
+
+  // 검색 input — delegated (DOM 늦게 마운트돼도 동작)
+  document.addEventListener('input', function(e) {
+    if (e.target && e.target.id === 'ai-search-input') {
+      _aiSearchQuery = e.target.value || '';
+      _applyAiSearchFilter();
+    }
+  });
+
+  // 클릭 라우팅: 리스트 row → detail, "← 목록" → list, "모두 보기" → 나머지 expand, sort dropdown
+  document.addEventListener('click', function(e) {
+    // sort dropdown trigger
+    const sortBtn = e.target.closest('#ai-sort-trigger');
+    if (sortBtn) {
+      e.preventDefault();
+      const menu = document.getElementById('ai-sort-menu');
+      if (menu) {
+        const open = menu.hasAttribute('hidden') ? false : true;
+        if (open) { menu.setAttribute('hidden', ''); sortBtn.setAttribute('aria-expanded', 'false'); }
+        else { menu.removeAttribute('hidden'); sortBtn.setAttribute('aria-expanded', 'true'); }
+      }
+      return;
+    }
+    // sort menu item
+    const sortItem = e.target.closest('#ai-sort-menu li[data-sort]');
+    if (sortItem) {
+      e.preventDefault();
+      const mode = sortItem.dataset.sort;
+      if (mode && mode !== _aiSortMode) {
+        _aiSortMode = mode;
+        document.querySelectorAll('#ai-sort-menu li').forEach(li => {
+          li.classList.toggle('on', li.dataset.sort === mode);
+        });
+        const trigger = document.getElementById('ai-sort-trigger');
+        if (trigger) trigger.firstChild ? trigger.childNodes[0].nodeValue = AI_SORT_LABEL[mode] : (trigger.textContent = AI_SORT_LABEL[mode]);
+        if (trigger) trigger.textContent = AI_SORT_LABEL[mode];
+        _reorderAiList();
+      }
+      const menu = document.getElementById('ai-sort-menu');
+      if (menu) menu.setAttribute('hidden', '');
+      const trig = document.getElementById('ai-sort-trigger');
+      if (trig) trig.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    // 외부 클릭 시 dropdown 닫기
+    const menuEl = document.getElementById('ai-sort-menu');
+    if (menuEl && !menuEl.hasAttribute('hidden') && !e.target.closest('.cb-sort-wrap')) {
+      menuEl.setAttribute('hidden', '');
+      const trig = document.getElementById('ai-sort-trigger');
+      if (trig) trig.setAttribute('aria-expanded', 'false');
+    }
+
+    const tk = e.target.closest('#ai-chart-cb-list .cb-tk');
+    if (tk) {
+      e.preventDefault();
+      showAiChartDetail(tk.getAttribute('data-ticker'));
+      return;
+    }
+    const back = e.target.closest('#ai-chart-back');
+    if (back) {
+      e.preventDefault();
+      showAiChartList();
+      return;
+    }
+    const seeAll = e.target.closest('#ai-chart-see-all');
+    if (seeAll) {
+      e.preventDefault();
+      _aiListExpanded = !_aiListExpanded;
+      const rows = document.querySelectorAll('#ai-chart-cb-list .cb-tk');
+      rows.forEach((row, i) => {
+        if (i < AI_LIST_INITIAL) return;
+        if (_aiListExpanded) {
+          row.classList.remove('aichart-hidden');
+          // expand 시 stagger 재트리거 (인덱스 - INITIAL 기반)
+          row.style.animationDelay = Math.min((i - AI_LIST_INITIAL + 1) * 60, 400) + 'ms';
+          row.style.animation = 'none';
+          void row.offsetWidth;
+          row.style.animation = '';
+        } else {
+          row.classList.add('aichart-hidden');
+        }
+      });
+      _updateSeeAllLabel();
+      return;
+    }
+  });
 
   // 섹터 탭 (home.js 가 직접 관리). 다른 5개 탭과 같은 .scroll-wrap 안 main.content.
   function showSectorTab(id) {
@@ -739,7 +1124,7 @@
       sumEl.innerHTML = `
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px">
           <div>
-            <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">상승 확률 − 하락 확률</div>
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">향후 한달뒤 상승 확률 − 하락 확률</div>
             <div style="font-size:42px;font-weight:800;color:${dCol};line-height:1.05">${sign}${diff.toFixed(1)}<span style="font-size:18px;color:#64748b">p</span></div>
             <div style="font-size:13px;color:${dCol};margin-top:4px;font-weight:600">${dLab}</div>
           </div>

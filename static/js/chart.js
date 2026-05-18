@@ -1,11 +1,12 @@
 // ── 캔들스틱 차트 탭 ──
-const CHART_MAIN_TICKERS_US = ['VOO','QQQ','DIA','IWM','SOXX','SMH','GLD','TLT','SCHD'];
+const CHART_MAIN_TICKERS_US = ['SPY','QQQ','DIA','IWM','VTI','VOO','SOXX','SMH','XLK','XLF','XLE','XLV','ARKK','GLD','TLT','SCHD'];
 const CHART_MAIN_TICKERS_KR = ['069500','102110','232080','091160','139260','266420','091170','091180','117680'];
 const TICKER_NAMES = {
   // US
   SPY:'S&P 500 ETF', QQQ:'Nasdaq 100', DIA:'Dow Jones', IWM:'Russell 2000',
-  VOO:'S&P 500 (V)', SOXX:'Semiconductor', SMH:'Semiconductor (VN)',
-  GLD:'Gold', TLT:'Treasury 20Y+', SCHD:'Dividend',
+  VTI:'Total Market', VOO:'S&P 500 (V)', SOXX:'Semiconductor', SMH:'Semiconductor (VN)',
+  XLK:'Tech Sector', XLF:'Financial Sector', XLE:'Energy Sector', XLV:'Health Sector',
+  ARKK:'ARK Innovation', GLD:'Gold', TLT:'Treasury 20Y+', SCHD:'Dividend',
   // KR (KODEX/TIGER 6자리 코드)
   '069500':'KODEX 200', '102110':'TIGER 200',
   '232080':'TIGER 코스닥150', '229200':'KODEX 코스닥150',
@@ -103,6 +104,28 @@ function renderTickerChips() {
     _chartTicker = chip.dataset.tk;
     el.querySelectorAll('.chart-tk-chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
+    hidePredictSection();
+    loadCandleChart();
+  };
+}
+
+// AI차트 list view 에서 CHART_MAIN_TICKERS 에 없는 ticker (XLK/XLF/XLE/XLV/ARKK/SPY/VTI 등) 도
+// 직접 로드 가능하도록 외부 노출. backend /api/chart/ohlc 는 CHART_TICKERS 16개 지원.
+if (typeof window !== 'undefined') {
+  window.selectChartTicker = function(ticker) {
+    if (!ticker) return;
+    _chartTicker = ticker;
+    const el = document.getElementById('chart-ticker-chips');
+    if (el) {
+      const chips = el.querySelectorAll('.chart-tk-chip');
+      let matched = false;
+      chips.forEach(c => {
+        const on = c.dataset.tk === ticker;
+        c.classList.toggle('active', on);
+        if (on) matched = true;
+      });
+      if (!matched) chips.forEach(c => c.classList.remove('active'));
+    }
     hidePredictSection();
     loadCandleChart();
   };
