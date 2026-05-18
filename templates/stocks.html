@@ -35,7 +35,16 @@
   <link rel="stylesheet" href="/static/css/home.css?v=18">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
-    (function(){var t=localStorage.getItem('theme');if(!t){t='dark';localStorage.setItem('theme','dark');}if(t==='dark')document.documentElement.setAttribute('data-theme','dark');})();
+    (function(){
+      // 이전 작업의 라이트 강제 마이그레이션 흔적 제거 + 다크 디폴트 복귀
+      if (localStorage.getItem('theme-migrated-light')) {
+        localStorage.removeItem('theme-migrated-light');
+        localStorage.setItem('theme', 'dark');
+      }
+      var t = localStorage.getItem('theme');
+      if (!t) { t = 'dark'; localStorage.setItem('theme', 'dark'); }
+      if (t === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    })();
     // splash 노출 정책:
     //   - F5/Ctrl+R (reload)         → 무조건 정상 splash (사용자가 "새로고침" 의지로 재진입)
     //   - 모바일 시스템 뒤로/forward (back_forward) → 무조건 splash 우회, 즉시 홈화면 복귀
@@ -282,10 +291,11 @@
         <span class="ht-title">섹터 모멘텀</span>
         <span class="ht-sub">1주·1개월 수익률 랭킹</span>
       </button>
-      <button class="home-tile" data-tile="market-valuation">
-        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 A9 9 0 0 1 21 17"/><path d="M12 17 L17 8"/><circle cx="12" cy="17" r="1.4" fill="currentColor"/></svg></span>
-        <span class="ht-title">시장 밸류</span>
-        <span class="ht-sub">ERP · 고/저평가</span>
+      <button class="home-tile" data-tile="crash-surge">
+        <span class="ht-badge">NEW</span>
+        <span class="ht-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16 L8 11 L12 14 L16 9 L21 4"/><path d="M3 21 L21 21"/><polyline points="14 4 21 4 21 11"/></svg></span>
+        <span class="ht-title">상승·하락 신호</span>
+        <span class="ht-sub">확률 차이 · 변동성 · 선행성</span>
       </button>
     </div>
   </section>
@@ -577,26 +587,24 @@
       <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다. 제공되는 데이터와 분석 결과는 참고용이며, 정확성이나 완전성을 보장하지 않습니다.</div>
     </main>
 
-    <!-- ═══ 시장 밸류 (ERP / Fed Model) 탭 ═══ -->
-    <main class="content" id="tab-market-valuation" style="display:none;">
-      <h2 class="page-title">시장 밸류</h2>
-      <!-- 탭 헤드라인 (룰베이스 한 줄 해설) -->
-      <div class="tab-headline-box loading" id="headline-market-valuation"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
-      <div id="market-valuation-formula" class="mv-formula"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-      <div id="market-valuation-gauge" class="mv-gauge"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-      <div class="mv-section-label">분해</div>
-      <div id="market-valuation-decompose" class="mv-decompose"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-      <div class="mv-section-label">10년 추이</div>
-      <div id="market-valuation-history" class="mv-history"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+    <!-- ═══ 상승·하락 신호 탭 (crash_surge regressor 결과 시각화) ═══ -->
+    <main class="content" id="tab-crash-surge" style="display:none;">
+      <h2 class="page-title">상승·하락 신호</h2>
+      <div class="tab-headline-box loading" id="headline-crash-surge"><span class="tab-headline-label">오늘</span><span class="tab-headline-text">로딩 중…</span></div>
 
-      <!-- AI 해설 (다른 탭과 동일 구조) -->
-      <div class="card fade-target ai-explain-card" style="margin-top:18px;">
-        <div class="card-head">
-          <span class="card-label" data-i18n="ai.explainLabel">AI 해설</span>
-          <span class="badge" style="background:rgba(139,92,246,0.15);color:#8B5CF6;">AI</span>
+      <!-- ① hero — 오늘의 상승-하락 net_score -->
+      <section class="card fade-target" id="cs-summary"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></section>
+
+      <!-- ② VIX 변동성 칩 -->
+      <section class="card fade-target" id="cs-volatility" style="margin-top:14px"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></section>
+
+      <!-- ③ 이중축 차트 — 지수 종가 vs (surge-crash) 신호 -->
+      <section class="card fade-target" id="cs-chart-card" style="margin-top:14px">
+        <div class="fundamental-chart-head">
+          <span class="fc-section-label">신호 vs 실제 가격 (선행성 비교)</span>
         </div>
-        <div id="market-valuation-interpretation" class="ai-explain-body mv-interpretation"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
-      </div>
+        <div id="cs-chart"><div class="loading-placeholder"><div class="loading-spinner sm"></div></div></div>
+      </section>
 
       <div class="disclaimer" data-i18n="disclaimer.text">본 정보는 투자 권유 목적이 아니며, 투자 판단의 책임은 이용자 본인에게 있습니다.</div>
     </main>

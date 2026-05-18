@@ -16,7 +16,7 @@
     'macro':       { action: 'tab',        idx: 4 },
     'sector-val':       { action: 'sector-tab', id: 'tab-sector-val' },
     'sector-mom':       { action: 'sector-tab', id: 'tab-sector-mom' },
-    'market-valuation': { action: 'sector-tab', id: 'tab-market-valuation' },
+    'crash-surge':      { action: 'sector-tab', id: 'tab-crash-surge' },
   };
 
   // KR 모드 지원 타일 (Stage 3.x). 나머지는 데이터 미적재 → 비활성화.
@@ -152,8 +152,8 @@
       loadSectorMomentum();
       if (typeof window.loadAiExplain === 'function') window.loadAiExplain('sector-mom');
     }
-    if (id === 'tab-market-valuation') {
-      loadMarketValuation();
+    if (id === 'tab-crash-surge') {
+      loadCrashSurge();
     }
     // main.js 가 관리하는 .tab active 표시 해제 (탭 바는 안 보이지만 깔끔하게)
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -695,6 +695,183 @@
     if (days >= 365)      return '1년 전';
     if (days >= 60)       return `${Math.round(days / 30)}개월 전`;
     return `${days}일 전`;
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // 상승·하락 신호 (crash_surge regressor) — 신호 vs 가격 이중축
+  // ─────────────────────────────────────────────────────────────
+  let _csDays = 252;
+  const CS_LEAD = 20;
+  async function loadCrashSurge(days) {
+    if (typeof days === 'number') _csDays = days;
+    const sumEl = document.getElementById('cs-summary');
+    const volEl = document.getElementById('cs-volatility');
+    const chartEl = document.getElementById('cs-chart');
+    const _SPIN = '<div class="loading-placeholder"><div class="loading-spinner sm"></div></div>';
+    [sumEl, volEl, chartEl].forEach(el => el && (el.innerHTML = _SPIN));
+    if (chartEl && typeof window.attachPeriodToggle === 'function') {
+      window.attachPeriodToggle(chartEl, _csDays, p => loadCrashSurge(p));
+    }
+    const wr = (typeof window.withRegion === 'function') ? window.withRegion : (u => u);
+    const isKr = (typeof window.getRegion === 'function') && window.getRegion() === 'kr';
+    const ticker = isKr ? '069500' : 'SPY';
+    const indexLabel = isKr ? 'KOSPI (069500)' : 'S&P 500 (SPY)';
+    const interval = _csDays >= 1000 ? '1wk' : '1d';
+    const leadBars = interval === '1wk' ? Math.round(CS_LEAD / 5) : CS_LEAD;
+    const histDays = _csDays + leadBars + 5;
+    try {
+      const [curR, histR, macroR, ohlcR] = await Promise.all([
+        fetch(wr('/api/crash-surge/current')).then(r => r.json()).catch(() => null),
+        fetch(wr('/api/crash-surge/history?days=' + histDays)).then(r => r.json()).catch(() => []),
+        fetch(wr('/api/macro/latest')).then(r => r.json()).catch(() => null),
+        fetch('/api/chart/ohlc?ticker=' + ticker + '&interval=' + interval).then(r => r.json()).catch(() => null),
+      ]);
+      if (!curR || curR.crash_score == null || curR.surge_score == null) {
+        sumEl.innerHTML = '<span style="color:#ef4444;">데이터 없음</span>';
+        return;
+      }
+      const surge = Number(curR.surge_score) || 0;
+      const crash = Number(curR.crash_score) || 0;
+      const diff = surge - crash;
+      const sign = diff >= 0 ? '+' : '';
+      const dCol = diff > 5 ? '#10b981' : diff < -5 ? '#ef4444' : '#94a3b8';
+      const dLab = diff > 10 ? '상승 우세' : diff > 3 ? '상승 약우세' : diff < -10 ? '하락 우세' : diff < -3 ? '하락 약우세' : '균형';
+      sumEl.innerHTML = `
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 16px">
+          <div>
+            <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">상승 확률 − 하락 확률</div>
+            <div style="font-size:42px;font-weight:800;color:${dCol};line-height:1.05">${sign}${diff.toFixed(1)}<span style="font-size:18px;color:#64748b">p</span></div>
+            <div style="font-size:13px;color:${dCol};margin-top:4px;font-weight:600">${dLab}</div>
+          </div>
+          <div style="display:flex;gap:18px;font-size:12px;color:#cbd5e1">
+            <div><div style="color:#94a3b8;margin-bottom:2px">상승</div><div style="font-size:18px;font-weight:700;color:#10b981">${surge.toFixed(1)}</div></div>
+            <div><div style="color:#94a3b8;margin-bottom:2px">하락</div><div style="font-size:18px;font-weight:700;color:#ef4444">${crash.toFixed(1)}</div></div>
+          </div>
+        </div>
+        <div style="padding:0 16px 12px;font-size:11px;color:#64748b">기준일 ${escapeHtml(curR.date || '')}</div>`;
+      // 변동성 칩
+      const vix = macroR && macroR.vix != null ? Number(macroR.vix) : null;
+      const volLabel = isKr ? 'VKOSPI' : 'VIX';
+      let volCol = '#94a3b8', volTxt = '데이터 없음', volSub = '';
+      if (vix != null) {
+        if (vix < 15)      { volCol = '#10b981'; volTxt = '낮음';   volSub = '평온 (15 미만)'; }
+        else if (vix < 20) { volCol = '#22c55e'; volTxt = '약낮음'; volSub = '정상 (15–20)'; }
+        else if (vix < 25) { volCol = '#f59e0b'; volTxt = '보통';   volSub = '경계 (20–25)'; }
+        else if (vix < 30) { volCol = '#fb923c'; volTxt = '높음';   volSub = '불안 (25–30)'; }
+        else               { volCol = '#ef4444'; volTxt = '매우 높음'; volSub = '패닉 (30↑)'; }
+      }
+      const vixStr = vix != null ? vix.toFixed(2) : '—';
+      volEl.innerHTML = `
+        <div style="padding:12px 16px">
+          <div style="font-size:12px;color:#94a3b8;margin-bottom:6px">향후 한달간 변동성 예상</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="display:inline-block;padding:6px 14px;border-radius:999px;background:${volCol};color:#0b1220;font-weight:800;font-size:14px">${volTxt}</span>
+            <span style="font-size:22px;font-weight:700;color:#e2e8f0">${vixStr}</span>
+            <span style="font-size:12px;color:#94a3b8">${volLabel}</span>
+          </div>
+          <div style="font-size:11px;color:#64748b;margin-top:6px">${volSub}</div>
+        </div>`;
+      // 차트
+      const hist = Array.isArray(histR) ? histR.slice() : [];
+      hist.sort((a, b) => a.date.localeCompare(b.date));
+      const sigMap = new Map();
+      hist.forEach(r => {
+        if (r && r.date) sigMap.set(r.date, (Number(r.surge_score) || 0) - (Number(r.crash_score) || 0));
+      });
+      const candles = (ohlcR && Array.isArray(ohlcR.candles)) ? ohlcR.candles : [];
+      candles.sort((a, b) => (a.d || '').localeCompare(b.d || ''));
+      const wantBars = interval === '1wk' ? Math.ceil(_csDays / 5) : _csDays;
+      const recent = candles.slice(-(wantBars + leadBars));
+      const maxBack = interval === '1wk' ? 7 : 3;
+      function lookup(d) {
+        if (sigMap.has(d)) return sigMap.get(d);
+        const base = new Date(d + 'T00:00:00');
+        for (let k = 1; k <= maxBack; k++) {
+          const t = new Date(base); t.setDate(base.getDate() - k);
+          const key = t.toISOString().slice(0, 10);
+          if (sigMap.has(key)) return sigMap.get(key);
+        }
+        return null;
+      }
+      const series = [];
+      let nU = 0, nD = 0, hU = 0, hD = 0;
+      const TH = 3;
+      for (let i = 0; i < recent.length - leadBars; i++) {
+        const sig = lookup(recent[i].d);
+        const future = recent[i + leadBars];
+        const cur = recent[i];
+        const px = future && future.c != null ? Number(future.c) : null;
+        if (sig != null && px != null) {
+          series.push({ date: recent[i].d, price: px, signal: sig });
+          const cP = cur && cur.c != null ? Number(cur.c) : null;
+          if (cP > 0) {
+            const ret = (px - cP) / cP;
+            if (sig > TH) { nU++; if (ret > 0) hU++; }
+            else if (sig < -TH) { nD++; if (ret < 0) hD++; }
+          }
+        }
+      }
+      const nS = nU + nD;
+      const acc = nS ? Math.round((hU + hD) / nS * 1000) / 10 : null;
+      const aU = nU ? Math.round(hU / nU * 1000) / 10 : null;
+      const aD = nD ? Math.round(hD / nD * 1000) / 10 : null;
+      if (series.length < 5) {
+        chartEl.innerHTML = `<div style="color:#94a3b8;padding:20px;text-align:center">차트 데이터 부족</div>`;
+        return;
+      }
+      const leadLab = interval === '1wk' ? '4주' : '20일';
+      chartEl.innerHTML = renderCsChart(series, indexLabel, leadLab);
+    } catch(e) {
+      console.warn('[crash-surge] failed', e);
+      sumEl.innerHTML = `<span style="color:#ef4444;">로드 실패</span>`;
+    }
+  }
+  function renderCsChart(series, indexLabel, leadLab) {
+    const W = 960, H = 440;
+    const pad = { top: 44, right: 78, bottom: 52, left: 78 };
+    const cW = W - pad.left - pad.right, cH = H - pad.top - pad.bottom;
+    const n = series.length;
+    const prices = series.map(r => r.price);
+    const signals = series.map(r => r.signal);
+    const pMin = Math.min.apply(null, prices), pMax = Math.max.apply(null, prices);
+    const pSpan = (pMax - pMin) || 1;
+    const sAbs = Math.max(Math.abs(Math.min.apply(null, signals)), Math.abs(Math.max.apply(null, signals)), 1);
+    const sMin = -sAbs, sMax = sAbs, sSpan = sMax - sMin;
+    const x = i => pad.left + (n <= 1 ? 0 : (cW * i) / (n - 1));
+    const yP = v => pad.top + cH - ((v - pMin) / pSpan) * cH;
+    const yS = v => pad.top + cH - ((v - sMin) / sSpan) * cH;
+    let pricePath = '', sigPath = '';
+    for (let i = 0; i < n; i++) {
+      pricePath += (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + yP(prices[i]).toFixed(1) + ' ';
+      sigPath   += (i === 0 ? 'M' : 'L') + x(i).toFixed(1) + ',' + yS(signals[i]).toFixed(1) + ' ';
+    }
+    const zeroY = yS(0);
+    const xLabels = [0, Math.floor(n / 2), n - 1].map(i =>
+      `<text x="${x(i).toFixed(1)}" y="${H - 14}" fill="#cbd5e1" font-size="13" font-weight="600" text-anchor="middle">${escapeHtml(series[i].date)}</text>`).join('');
+    const leftLabels = `
+      <text x="${pad.left - 8}" y="${pad.top + 6}" fill="#10b981" font-size="13" font-weight="700" text-anchor="end">${pMax.toFixed(1)}</text>
+      <text x="${pad.left - 8}" y="${pad.top + cH}" fill="#10b981" font-size="13" font-weight="700" text-anchor="end">${pMin.toFixed(1)}</text>`;
+    const rightLabels = `
+      <text x="${W - pad.right + 8}" y="${pad.top + 6}" fill="#f59e0b" font-size="13" font-weight="700" text-anchor="start">+${sAbs.toFixed(0)}</text>
+      <text x="${W - pad.right + 8}" y="${zeroY + 5}" fill="#94a3b8" font-size="12" text-anchor="start">0</text>
+      <text x="${W - pad.right + 8}" y="${pad.top + cH}" fill="#f59e0b" font-size="13" font-weight="700" text-anchor="start">−${sAbs.toFixed(0)}</text>`;
+    return `
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;max-height:560px">
+        <g font-size="17" font-weight="700">
+          <rect x="${pad.left}" y="10" width="28" height="7" fill="#10b981" rx="2"/>
+          <text x="${pad.left + 36}" y="24" fill="#e2e8f0">${escapeHtml(indexLabel)} 종가 (좌)</text>
+          <rect x="${pad.left + 330}" y="10" width="28" height="7" fill="#f59e0b" rx="2"/>
+          <text x="${pad.left + 366}" y="24" fill="#e2e8f0">상승−하락 신호 (우)</text>
+        </g>
+        <text x="${W - pad.right}" y="24" fill="#94a3b8" font-size="13" text-anchor="end">가격 ${escapeHtml(leadLab)} 앞당김</text>
+        <line x1="${pad.left}" y1="${zeroY}" x2="${W - pad.right}" y2="${zeroY}" stroke="#334155" stroke-dasharray="3 3"/>
+        <path d="${pricePath}" fill="none" stroke="#10b981" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round"/>
+        <path d="${sigPath}" fill="none" stroke="#f59e0b" stroke-width="4.5" stroke-linejoin="round" stroke-linecap="round" opacity="0.95"/>
+        ${leftLabels}
+        ${rightLabels}
+        ${xLabels}
+      </svg>
+      <div style="font-size:12px;color:#64748b;margin-top:8px;text-align:center">최근 ${n} 봉 · 가격(녹)이 신호(주황)보다 ${escapeHtml(leadLab)} 앞으로 이동 — 두 선이 겹칠수록 신호가 미래 가격 선행</div>`;
   }
 
   // main.js popstate 가 호출할 수 있도록 window 에 노출
