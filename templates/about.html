@@ -73,31 +73,43 @@
       <!-- ── 2. 사용 방법 ───────────────────────────────────── -->
       <section id="sec-usage" class="about-section">
         <h2 class="about-section-title">사용 방법</h2>
-        <p class="about-section-lead">메인 탭 5개 + 홈 화면. 각 탭은 시장의 다른 측면을 보여줍니다.</p>
+        <p class="about-section-lead">홈 + 4개 카테고리 하단바 (시황·분석·환경·섹터) + 즐겨찾기. 카테고리를 누르면 관련 분석 페이지가 한 시트에 묶여 올라옵니다.</p>
         <div class="about-cards">
           <div class="about-card">
             <div class="about-card-title">홈</div>
-            <div class="about-card-body">오늘의 종합 판단 (AI 헤드라인) + 8개 탐색 타일. 모든 탭으로 진입하는 허브.</div>
+            <div class="about-card-body">오늘의 종합 판단(AI 헤드라인) + 즐겨찾기 + 카테고리 미리보기 4장. 각 카테고리 카드 또는 하단바로 분석 페이지 진입.</div>
           </div>
           <div class="about-card">
-            <div class="about-card-title">AI차트</div>
-            <div class="about-card-body">선택 ETF 의 가격 시계열 + 30일 fan chart 예측 + 변동성 구간 대역. GJR-GARCH 기반.</div>
+            <div class="about-card-title">시황 — 시장</div>
+            <div class="about-card-body">오늘 시장 헤드라인 + 공포·탐욕 심리 + VIX 변동성 + 보유 포트폴리오 손익.</div>
           </div>
           <div class="about-card">
-            <div class="about-card-title">시황</div>
-            <div class="about-card-body">시장 심리·요약·보유종목 손익. Noise vs Signal 갭바로 "정렬 vs 분리" 국면 표시.</div>
+            <div class="about-card-title">시황 — AI차트</div>
+            <div class="about-card-body">선택 ETF 가격 시계열 + 30일 fan chart 예측 + 변동성 구간 대역. GJR-GARCH-Skew-t + FHS 기반.</div>
           </div>
           <div class="about-card">
-            <div class="about-card-title">펀더멘털</div>
-            <div class="about-card-body">시장 밸류 (CAPE·ERP) 와 펀더멘털-주가 갭. HMM 4-state 국면 분류.</div>
+            <div class="about-card-title">분석 — 펀더멘털</div>
+            <div class="about-card-body">펀더멘털-주가 갭 (가격이 이익을 얼마나 추월했는지) + Noise vs Signal 점수. 10년 분포 내 상위 N% 위치 표시.</div>
           </div>
           <div class="about-card">
-            <div class="about-card-title">평소 이탈도</div>
-            <div class="about-card-body">10피처 마할라노비스 D² 기반 "오늘이 평소와 얼마나 다른가" 와 비슷했던 과거 시점.</div>
+            <div class="about-card-title">분석 — 이상 탐지</div>
+            <div class="about-card-body">10피처 마할라노비스 D² 기반 "오늘이 평소와 얼마나 다른가" + k-NN 으로 비슷했던 과거 시점.</div>
           </div>
           <div class="about-card">
-            <div class="about-card-title">거시경제</div>
-            <div class="about-card-body">섹터 순환 국면 + 매크로 지표 10년 추세 (PMI / 수익률 곡선 / 신용 스프레드 등).</div>
+            <div class="about-card-title">환경 — 거시경제</div>
+            <div class="about-card-body">경기 사이클 국면(HMM 4-state) + 매크로 지표 10년 추세 (PMI · 수익률 곡선 · 신용 스프레드 등) + Top 섹터.</div>
+          </div>
+          <div class="about-card">
+            <div class="about-card-title">섹터 — 모멘텀</div>
+            <div class="about-card-body">1주·1개월 기간별 8섹터 ETF 수익률 랭킹. 어느 섹터로 자금이 몰리고 있는지 직관적 비교.</div>
+          </div>
+          <div class="about-card">
+            <div class="about-card-title">섹터 — 밸류</div>
+            <div class="about-card-body">8섹터 가중평균 PER 과 10년 평균 대비 위치. 비싸진 섹터 vs 싸진 섹터 식별.</div>
+          </div>
+          <div class="about-card">
+            <div class="about-card-title">즐겨찾기 별표</div>
+            <div class="about-card-body">분석 페이지 우상단 별 아이콘 → 홈 즐겨찾기 칩으로 추가. 자주 보는 페이지 한 번에 재진입.</div>
           </div>
         </div>
       </section>
