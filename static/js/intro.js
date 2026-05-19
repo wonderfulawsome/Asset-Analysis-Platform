@@ -1,10 +1,14 @@
-/* Intro 오버레이 — 첫 진입 1회만 노출.
-   localStorage 'passive_intro_seen' = '1' 이면 skip.
+/* Intro 오버레이 — 버전별 1회 노출.
+   localStorage 'passive_intro_seen' 값이 현재 INTRO_VERSION 과 같으면 skip.
+   인트로 내용 갱신 시 INTRO_VERSION 만 올리면 전 사용자에게 1회 재노출됨.
    splash 제거 후 main.js dismissSplash 에서 window.showIntroIfNeeded(cb) 호출. */
 (function() {
   'use strict';
   const STORAGE_KEY = 'passive_intro_seen';
-  // 첫 방문자만 노출. true 로 두면 새로고침마다 노출 (개발용).
+  // 인트로 콘텐츠 버전. 인트로 슬라이드/문구를 의미있게 바꿀 때마다 1씩 올린다.
+  // 사용자 localStorage 의 저장값과 다르면 재노출 후 현재 버전으로 갱신.
+  const INTRO_VERSION = '2';
+  // 개발용: true 로 두면 새로고침마다 강제 노출.
   const FORCE_ALWAYS_SHOW = false;
   let _idx = 0;
   let _slides = [];
@@ -33,7 +37,7 @@
 
   function _close() {
     if (!FORCE_ALWAYS_SHOW) {
-      try { localStorage.setItem(STORAGE_KEY, '1'); } catch (_) {}
+      try { localStorage.setItem(STORAGE_KEY, INTRO_VERSION); } catch (_) {}
     }
     if (!_overlay) { if (_onDone) _onDone(); return; }
     _overlay.classList.remove('visible');
@@ -93,7 +97,7 @@
   window.showIntroIfNeeded = function(onDone) {
     let seen = false;
     if (!FORCE_ALWAYS_SHOW) {
-      try { seen = localStorage.getItem(STORAGE_KEY) === '1'; } catch (_) {}
+      try { seen = localStorage.getItem(STORAGE_KEY) === INTRO_VERSION; } catch (_) {}
     }
     if (seen) { if (onDone) onDone(); return; }
     _overlay = document.getElementById('intro-overlay');
