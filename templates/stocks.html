@@ -31,6 +31,471 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
   <link rel="stylesheet" href="/static/css/main.css?v=141">
   <style>
+    /* ── Intro 오버레이 (첫 진입 시 splash 다음에 노출) ─────────── */
+    .intro-overlay {
+      position: fixed; inset: 0; z-index: 9998;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      padding: 60px 24px 32px;
+      opacity: 0; transition: opacity 280ms ease;
+    }
+    .intro-overlay.visible { opacity: 1; }
+    .intro-overlay.fade-out { opacity: 0; }
+    .intro-skip {
+      position: absolute; top: 18px; right: 18px;
+      background: transparent; border: 0; cursor: pointer;
+      color: var(--sub); font-size: 14px; font-weight: 600;
+      padding: 8px 12px; border-radius: 8px; font-family: inherit;
+    }
+    .intro-skip:hover { background: rgba(255,255,255,0.06); }
+    .intro-stage {
+      flex: 1; position: relative;
+      display: flex; align-items: center; justify-content: center;
+      overflow: hidden;
+    }
+    .intro-slide {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 0 8px;
+      opacity: 0; transform: translateX(40px);
+      transition: opacity 320ms ease, transform 360ms cubic-bezier(.2,.7,.2,1);
+      pointer-events: none;
+    }
+    .intro-slide.active {
+      opacity: 1; transform: translateX(0); pointer-events: auto;
+    }
+    .intro-slide.prev {
+      transform: translateX(-40px);
+    }
+    .intro-logo {
+      width: 88px; height: 72px; color: #FF8C00; margin-bottom: 22px;
+    }
+    .intro-icon {
+      width: 76px; height: 76px; border-radius: 22px;
+      background: rgba(255,140,0,0.12); color: #FF8C00;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 22px;
+    }
+    .intro-icon svg { width: 38px; height: 38px; }
+    .intro-h1 {
+      font-size: 26px; font-weight: 800; letter-spacing: -0.035em;
+      color: var(--text); margin: 0 0 12px;
+      word-break: keep-all; white-space: nowrap;
+    }
+    .intro-h2 {
+      font-size: 26px; font-weight: 800; letter-spacing: -0.03em;
+      color: var(--text); margin: 0 0 12px;
+    }
+    .intro-sub {
+      font-size: 15px; color: var(--sub); margin: 0;
+      line-height: 1.55; max-width: 320px;
+    }
+    .intro-desc {
+      font-size: 14.5px; color: var(--sub); margin: 0;
+      line-height: 1.7; max-width: 360px;
+    }
+    .intro-desc strong { color: var(--text); font-weight: 700; }
+    .intro-footer {
+      display: flex; flex-direction: column; align-items: center; gap: 18px;
+      padding-top: 16px;
+    }
+    .intro-dots { display: flex; gap: 8px; }
+    .intro-dots .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: rgba(128,128,128,0.3);
+      transition: background 200ms, width 200ms;
+    }
+    .intro-dots .dot.active {
+      background: #FF8C00; width: 22px; border-radius: 4px;
+    }
+    .intro-next {
+      background: #FF8C00; color: #fff;
+      border: 0; border-radius: 999px; cursor: pointer; font-family: inherit;
+      font-size: 15px; font-weight: 700; letter-spacing: -0.01em;
+      padding: 14px 0; width: 100%; max-width: 360px;
+      transition: transform 120ms, opacity 200ms;
+    }
+    .intro-next:hover { opacity: 0.92; }
+    .intro-next:active { transform: scale(0.985); }
+    .intro-hint {
+      font-size: 12.5px; color: #FF8C00; margin: 14px 0 0; font-weight: 700;
+      letter-spacing: -0.005em;
+    }
+    .intro-mock {
+      width: 100%; max-width: 360px; margin: 0 auto 22px;
+      background: rgba(128,128,128,0.06);
+      border: 1px solid rgba(128,128,128,0.15);
+      border-radius: 16px; padding: 14px; box-sizing: border-box;
+    }
+
+    /* Slide 2 — AI차트 list mock */
+    .intro-mock-list { display: flex; flex-direction: column; gap: 8px; }
+    .im-row {
+      display: grid; grid-template-columns: 36px 1fr 60px auto;
+      align-items: center; gap: 10px;
+      padding: 8px 6px; border-radius: 10px; position: relative;
+    }
+    .im-row-hl { background: rgba(255,140,0,0.08); }
+    .im-ico {
+      width: 36px; height: 36px; border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 800; letter-spacing: -0.02em;
+    }
+    .im-ico-spy { background: #FDEBDC; color: #C44A12; }
+    .im-ico-qqq { background: #EDE9FE; color: #7C3AED; }
+    .im-ico-xlk { background: #DBEAFE; color: #2563EB; }
+    .im-nm { display: flex; flex-direction: column; min-width: 0; }
+    .im-t { font-size: 12.5px; font-weight: 700; color: var(--text); }
+    .im-s { font-size: 10.5px; font-weight: 600; color: var(--sub); }
+    .im-spark { width: 60px; height: 24px; }
+    .im-sp-line { stroke-dasharray: 200; stroke-dashoffset: 200; }
+    .im-price { display: flex; flex-direction: column; align-items: flex-end; }
+    .im-p { font-size: 12px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+    .im-d { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 6px; margin-top: 2px; }
+    .im-d.up { background: rgba(11,166,109,0.16); color: #0BA66D; }
+    .im-d.down { background: rgba(224,57,74,0.18); color: #E0394A; }
+    .im-tap {
+      position: absolute; right: -2px; top: 50%; transform: translateY(-50%);
+      width: 20px; height: 20px; opacity: 0;
+      background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23FF8C00'><path d='M9 11V5a3 3 0 0 1 6 0v6h2a2 2 0 0 1 2 2v6a3 3 0 0 1-3 3h-6a3 3 0 0 1-3-3v-6a2 2 0 0 1 2-2z'/></svg>") center/contain no-repeat;
+    }
+
+    /* Slide 3 — 이탈도 chart mock */
+    .intro-mock-deviation { padding: 16px 12px 10px; }
+    .im-chart { width: 100%; height: 140px; display: block; }
+    .im-line { stroke-dasharray: 800; stroke-dashoffset: 800; }
+    .im-pulse { opacity: 0; transform-origin: 300px 12px; }
+    .im-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 11px; color: var(--sub); }
+    .im-leg-item { display: inline-flex; align-items: center; gap: 6px; }
+    .im-leg-band { width: 14px; height: 8px; background: rgba(148,163,184,0.4); border-radius: 2px; }
+    .im-leg-bull { width: 14px; height: 8px; background: rgba(34,197,94,0.30); border-radius: 2px; }
+    .im-leg-bear { width: 14px; height: 8px; background: rgba(239,68,68,0.30); border-radius: 2px; }
+    .im-leg-line { width: 14px; height: 2px; background: var(--text); }
+
+    /* Slide 4 — bars */
+    .intro-mock-bars { display: flex; flex-direction: column; gap: 10px; padding: 14px 14px; }
+    .im-bar-row { display: grid; grid-template-columns: 80px 1fr; gap: 10px; align-items: center; }
+    .im-bar-lab { font-size: 11.5px; color: var(--sub); font-weight: 700; }
+    .im-bar-track {
+      background: rgba(128,128,128,0.12); border-radius: 6px; height: 22px;
+      position: relative; overflow: hidden;
+    }
+    .im-bar-fill {
+      position: absolute; top: 0; bottom: 0; left: 0;
+      display: flex; align-items: center; justify-content: flex-end;
+      padding: 0 8px; color: #fff; font-size: 11px; font-weight: 800;
+      border-radius: 6px; width: 0;
+    }
+    .im-bar-fill.up { background: linear-gradient(90deg, #16A34A 0%, #0BA66D 100%); }
+    .im-bar-fill.down { background: linear-gradient(90deg, #DC2626 0%, #E0394A 100%); }
+
+    /* Slide 4 — 시황·거시·섹터 composite */
+    .intro-mock-mms { padding: 10px 10px; display: flex; flex-direction: column; gap: 8px; }
+    .im-mms-card {
+      background: rgba(128,128,128,0.05); border: 1px solid rgba(128,128,128,0.12);
+      border-radius: 10px; padding: 8px 10px;
+    }
+    .im-mms-head {
+      font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--sub); margin-bottom: 6px;
+    }
+    .im-mms-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .im-mms-cell { text-align: center; padding: 4px 0; border-right: 1px solid rgba(128,128,128,0.15); }
+    .im-mms-cell:last-child { border-right: 0; }
+    .im-mms-lab { font-size: 9.5px; font-weight: 700; color: var(--sub); letter-spacing: 0.04em; }
+    .im-mms-val { font-size: 16px; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; margin-top: 2px; }
+    .im-mms-sub { font-size: 9.5px; font-weight: 600; color: var(--sub); margin-top: 1px; }
+    .im-mms-sub.up { color: #0BA66D; } .im-mms-sub.down { color: #E0394A; }
+    .im-phase-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .im-phase-chip {
+      font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+      background: rgba(16,185,129,0.16); color: #10b981;
+    }
+    .im-phase-sub { font-size: 11px; color: var(--sub); font-weight: 600; }
+    .im-mms-chart { width: 100%; height: 44px; display: block; }
+    .im-mms-line { stroke-dasharray: 400; stroke-dashoffset: 400; }
+    .im-heat-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+    }
+    .im-heat-cell {
+      font-size: 10px; font-weight: 800; color: #fff;
+      text-align: center; padding: 7px 0; border-radius: 5px;
+      letter-spacing: -0.01em;
+      opacity: 0; transform: scale(0.6);
+    }
+    .im-heat-cell[data-r="3"]  { background: #16A34A; }
+    .im-heat-cell[data-r="2"]  { background: #22C55E; }
+    .im-heat-cell[data-r="1"]  { background: rgba(34,197,94,0.55); color: var(--text); }
+    .im-heat-cell[data-r="0"]  { background: rgba(148,163,184,0.30); color: var(--text); }
+    .im-heat-cell[data-r="-1"] { background: rgba(239,68,68,0.55); color: var(--text); }
+    .im-heat-cell[data-r="-2"] { background: #E0394A; }
+
+    /* Slide 5 — 펀더멘털 Noise vs Signal */
+    .intro-mock-fundamental { padding: 16px 16px; }
+    .im-ns-head {
+      display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+    }
+    .im-ns-overline {
+      font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--sub);
+    }
+    .im-ns-badge {
+      font-size: 10.5px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+      background: rgba(255,140,0,0.16); color: #FF8C00;
+    }
+    .im-ns-gauge { margin-bottom: 14px; }
+    .im-ns-track {
+      display: block; position: relative;
+      background: linear-gradient(90deg, rgba(224,57,74,0.20) 0%, rgba(148,163,184,0.20) 50%, rgba(255,140,0,0.20) 100%);
+      border-radius: 999px; height: 12px; overflow: hidden;
+    }
+    .im-ns-fill {
+      position: absolute; left: 0; top: 0; bottom: 0;
+      background: linear-gradient(90deg, rgba(224,57,74,0.4) 0%, #FF8C00 100%);
+      border-radius: 999px; width: 0;
+    }
+    .im-ns-scale {
+      display: flex; justify-content: space-between; font-size: 10px;
+      color: var(--sub); margin-top: 6px;
+    }
+    .im-fund-chart { width: 100%; height: 60px; display: block; }
+    .im-fund-signal, .im-fund-price { stroke-dasharray: 400; stroke-dashoffset: 400; }
+
+    /* Slide 6 — signal hero */
+    .intro-mock-signal { padding: 16px 18px; }
+    .im-hero-lab { font-size: 11.5px; color: var(--sub); margin-bottom: 8px; }
+    .im-hero-row { display: flex; align-items: baseline; gap: 12px; }
+    .im-hero-num {
+      font-size: 40px; font-weight: 800; color: #10b981;
+      letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
+    }
+    .im-hero-unit { font-size: 18px; color: var(--sub); margin-left: 2px; }
+    .im-hero-tag {
+      font-size: 11px; font-weight: 800; padding: 4px 10px; border-radius: 999px;
+    }
+    .im-hero-tag.up { background: rgba(16,185,129,0.16); color: #10b981; }
+    .im-pair { display: flex; gap: 18px; margin-top: 6px; }
+    .im-pair-cell { display: flex; flex-direction: column; }
+    .im-pair-lab { font-size: 10.5px; color: var(--sub); }
+    .im-pair-val { font-size: 16px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .im-pair-val.up { color: #10b981; }
+    .im-pair-val.down { color: #ef4444; }
+    .im-mini-chart { width: 100%; height: 60px; margin-top: 10px; display: block; }
+    .im-mini-price, .im-mini-signal { stroke-dasharray: 400; stroke-dashoffset: 400; }
+
+    /* ── 슬라이드 active 시 애니메이션 발동 ─────────────────────── */
+    @keyframes im-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+    @keyframes im-line-draw { to { stroke-dashoffset: 0; } }
+    @keyframes im-bar-grow { from { width: 0; } to { width: var(--w, 50%); } }
+    @keyframes im-tap-pulse {
+      0% { opacity: 0; transform: translateY(-50%) scale(0.5); }
+      30% { opacity: 1; transform: translateY(-50%) scale(1.1); }
+      60% { opacity: 1; transform: translateY(-50%) scale(0.9); }
+      100% { opacity: 0; transform: translateY(-50%) scale(1.2); }
+    }
+    @keyframes im-pulse-dot {
+      0% { opacity: 0; transform: scale(0.4); }
+      40% { opacity: 1; transform: scale(1.4); }
+      80% { opacity: 0.6; transform: scale(1); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    @keyframes im-hero-pop {
+      from { opacity: 0; transform: scale(0.6); }
+      60% { opacity: 1; transform: scale(1.08); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    .intro-slide.active .intro-mock { animation: im-fade-up .5s cubic-bezier(.2,.7,.2,1) both; }
+    .intro-slide.active .im-row { animation: im-fade-up .45s cubic-bezier(.2,.7,.2,1) both; }
+    .intro-slide.active .im-row:nth-child(1) { animation-delay: .15s; }
+    .intro-slide.active .im-row:nth-child(2) { animation-delay: .25s; }
+    .intro-slide.active .im-row:nth-child(3) { animation-delay: .35s; }
+    .intro-slide.active .im-sp-line { animation: im-line-draw 1.2s cubic-bezier(.2,.7,.2,1) forwards .5s; }
+    .intro-slide.active .im-row-hl .im-tap { animation: im-tap-pulse 1.8s ease-in-out infinite 1.4s; }
+
+    .intro-slide.active .im-line { animation: im-line-draw 1.6s cubic-bezier(.2,.7,.2,1) forwards .35s; }
+    .intro-slide.active .im-pulse { animation: im-pulse-dot 2s ease-in-out infinite 1.8s; }
+
+    .intro-slide.active .im-bar-fill { animation: im-bar-grow .9s cubic-bezier(.2,.7,.2,1) both; }
+    .intro-slide.active .im-bar-row:nth-child(1) .im-bar-fill { animation-delay: .25s; }
+    .intro-slide.active .im-bar-row:nth-child(2) .im-bar-fill { animation-delay: .35s; }
+    .intro-slide.active .im-bar-row:nth-child(3) .im-bar-fill { animation-delay: .45s; }
+    .intro-slide.active .im-bar-row:nth-child(4) .im-bar-fill { animation-delay: .55s; }
+
+    .intro-slide.active .im-mms-card { animation: im-fade-up .5s cubic-bezier(.2,.7,.2,1) both; }
+    .intro-slide.active .im-mms-card:nth-child(1) { animation-delay: .15s; }
+    .intro-slide.active .im-mms-card:nth-child(2) { animation-delay: .30s; }
+    .intro-slide.active .im-mms-card:nth-child(3) { animation-delay: .45s; }
+    .intro-slide.active .im-mms-line { animation: im-line-draw 1.2s cubic-bezier(.2,.7,.2,1) forwards .55s; }
+    .intro-slide.active .im-heat-cell { animation: im-scale-pop .5s cubic-bezier(.2,.7,.2,1) both; }
+    .intro-slide.active .im-heat-cell:nth-child(1) { animation-delay: .70s; }
+    .intro-slide.active .im-heat-cell:nth-child(2) { animation-delay: .76s; }
+    .intro-slide.active .im-heat-cell:nth-child(3) { animation-delay: .82s; }
+    .intro-slide.active .im-heat-cell:nth-child(4) { animation-delay: .88s; }
+
+    /* 슬라이드 3+ 강화 — 실제 분석 페이지 미러 애니메이션 */
+    .im-tab-chip{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase;color:#FF8C00;background:rgba(255,140,0,0.14);padding:5px 10px;border-radius:99px;margin-bottom:10px}
+    .im-tab-chip::before{content:'';width:5px;height:5px;border-radius:50%;background:#FF8C00;animation:imDotPulse 1.6s ease-in-out infinite}
+    @keyframes imDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(1.4)}}
+    .intro-slide.active .im-tab-chip{animation:im-fade-up .4s cubic-bezier(.2,.7,.2,1) both}
+
+    /* 실 분석 페이지 미러 — 헤드라인 박스 / 카드 chrome */
+    .im-headline-box{display:flex;align-items:center;gap:10px;padding:10px 14px;background:rgba(255,140,0,0.10);border:1px solid rgba(255,140,0,0.28);border-radius:12px;margin-bottom:10px;font-size:12px;color:var(--text);font-weight:600;letter-spacing:-0.005em}
+    .im-headline-box .im-hb-lab{font-size:9.5px;font-weight:800;letter-spacing:0.18em;text-transform:uppercase;color:#FF8C00;background:rgba(255,140,0,0.18);padding:3px 7px;border-radius:99px}
+    .intro-slide.active .im-headline-box{animation:im-fade-up .45s cubic-bezier(.2,.7,.2,1) both .1s}
+
+    .im-card{background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:14px;padding:12px 14px;margin-bottom:10px;position:relative}
+    [data-theme="light"] .im-card{background:#fff;border-color:rgba(0,0,0,0.06);box-shadow:0 1px 3px rgba(0,0,0,0.04)}
+    .im-card .im-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+    .im-card .im-card-head .im-card-lab{font-size:11px;font-weight:800;letter-spacing:0.04em;color:var(--text)}
+    .im-card .im-card-head .im-card-badge{font-size:9px;font-weight:800;letter-spacing:0.06em;padding:3px 7px;border-radius:99px}
+    .im-card .im-card-head .im-card-badge.ai{background:rgba(139,92,246,0.18);color:#8B5CF6}
+    .im-card .im-card-head .im-card-badge.yellow{background:rgba(255,140,0,0.18);color:#FF8C00}
+    .intro-slide.active .im-card{animation:im-fade-up .45s cubic-bezier(.2,.7,.2,1) both}
+
+    /* 시장 페이지 미러 */
+    .im-mkt-ai-body{font-size:11.5px;color:var(--text);font-weight:500;line-height:1.5}
+    .im-mkt-ai-body b{color:#FF8C00;font-weight:700}
+    .im-stat-strip{display:grid;grid-template-columns:repeat(3,1fr);background:rgba(255,255,255,0.03);border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,0.06)}
+    [data-theme="light"] .im-stat-strip{background:#FAFAFA;border-color:rgba(0,0,0,0.05)}
+    .im-stat-strip .im-stat-cell{padding:10px 8px;text-align:center;border-right:1px solid rgba(255,255,255,0.05)}
+    .im-stat-strip .im-stat-cell:last-child{border-right:0}
+    .im-stat-strip .im-stat-lab{font-size:9.5px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:0.08em;text-transform:uppercase}
+    [data-theme="light"] .im-stat-strip .im-stat-lab{color:#888}
+    .im-stat-strip .im-stat-val{font-size:14px;font-weight:800;color:var(--text);margin-top:3px;font-feature-settings:'tnum';letter-spacing:-0.015em}
+    .im-stat-strip .im-stat-sub{font-size:9.5px;font-weight:600;color:rgba(255,255,255,0.5);margin-top:1px}
+    .im-stat-strip .im-stat-sub.up{color:#0BA66D}.im-stat-strip .im-stat-sub.down{color:#E0394A}
+    .im-hold-row{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11.5px}
+    .im-hold-row:last-child{border-bottom:0}
+    .im-hold-row .im-hold-ico{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:#fff;background:#0052FF}
+    .im-hold-row .im-hold-ico.green{background:#76B900}.im-hold-row .im-hold-ico.red{background:#E0394A}
+    .im-hold-row .im-hold-nm{font-weight:700;color:var(--text);font-size:12px}
+    .im-hold-row .im-hold-ret{font-weight:800;font-feature-settings:'tnum'}
+    .im-hold-row .im-hold-ret.up{color:#0BA66D}
+    .intro-slide.active .im-hold-row{animation:im-fade-up .4s cubic-bezier(.2,.7,.2,1) both}
+    .intro-slide.active .im-hold-row:nth-child(1){animation-delay:.55s}
+    .intro-slide.active .im-hold-row:nth-child(2){animation-delay:.65s}
+    .intro-slide.active .im-hold-row:nth-child(3){animation-delay:.75s}
+
+    /* 펀더 페이지 미러 */
+    .im-nr-hero{padding:14px 16px 12px}
+    .im-nr-hero-over{font-size:10px;font-weight:800;letter-spacing:0.14em;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:6px}
+    [data-theme="light"] .im-nr-hero-over{color:#888}
+    .im-nr-hero-num{font-size:36px;font-weight:800;letter-spacing:-0.04em;color:#FF8C00;line-height:1;font-feature-settings:'tnum';margin-bottom:4px}
+    .im-nr-hero-sub{font-size:11.5px;color:var(--text);font-weight:600;margin-bottom:10px}
+    .im-nr-bar{height:8px;background:rgba(255,255,255,0.08);border-radius:99px;overflow:hidden;position:relative}
+    [data-theme="light"] .im-nr-bar{background:rgba(0,0,0,0.08)}
+    .im-nr-bar-fill{height:100%;background:linear-gradient(90deg,#FF8C00,#FFB266);border-radius:99px;width:68%;transform-origin:left;animation:im-bar-grow .9s cubic-bezier(.2,.7,.2,1) both .35s}
+    .im-nr-scale{display:flex;justify-content:space-between;margin-top:6px;font-size:9px;font-weight:700;color:rgba(255,255,255,0.4);letter-spacing:0.06em}
+    [data-theme="light"] .im-nr-scale{color:#888}
+    .im-quote{border-left:3px solid #FF8C00;padding:6px 12px;font-size:12px;color:var(--text);font-weight:500;line-height:1.55;font-style:italic}
+    .im-quote b{color:#FF8C00;font-weight:700;font-style:normal}
+    .im-quote-foot{font-size:9.5px;color:rgba(255,255,255,0.4);font-weight:600;margin-top:6px;letter-spacing:0.04em}
+    [data-theme="light"] .im-quote-foot{color:#999}
+
+    /* 펀더멘털 반영도 — 실제 화면 미러 */
+    .im-fc-head{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px}
+    .im-fc-title{font-size:12.5px;font-weight:800;color:var(--text);letter-spacing:-0.005em}
+    .im-fc-badge{font-size:9px;font-weight:800;letter-spacing:0.08em;padding:3px 7px;border-radius:99px;background:rgba(255,140,0,0.18);color:#FF8C00}
+    .im-fc-num-row{display:flex;align-items:baseline;gap:10px;margin:4px 0 2px}
+    .im-fc-bolt{width:34px;height:34px;border-radius:50%;background:rgba(255,140,0,0.18);color:#FF8C00;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .im-fc-bolt svg{width:18px;height:18px}
+    .im-fc-num{font-size:22px;font-weight:800;letter-spacing:-0.02em;color:#FF8C00;font-feature-settings:'tnum'}
+    .im-fc-sub{font-size:10px;color:rgba(255,255,255,0.55);font-weight:600;letter-spacing:-0.005em;margin-left:8px}
+    [data-theme="light"] .im-fc-sub{color:#888}
+    .im-fc-desc{font-size:10.5px;color:var(--text);font-weight:500;line-height:1.5;margin:6px 0 10px}
+    .im-fc-desc b{color:#FF8C00;font-weight:700}
+    .im-fc-track-wrap{margin:6px 0 8px}
+    .im-fc-track-labels{display:flex;justify-content:space-between;font-size:9px;font-weight:700;color:rgba(255,255,255,0.55);letter-spacing:0.04em;margin-bottom:5px}
+    [data-theme="light"] .im-fc-track-labels{color:#888}
+    .im-fc-track{position:relative;height:6px;border-radius:99px;background:linear-gradient(90deg,#0BA66D,#F4C82F 50%,#E0394A)}
+    .im-fc-track .im-fc-marker{position:absolute;top:-4px;width:14px;height:14px;border-radius:50%;background:#FF8C00;border:2px solid var(--bg);box-shadow:0 0 0 1px rgba(255,140,0,0.4);left:67%;transform:translateX(-50%);animation:imRing 1.8s ease-out infinite 1.4s}
+    .im-fc-foot{background:rgba(255,140,0,0.06);border:1px dashed rgba(255,140,0,0.32);border-radius:8px;padding:8px 10px;font-size:10.5px;color:var(--text);font-weight:500;line-height:1.5}
+    .im-fc-foot b{font-weight:700;color:#FF8C00;font-feature-settings:'tnum'}
+    .im-fc-foot-more{font-size:9px;color:rgba(255,255,255,0.4);font-weight:600;letter-spacing:0.04em;text-align:right;margin-top:4px}
+    [data-theme="light"] .im-fc-foot-more{color:#999}
+    .intro-slide.active .im-fc-num-row{animation:im-fade-up .5s cubic-bezier(.2,.7,.2,1) both .35s}
+    .intro-slide.active .im-fc-desc{animation:im-fade-up .4s cubic-bezier(.2,.7,.2,1) both .5s}
+    .intro-slide.active .im-fc-track-wrap{animation:im-fade-up .45s cubic-bezier(.2,.7,.2,1) both .65s}
+    .intro-slide.active .im-fc-foot{animation:im-fade-up .45s cubic-bezier(.2,.7,.2,1) both .85s}
+
+    /* 강조 펄스 링 — 큰 숫자 옆 */
+    @keyframes imRing{0%{box-shadow:0 0 0 0 rgba(255,140,0,0.55)}70%{box-shadow:0 0 0 14px rgba(255,140,0,0)}100%{box-shadow:0 0 0 0 rgba(255,140,0,0)}}
+    .intro-slide.active .im-hero-num{position:relative;border-radius:8px;animation:imRing 1.8s ease-out infinite 1.2s}
+    .intro-slide.active .im-ns-fill{animation:im-bar-grow 1s cubic-bezier(.2,.7,.2,1) both .35s, imRingSoft 2s ease-in-out 1.2s infinite}
+    @keyframes imRingSoft{0%,100%{box-shadow:0 0 0 0 rgba(255,140,0,0)}50%{box-shadow:0 0 14px 2px rgba(255,140,0,0.35)}}
+
+    /* 손가락 탭 위치 — 페이지마다 */
+    .im-finger{position:absolute;pointer-events:none;width:36px;height:36px;opacity:0;animation:imFingerTap 2.2s ease-in-out infinite 1.6s}
+    .im-finger svg{width:100%;height:100%;color:#FF8C00;filter:drop-shadow(0 4px 12px rgba(255,140,0,0.55))}
+    @keyframes imFingerTap{0%{opacity:0;transform:translate(0,8px) scale(0.9)}30%{opacity:1;transform:translate(0,0) scale(1)}45%{transform:translate(0,2px) scale(0.92)}60%{transform:translate(0,0) scale(1)}100%{opacity:0;transform:translate(0,0) scale(1)}}
+
+    /* 카드 컨테이너 — 페이지 보이는 듯 */
+    .im-page-head{display:flex;justify-content:space-between;align-items:center;padding:0 0 8px;border-bottom:1px dashed rgba(255,255,255,0.08);margin-bottom:10px}
+    [data-theme="light"] .im-page-head{border-bottom-color:rgba(0,0,0,0.06)}
+    .im-page-head .im-ph-title{font-size:14px;font-weight:800;letter-spacing:-0.01em;color:var(--text)}
+    .im-page-head .im-ai-pill{font-size:9px;font-weight:800;letter-spacing:0.1em;color:#FF8C00;background:rgba(255,140,0,0.15);padding:3px 8px;border-radius:99px}
+    .intro-slide.active .im-page-head{animation:im-fade-up .4s cubic-bezier(.2,.7,.2,1) both}
+
+    /* 시그널 페이지 ㅡ 강조 효과 */
+    .intro-slide.active .im-hero-tag{animation:im-fade-up .5s cubic-bezier(.2,.7,.2,1) both .35s}
+    .intro-slide.active .im-pair-cell{animation:im-fade-up .45s cubic-bezier(.2,.7,.2,1) both}
+    .intro-slide.active .im-pair-cell:nth-child(1){animation-delay:.55s}
+    .intro-slide.active .im-pair-cell:nth-child(2){animation-delay:.65s}
+    .intro-slide.active .im-pair-cell:nth-child(3){animation-delay:.75s}
+    .intro-slide.active .im-mini-price{stroke-dasharray:600;stroke-dashoffset:600;animation:im-line-draw 1.2s cubic-bezier(.2,.7,.2,1) forwards .8s}
+    .intro-slide.active .im-mini-signal{stroke-dasharray:600;stroke-dashoffset:600;animation:im-line-draw 1.4s cubic-bezier(.2,.7,.2,1) forwards 1.1s}
+    .intro-slide.active .im-fund-signal{stroke-dasharray:600;stroke-dashoffset:600;animation:im-line-draw 1.4s cubic-bezier(.2,.7,.2,1) forwards .8s}
+    .intro-slide.active .im-fund-price{stroke-dasharray:600;stroke-dashoffset:600;animation:im-line-draw 1.8s cubic-bezier(.2,.7,.2,1) forwards 1.1s}
+    .intro-slide.active .im-legend{animation:im-fade-up .4s cubic-bezier(.2,.7,.2,1) both .8s}
+
+    /* 페이지 mock 외곽 — 미니 phone frame */
+    .intro-mock{position:relative}
+    .intro-mock::before{
+      content:'';position:absolute;inset:-6px -10px;border-radius:18px;
+      border:1px solid rgba(255,255,255,0.06);
+      background:rgba(255,255,255,0.02);
+      pointer-events:none;z-index:-1;
+    }
+    [data-theme="light"] .intro-mock::before{border-color:rgba(0,0,0,0.06);background:rgba(0,0,0,0.02)}
+    .intro-slide.active .intro-mock::before{animation:im-frame-in .5s cubic-bezier(.2,.7,.2,1) both}
+    @keyframes im-frame-in{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
+    .intro-slide.active .im-heat-cell:nth-child(5) { animation-delay: .94s; }
+    .intro-slide.active .im-heat-cell:nth-child(6) { animation-delay: 1.00s; }
+    .intro-slide.active .im-heat-cell:nth-child(7) { animation-delay: 1.06s; }
+    .intro-slide.active .im-heat-cell:nth-child(8) { animation-delay: 1.12s; }
+    @keyframes im-scale-pop {
+      from { opacity: 0; transform: scale(0.6); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    .intro-slide.active .im-ns-fill { animation: im-bar-grow .9s cubic-bezier(.2,.7,.2,1) both .35s; }
+    .intro-slide.active .im-fund-signal { animation: im-line-draw 1.2s cubic-bezier(.2,.7,.2,1) forwards .7s; }
+    .intro-slide.active .im-fund-price  { animation: im-line-draw 1.2s cubic-bezier(.2,.7,.2,1) forwards .9s; }
+
+    .intro-slide.active .im-hero-num { animation: im-hero-pop .8s cubic-bezier(.2,.7,.2,1) both .25s; }
+    .intro-slide.active .im-hero-tag { animation: im-fade-up .5s cubic-bezier(.2,.7,.2,1) both .55s; }
+    .intro-slide.active .im-pair-cell { animation: im-fade-up .5s cubic-bezier(.2,.7,.2,1) both; }
+    .intro-slide.active .im-pair-cell:nth-child(1) { animation-delay: .65s; }
+    .intro-slide.active .im-pair-cell:nth-child(2) { animation-delay: .75s; }
+    .intro-slide.active .im-pair-cell:nth-child(3) { animation-delay: .85s; }
+    .intro-slide.active .im-mini-price { animation: im-line-draw 1.2s cubic-bezier(.2,.7,.2,1) forwards .8s; }
+    .intro-slide.active .im-mini-signal { animation: im-line-draw 1.4s cubic-bezier(.2,.7,.2,1) forwards 1s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .intro-overlay, .intro-slide { transition: none !important; }
+      .intro-slide.active * { animation: none !important; }
+      .intro-slide.active .im-sp-line,
+      .intro-slide.active .im-line,
+      .intro-slide.active .im-mms-line,
+      .intro-slide.active .im-fund-signal,
+      .intro-slide.active .im-fund-price,
+      .intro-slide.active .im-mini-price,
+      .intro-slide.active .im-mini-signal { stroke-dashoffset: 0 !important; }
+      .intro-slide.active .im-heat-cell { opacity: 1 !important; transform: scale(1) !important; }
+      .intro-slide.active .im-bar-fill { width: var(--w, 50%) !important; }
+    }
+
     /* AI차트 — Coinbase Prices style 목록 (다크 모드 친화) */
     .ai-chart-list-view { padding: 12px 8px 16px; }
     .ai-chart-list-view .cb-top {
@@ -394,6 +859,235 @@
     </div>
   </div>
 
+  <!-- Intro overlay (첫 진입 시) -->
+  <div id="intro-overlay" class="intro-overlay" style="display:none;" aria-hidden="true">
+    <button id="intro-skip" class="intro-skip" type="button">건너뛰기</button>
+    <div class="intro-stage" id="intro-stage">
+
+      <!-- Slide 1: 환영 -->
+      <section class="intro-slide intro-slide-welcome" data-idx="0">
+        <svg class="intro-logo" viewBox="0 0 513 427" xmlns="http://www.w3.org/2000/svg">
+          <use href="#lp0" fill="currentColor" transform="translate(124,10)"/>
+          <use href="#lp1" fill="currentColor" transform="translate(347,10)"/>
+          <use href="#lp2" fill="currentColor" transform="translate(141,138)"/>
+          <use href="#lp3" fill="currentColor" transform="translate(368,138)"/>
+          <use href="#lp4" fill="currentColor" transform="translate(214,149)"/>
+          <use href="#lp5" fill="currentColor" transform="translate(454,225)"/>
+        </svg>
+        <h1 class="intro-h1">Passive 에 오신 것을 환영합니다</h1>
+        <p class="intro-sub">감정 없이, 데이터로. 시장을 읽는 7가지 시선을 짧게 소개할게요.</p>
+      </section>
+
+      <!-- Slide 2: AI차트 — list → detail 흐름 -->
+      <section class="intro-slide" data-idx="1">
+        <div class="intro-mock intro-mock-list">
+          <div class="im-row">
+            <span class="im-ico im-ico-spy">SPY</span>
+            <span class="im-nm"><span class="im-t">S&P 500 ETF</span><span class="im-s">SPY</span></span>
+            <svg class="im-spark" viewBox="0 0 80 30"><polyline class="im-sp-line up" fill="none" stroke="#0BA66D" stroke-width="1.8" points="0,22 12,18 24,20 36,14 48,12 60,8 72,6 80,4"/></svg>
+            <span class="im-price"><span class="im-p">$480.12</span><span class="im-d up">+0.45%</span></span>
+          </div>
+          <div class="im-row">
+            <span class="im-ico im-ico-qqq">QQQ</span>
+            <span class="im-nm"><span class="im-t">Nasdaq 100</span><span class="im-s">QQQ</span></span>
+            <svg class="im-spark" viewBox="0 0 80 30"><polyline class="im-sp-line down" fill="none" stroke="#E0394A" stroke-width="1.8" points="0,6 12,9 24,8 36,12 48,15 60,18 72,16 80,20"/></svg>
+            <span class="im-price"><span class="im-p">$410.55</span><span class="im-d down">−0.23%</span></span>
+          </div>
+          <div class="im-row im-row-hl">
+            <span class="im-ico im-ico-xlk">XLK</span>
+            <span class="im-nm"><span class="im-t">Tech Sector</span><span class="im-s">XLK</span></span>
+            <svg class="im-spark" viewBox="0 0 80 30"><polyline class="im-sp-line up" fill="none" stroke="#0BA66D" stroke-width="1.8" points="0,24 12,20 24,16 36,14 48,10 60,8 72,5 80,3"/></svg>
+            <span class="im-price"><span class="im-p">$220.30</span><span class="im-d up">+1.20%</span></span>
+            <span class="im-tap" aria-hidden="true"></span>
+          </div>
+        </div>
+        <h2 class="intro-h2">AI차트</h2>
+        <p class="intro-desc">ETF 16개 (US) / 11개 (KR) 목록에서 종목 탭 → 캔들 차트와 <strong>모양·강도 매칭</strong>으로 닮은 과거 구간 top-3/5 + 후속 분포 확인.</p>
+        <p class="intro-hint">↗ 손가락 표시처럼 종목을 탭해 보세요</p>
+      </section>
+
+      <!-- Slide 3: 시장 이탈도 — D² 시계열 + 상위 10% 임계 + 강세/하락장 배경 -->
+      <section class="intro-slide" data-idx="2">
+        <div class="intro-mock intro-mock-deviation">
+          <div class="im-page-head">
+            <span class="im-ph-title">시장 이탈도</span>
+            <span class="im-ai-pill">AI</span>
+          </div>
+          <span class="im-tab-chip">이상 탐지</span>
+          <svg viewBox="0 0 320 140" preserveAspectRatio="none" class="im-chart">
+            <!-- 강세장 / 하락장 배경 음영 (regime_50 band) -->
+            <rect x="0"   y="6" width="120" height="128" fill="#22c55e" opacity="0.10"/>
+            <rect x="120" y="6" width="80"  height="128" fill="#ef4444" opacity="0.10"/>
+            <rect x="200" y="6" width="120" height="128" fill="#22c55e" opacity="0.10"/>
+            <!-- 상위 10% 경계 (가로 점선) -->
+            <line x1="0" y1="38" x2="320" y2="38" stroke="rgba(255,140,0,0.7)" stroke-width="1.2" stroke-dasharray="4,4"/>
+            <text x="316" y="32" text-anchor="end" font-size="9" fill="#FF8C00" font-weight="700">상위 10%</text>
+            <!-- 평시 D² 변동 (log 압축) + 우측 spike -->
+            <polyline class="im-line" fill="none" stroke="var(--text)" stroke-width="2"
+              points="0,108 22,104 44,112 66,98 88,106 110,90 132,118 154,116 176,100 198,92 220,78 242,62 264,48 286,30 308,18 320,12"/>
+            <!-- 오늘 강조 dot -->
+            <circle class="im-pulse" cx="320" cy="12" r="5" fill="#FF8C00"/>
+          </svg>
+          <div class="im-legend">
+            <span class="im-leg-item"><span class="im-leg-bull"></span>강세장</span>
+            <span class="im-leg-item"><span class="im-leg-bear"></span>하락장</span>
+            <span class="im-leg-item"><span class="im-leg-line"></span>D² 이탈도</span>
+          </div>
+        </div>
+        <h2 class="intro-h2">시장 이탈도</h2>
+        <p class="intro-desc">D² (Mahalanobis 거리) 가 <strong>오렌지 점선 (상위 10%)</strong> 위로 솟을수록 <strong>오늘이 평소와 다름</strong>. 녹색·붉은 배경 = 강세장·하락장. 과거 같은 패턴 (k-NN) + 무엇이 평소와 다른지 (top contributors) 함께 제공.</p>
+        <p class="intro-hint">↗ 우측 끝 점 = 오늘, 상위 N% 위치 표시</p>
+      </section>
+
+      <!-- Slide 4: 시장 탭 실제 화면 미러 -->
+      <section class="intro-slide" data-idx="3">
+        <div class="intro-mock intro-mock-mms">
+          <div class="im-page-head">
+            <span class="im-ph-title">시장</span>
+            <span class="im-ai-pill">LIVE</span>
+          </div>
+          <span class="im-tab-chip">시황</span>
+          <!-- 헤드라인 박스 (탭 상단 룰베이스 한 줄) -->
+          <div class="im-headline-box">
+            <span class="im-hb-lab">오늘</span>
+            <span>심리·변동성 모두 균형. 평소 호흡 안.</span>
+          </div>
+          <!-- AI 오늘의 시장 카드 -->
+          <div class="im-card">
+            <div class="im-card-head">
+              <span class="im-card-lab">AI 오늘의 시장</span>
+              <span class="im-card-badge ai">AI</span>
+            </div>
+            <div class="im-mkt-ai-body">S&P 500 <b>−0.07%</b> · RSI 71.8 과매수. 펀더-주가 갭 +14.9%, 평소 호흡 안.</div>
+          </div>
+          <!-- VIX / VOL / P/C 3-cell strip -->
+          <div class="im-card" style="padding:6px">
+            <div class="im-stat-strip">
+              <div class="im-stat-cell"><div class="im-stat-lab">VIX</div><div class="im-stat-val">18.4</div><div class="im-stat-sub up">잔잔</div></div>
+              <div class="im-stat-cell"><div class="im-stat-lab">VOL</div><div class="im-stat-val">+12%</div><div class="im-stat-sub">5일 평균</div></div>
+              <div class="im-stat-cell"><div class="im-stat-lab">P/C</div><div class="im-stat-val">0.92</div><div class="im-stat-sub">균형</div></div>
+            </div>
+          </div>
+          <!-- My Holdings -->
+          <div class="im-card">
+            <div class="im-card-head"><span class="im-card-lab">My Holdings</span></div>
+            <div class="im-hold-row"><span class="im-hold-ico">SPY</span><span class="im-hold-nm">SPY</span><span class="im-hold-ret up">+2.1%</span></div>
+            <div class="im-hold-row"><span class="im-hold-ico green">QQQ</span><span class="im-hold-nm">QQQ</span><span class="im-hold-ret up">+3.4%</span></div>
+            <div class="im-hold-row"><span class="im-hold-ico red">VTI</span><span class="im-hold-nm">VTI</span><span class="im-hold-ret up">+1.8%</span></div>
+          </div>
+        </div>
+        <h2 class="intro-h2">시장</h2>
+        <p class="intro-desc">AI 한 줄 해설 + <strong>VIX · VOL · P/C</strong> 지표 + <strong>보유 ETF</strong> 성과를 한 화면에. 룰베이스 헤드라인 박스가 오늘의 시장 흐름을 압축.</p>
+        <p class="intro-hint">↗ 모든 카드가 실시간 갱신</p>
+      </section>
+
+      <!-- Slide 5: 펀더멘털 탭 실제 화면 미러 -->
+      <section class="intro-slide" data-idx="4">
+        <div class="intro-mock intro-mock-fundamental">
+          <div class="im-page-head">
+            <span class="im-ph-title">펀더멘털</span>
+            <span class="im-ai-pill">LIVE</span>
+          </div>
+          <span class="im-tab-chip">분석</span>
+          <!-- 펀더멘털 반영도 카드 — 실제 fundamental-hero 페이지 미러 -->
+          <div class="im-card im-nr-hero">
+            <div class="im-fc-head">
+              <span class="im-fc-title">펀더멘털 반영도</span>
+              <span class="im-fc-badge">경계</span>
+            </div>
+            <div class="im-fc-num-row">
+              <span class="im-fc-bolt">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"/></svg>
+              </span>
+              <span class="im-fc-num">상위 42.7%</span>
+              <span class="im-fc-sub">가격이 이익을 추월</span>
+            </div>
+            <div class="im-fc-desc">과거 10년 분포에서 <b>상위 42.7% 추월 영역</b> · 가격이 이익 대비 <b>+118% 추월</b> (1년 누적)</div>
+            <div class="im-fc-track-wrap">
+              <div class="im-fc-track-labels"><span>압축 (가격&lt;이익)</span><span>추월 (가격&gt;이익)</span></div>
+              <div class="im-fc-track"><span class="im-fc-marker"></span></div>
+            </div>
+            <div class="im-fc-foot">
+              현재값 <b>+0.777</b> (log 차이) · 10년 분포 평균 <b>0.421</b><br>
+              가격이 이익 대비 빠르게 상승 — 0에 가까울수록 펀더멘털 반영
+            </div>
+            <div class="im-fc-foot-more">클릭하여 자세히 보기 →</div>
+          </div>
+        </div>
+        <h2 class="intro-h2">펀더멘털 반영도</h2>
+        <p class="intro-desc">가격이 이익(펀더멘털)보다 얼마나 앞서 갔는지를 과거 10년 분포 안에서의 위치(%)로 표시 — <strong>0%</strong>면 동행, <strong>100%</strong>에 가까울수록 가격이 이익 위로 멀어진 극단.</p>
+        <p class="intro-hint">↗ 상위 %가 클수록 가격이 이익을 더 추월</p>
+      </section>
+
+      <!-- Slide 6: 상승·하락 신호 — hero diff + dual-axis mini chart -->
+      <section class="intro-slide" data-idx="5">
+        <div class="intro-mock intro-mock-signal">
+          <div class="im-page-head">
+            <span class="im-ph-title">상승·하락 신호</span>
+            <span class="im-ai-pill">AI</span>
+          </div>
+          <span class="im-tab-chip">시그널</span>
+          <div class="im-hero-lab">향후 한달뒤 상승 확률 − 하락 확률</div>
+          <div class="im-hero-row">
+            <span class="im-hero-num" id="im-hero-num">+12.4<span class="im-hero-unit">p</span></span>
+            <span class="im-hero-tag up">상승 우세</span>
+          </div>
+          <div class="im-pair">
+            <div class="im-pair-cell"><div class="im-pair-lab">상승</div><div class="im-pair-val up">65.2</div></div>
+            <div class="im-pair-cell"><div class="im-pair-lab">하락</div><div class="im-pair-val down">52.8</div></div>
+            <div class="im-pair-cell"><div class="im-pair-lab">VIX</div><div class="im-pair-val">18.4</div></div>
+          </div>
+          <svg viewBox="0 0 320 60" preserveAspectRatio="none" class="im-mini-chart">
+            <polyline class="im-mini-price" fill="none" stroke="var(--text)" stroke-width="1.8"
+              points="0,40 40,42 80,36 120,34 160,28 200,22 240,18 280,14 320,10"/>
+            <polyline class="im-mini-signal" fill="none" stroke="#FF8C00" stroke-width="1.6" stroke-dasharray="3,3"
+              points="0,48 40,44 80,40 120,30 160,22 200,16 240,12 280,10 320,8"/>
+          </svg>
+        </div>
+        <h2 class="intro-h2">상승·하락 신호</h2>
+        <p class="intro-desc">XGBoost regressor 가 매크로·기술 피처로 예측한 향후 20일 <strong>상승/하락 점수 차이</strong>. 신호(점선)가 가격(실선) 보다 먼저 움직이면 선행성 확인.</p>
+        <p class="intro-hint">↗ 변동성 (VIX/VKOSPI) 과 함께 보세요</p>
+      </section>
+
+      <!-- 즐겨찾기 안내 슬라이드 -->
+      <section class="intro-slide intro-slide-fav" data-idx="6">
+        <div class="intro-mock intro-mock-fav">
+          <div class="im-fav-star" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+              <path d="M12 2 14.9 8.6 22 9.3 16.5 14.1 18 21 12 17.3 6 21 7.5 14.1 2 9.3 9.1 8.6 Z"/>
+            </svg>
+          </div>
+          <div class="im-fav-chips">
+            <span class="im-fav-chip"><span class="im-fav-ch-st">★</span> AI차트</span>
+            <span class="im-fav-chip"><span class="im-fav-ch-st">★</span> 펀더멘털</span>
+            <span class="im-fav-chip"><span class="im-fav-ch-st">★</span> 섹터 모멘텀</span>
+          </div>
+        </div>
+        <h2 class="intro-h2">즐겨찾기로 빠르게</h2>
+        <p class="intro-desc">분석 기능을 둘러보고 원하는 분석 페이지를 <strong>즐겨찾기</strong> 하세요. 우측 상단 <strong>별 아이콘</strong>을 누르면 홈에서 한 번에 진입할 수 있어요.</p>
+        <p class="intro-hint">★ 홈 상단 "즐겨찾기" 섹션에서 바로가기</p>
+      </section>
+
+    </div>
+    <style>
+      .intro-mock-fav{display:flex;flex-direction:column;align-items:center;gap:18px;padding:24px 0 8px}
+      .im-fav-star{width:88px;height:88px;border-radius:24px;background:rgba(255,140,0,0.16);color:#FF8C00;display:flex;align-items:center;justify-content:center;animation:imFavPop .9s cubic-bezier(.34,1.5,.64,1) both .2s}
+      .im-fav-star svg{width:52px;height:52px;filter:drop-shadow(0 6px 16px rgba(255,140,0,0.45))}
+      @keyframes imFavPop{0%{transform:scale(0.6) rotate(-12deg);opacity:0}60%{transform:scale(1.15) rotate(6deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
+      .im-fav-chips{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:300px}
+      .im-fav-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;background:rgba(255,140,0,0.12);border:1px solid rgba(255,140,0,0.45);border-radius:99px;color:var(--text);font-size:13px;font-weight:700;letter-spacing:-0.005em;animation:imFavChipIn .5s cubic-bezier(.2,.7,.2,1) both}
+      .im-fav-chip:nth-child(1){animation-delay:.5s}
+      .im-fav-chip:nth-child(2){animation-delay:.65s}
+      .im-fav-chip:nth-child(3){animation-delay:.8s}
+      .im-fav-ch-st{color:#FF8C00;font-size:13px}
+      @keyframes imFavChipIn{from{opacity:0;transform:translateY(8px) scale(0.9)}to{opacity:1;transform:none}}
+    </style>
+    <div class="intro-footer">
+      <div class="intro-dots" id="intro-dots"></div>
+      <button id="intro-next" class="intro-next" type="button">다음</button>
+    </div>
+  </div>
+
   <!-- Holdings Setup -->
   <div id="holdings-setup" class="holdings-setup" style="display:none;">
     <div class="holdings-inner">
@@ -544,8 +1238,48 @@
       <div id="home-ai-meta" class="home-ai-meta"></div>
     </div>
 
-    <!-- 탐색 — 2열 그리드 (.home-tile 카드형, 사용자 요청 스크린샷 톤으로 환원) -->
-    <div class="home-section-label">탐색</div>
+    <!-- 즐겨찾기 (별표 추가한 분석 페이지 빠른 진입) -->
+    <section class="fav-section empty" id="fav-section">
+      <div class="home-section-label">즐겨찾기</div>
+      <div class="fav-list" id="fav-list"></div>
+    </section>
+
+    <!-- 카테고리 4 카드 (가로 리스트, 한눈 미리보기) -->
+    <div class="home-section-label">한눈에</div>
+    <div class="home-cats" id="home-cats">
+      <button class="home-cat" type="button" data-home-cat="today">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H7 L9 6 L12 18 L14 9 L16 13 L18 12 H21"/></svg></span>
+        <span class="body">
+          <span class="head"><span class="t">시황</span><span class="tag">오늘</span></span>
+          <span class="s">시장 상태와 가격 움직임을 <b>한눈에</b></span>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="home-cat" type="button" data-home-cat="analysis">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7" opacity="0.5"/><circle cx="12" cy="12" r="10" opacity="0.3"/></svg></span>
+        <span class="body">
+          <span class="head"><span class="t">분석</span><span class="tag">왜</span></span>
+          <span class="s">펀더멘털과 가격의 <b>차이·이탈</b> 진단</span>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="home-cat" type="button" data-home-cat="context">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg></span>
+        <span class="body">
+          <span class="head"><span class="t">환경</span><span class="tag">매크로</span></span>
+          <span class="s">경기 국면 · <b>매크로 지표</b> · 시장 밸류</span>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+      <button class="home-cat" type="button" data-home-cat="sector">
+        <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="14" width="3" height="6" rx="0.5"/><rect x="10.5" y="9" width="3" height="11" rx="0.5"/><rect x="16" y="4" width="3" height="16" rx="0.5"/></svg></span>
+        <span class="body">
+          <span class="head"><span class="t">섹터</span><span class="tag">랭킹</span></span>
+          <span class="s"><b>모멘텀·밸류</b> 8섹터 비교</span>
+        </span>
+        <span class="arrow">›</span>
+      </button>
+    </div>
     <div class="home-tiles">
       <button class="home-tile" data-tile="ai-chart">
         <span class="ht-badge">NEW</span>
@@ -947,6 +1681,259 @@
     <div id="detail-body" class="detail-body"></div>
   </div>
 
+  <!-- ════ 카테고리 nav (옵션 D — 2×4) ════ -->
+  <style>
+    :root{--catnav-primary:#C44A12;--catnav-soft:#FDEBDC;--catnav-ink:#0D1117;--catnav-sub:#7E8499;--catnav-line:#EAECF0;--catnav-bg:#FFFFFF;}
+    [data-theme="dark"]{--catnav-primary:#FF7A2C;--catnav-soft:rgba(255,122,44,0.16);--catnav-ink:#F5F5F5;--catnav-sub:#9A9DA8;--catnav-line:rgba(255,255,255,0.10);--catnav-bg:#0F1116;}
+    body{padding-bottom:74px}
+    .cat-nav{position:fixed;left:0;right:0;bottom:0;z-index:80;background:var(--catnav-bg);border-top:1px solid var(--catnav-line);display:grid;grid-template-columns:repeat(5,1fr);padding:8px 6px calc(8px + env(safe-area-inset-bottom));box-shadow:0 -8px 24px -10px rgba(13,17,23,0.12);font-family:'Pretendard Variable','Pretendard',system-ui,sans-serif}
+    .cat-nav button{background:none;border:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--catnav-sub);padding:6px 4px;font-size:10.5px;font-weight:600;letter-spacing:-0.005em;font-family:inherit;transition:color .15s}
+    .cat-nav button .ico{width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:9px;color:var(--catnav-primary);transition:background .15s}
+    .cat-nav button .ico svg{width:20px;height:20px}
+    .cat-nav button.on{color:var(--catnav-primary)}
+    .cat-nav button.on .ico{background:var(--catnav-soft)}
+    .cat-nav button:active{transform:scale(0.96)}
+    .cat-overlay{position:fixed;inset:0;background:rgba(13,17,23,0.42);backdrop-filter:blur(6px);z-index:90;display:none;align-items:flex-end;justify-content:center;animation:catFadeIn .2s ease-out}
+    [data-theme="dark"] .cat-overlay{background:rgba(0,0,0,0.55)}
+    .cat-overlay.open{display:flex}
+    @keyframes catFadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes catSlideUp{from{transform:translateY(20px)}to{transform:none}}
+    .cat-sheet{width:100%;max-width:440px;background:var(--catnav-bg);border-radius:24px 24px 0 0;padding:18px 22px calc(74px + 18px + env(safe-area-inset-bottom));animation:catSlideUp .25s cubic-bezier(.2,.7,.2,1);font-family:'Pretendard Variable','Pretendard',system-ui,sans-serif;color:var(--catnav-ink);position:relative;max-height:80vh;overflow-y:auto}
+    .cat-sheet .grip{width:38px;height:4px;border-radius:99px;background:var(--catnav-line);margin:0 auto 14px}
+    .cat-sheet .kicker{font-size:11px;font-weight:700;color:var(--catnav-primary);letter-spacing:0.22em;text-transform:uppercase;margin-bottom:6px}
+    .cat-sheet h2{font-size:24px;font-weight:800;letter-spacing:-0.025em;line-height:1.25;margin-bottom:6px;color:var(--catnav-ink)}
+    .cat-sheet p.desc{font-size:13px;color:var(--catnav-sub);font-weight:500;line-height:1.55;margin-bottom:18px}
+    .cat-grid{display:flex;flex-direction:column;gap:10px}
+    .cat-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;background:var(--catnav-soft);border:1px solid var(--catnav-line);border-radius:16px;padding:16px 18px;cursor:pointer;color:var(--catnav-ink);text-decoration:none;font-family:inherit;text-align:left;transition:transform .12s}
+    .cat-card:hover{transform:translateY(-1px)}
+    .cat-card:active{transform:scale(0.98)}
+    .cat-card .ico{width:42px;height:42px;border-radius:12px;background:var(--catnav-bg);color:var(--catnav-primary);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+    .cat-card .ico svg{width:22px;height:22px}
+    .cat-card .body{display:flex;flex-direction:column;gap:2px}
+    .cat-card .body .t{font-size:15.5px;font-weight:800;letter-spacing:-0.015em}
+    .cat-card .body .s{font-size:12px;color:var(--catnav-sub);font-weight:500}
+    .cat-card .arrow{color:var(--catnav-sub);font-size:18px;line-height:1}
+    .cat-close{position:absolute;top:14px;right:18px;background:none;border:0;color:var(--catnav-sub);font-size:22px;font-weight:300;cursor:pointer;line-height:1;font-family:inherit;padding:4px}
+
+    /* 기존 9-tile 그리드 숨김 (cat-nav가 대체) */
+    .home-tiles{display:none !important}
+    /* 홈 4-카테고리 — 가로 리스트 (단일 컬럼, 정보 풍부) */
+    .home-cats{display:flex;flex-direction:column;gap:10px;padding:0 16px 20px}
+    .home-cat{
+      display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:16px;
+      background:var(--catnav-bg);border:1px solid var(--catnav-line);
+      border-radius:20px;padding:18px 20px;
+      cursor:pointer;color:var(--catnav-ink);text-align:left;
+      font-family:inherit;position:relative;overflow:hidden;
+      transition:transform .15s,border-color .15s,box-shadow .15s;
+    }
+    .home-cat::before{
+      content:'';position:absolute;left:0;top:0;bottom:0;width:4px;
+      background:var(--catnav-primary);opacity:0;transition:opacity .15s;
+    }
+    .home-cat:hover{transform:translateY(-2px);border-color:var(--catnav-primary);box-shadow:0 12px 28px -16px rgba(196,74,18,0.35)}
+    .home-cat:hover::before{opacity:1}
+    .home-cat:active{transform:scale(0.98)}
+    .home-cat .ico{
+      width:52px;height:52px;border-radius:14px;
+      background:var(--catnav-soft);color:var(--catnav-primary);
+      display:flex;align-items:center;justify-content:center;flex-shrink:0;
+    }
+    .home-cat .ico svg{width:28px;height:28px}
+    .home-cat .body{display:flex;flex-direction:column;gap:4px;min-width:0}
+    .home-cat .body .head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+    .home-cat .t{font-size:17px;font-weight:800;letter-spacing:-0.02em;line-height:1.15}
+    .home-cat .tag{
+      display:inline-block;font-size:10px;font-weight:700;letter-spacing:0.06em;
+      color:var(--catnav-primary);background:var(--catnav-soft);
+      padding:2px 7px;border-radius:99px;text-transform:uppercase;
+    }
+    .home-cat .s{font-size:12px;color:var(--catnav-sub);font-weight:500;line-height:1.4;letter-spacing:-0.005em}
+    .home-cat .s b{color:var(--catnav-ink);font-weight:700}
+    .home-cat .arrow{color:var(--catnav-sub);font-size:20px;line-height:1;font-weight:300;align-self:center}
+
+    /* 시황 ticker strip — 로고/이름 오렌지 포인트 */
+    .feed-ticker{color:var(--catnav-primary) !important}
+
+    /* 즐겨찾기 별 버튼 — 지역 토글 우측 (ticker strip 위) */
+    .fav-star{position:fixed;top:82px;right:14px;z-index:55;display:none;background:none;border:0;cursor:pointer;padding:6px;border-radius:50%;font-family:inherit;color:var(--catnav-sub);transition:transform .15s, color .15s}
+    .fav-star.show{display:inline-flex;align-items:center;justify-content:center}
+    .fav-star svg{width:24px;height:24px;display:block}
+    .fav-star:hover{transform:scale(1.1)}
+    .fav-star:active{transform:scale(0.9)}
+    .fav-star.on{color:var(--catnav-primary)}
+    @keyframes favPop{0%{transform:scale(1)}40%{transform:scale(1.35)}70%{transform:scale(0.9)}100%{transform:scale(1)}}
+    .fav-star.pop{animation:favPop .45s cubic-bezier(.34,1.5,.64,1)}
+
+    /* 홈 즐겨찾기 섹션 */
+    .fav-section{padding:0 16px 14px}
+    .fav-section.empty{display:none}
+    .fav-list{display:flex;gap:8px;overflow-x:auto;padding:2px 0 6px;scrollbar-width:none}
+    .fav-list::-webkit-scrollbar{display:none}
+    .fav-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:var(--catnav-soft);border:1px solid var(--catnav-primary);border-radius:99px;color:var(--catnav-ink);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:-0.005em;transition:transform .12s}
+    .fav-chip:active{transform:scale(0.96)}
+    .fav-chip .star-ico{color:var(--catnav-primary);font-size:12px;line-height:1}
+  </style>
+  <!-- 즐겨찾기 별 (탭 페이지 우측 상단 고정) -->
+  <button class="fav-star" id="fav-star" type="button" aria-label="즐겨찾기 토글">
+    <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" fill="none"><path d="M12 2 14.9 8.6 22 9.3 16.5 14.1 18 21 12 17.3 6 21 7.5 14.1 2 9.3 9.1 8.6 Z"/></svg>
+  </button>
+
+  <nav class="cat-nav" aria-label="카테고리">
+    <button type="button" data-cat="home" aria-label="홈"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 11 9-7 9 7v9a2 2 0 0 1-2 2h-4v-7H10v7H6a2 2 0 0 1-2-2z"/></svg></span>홈</button>
+    <button type="button" data-cat="today" aria-label="시황"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H7 L9 6 L12 18 L14 9 L16 13 L18 12 H21"/></svg></span>시황</button>
+    <button type="button" data-cat="analysis" aria-label="분석"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7" opacity="0.5"/><circle cx="12" cy="12" r="10" opacity="0.3"/></svg></span>분석</button>
+    <button type="button" data-cat="context" aria-label="환경"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg></span>환경</button>
+    <button type="button" data-cat="sector" aria-label="섹터"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="14" width="3" height="6" rx="0.5"/><rect x="10.5" y="9" width="3" height="11" rx="0.5"/><rect x="16" y="4" width="3" height="16" rx="0.5"/></svg></span>섹터</button>
+  </nav>
+  <div class="cat-overlay" id="cat-overlay" role="dialog" aria-modal="true">
+    <div class="cat-sheet" role="document">
+      <div class="grip" aria-hidden="true"></div>
+      <button class="cat-close" type="button" aria-label="닫기">×</button>
+      <p class="kicker" id="cat-kicker"></p>
+      <h2 id="cat-title"></h2>
+      <p class="desc" id="cat-desc"></p>
+      <div class="cat-grid" id="cat-grid"></div>
+    </div>
+  </div>
+  <script>
+  (function(){
+    const ICONS = {
+      market:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H7 L9 6 L12 18 L14 9 L16 13 L18 12 H21"/></svg>',
+      chart:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><path d="M6 16 L11 11 L14 14 L20 6"/></svg>',
+      fund:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="3" height="14" rx="0.5"/><rect x="9" y="9" width="3" height="11" rx="0.5"/><rect x="14" y="12" width="3" height="8" rx="0.5"/></svg>',
+      anomaly:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7" opacity="0.5"/><circle cx="12" cy="12" r="10" opacity="0.25"/></svg>',
+      globe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg>',
+      gauge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 A9 9 0 0 1 21 17"/><path d="M12 17 L17 8"/><circle cx="12" cy="17" r="1.4" fill="currentColor"/></svg>',
+      bars:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="14" width="3" height="6" rx="0.5"/><rect x="10.5" y="9" width="3" height="11" rx="0.5"/><rect x="16" y="4" width="3" height="16" rx="0.5"/></svg>',
+    };
+    const CATS = {
+      today:{kicker:'시황',title:'오늘 시장 상태',desc:'지수·심리·변동성 한 번에 확인',items:[{tile:'market',name:'시장',sub:'VIX · 공포·탐욕 · 보유 포트',icon:'market'},{tile:'ai-chart',name:'AI차트',sub:'캔들·MA·거래량 · 유사 패턴',icon:'chart'}]},
+      analysis:{kicker:'분석',title:'펀더멘털과 가격의 차이',desc:'실적 대비 주가가 어디 있는지, 평소와 얼마나 다른지.',items:[{tile:'fundamental',name:'펀더멘털',sub:'Noise vs Signal · 갭 분해',icon:'fund'},{tile:'signal',name:'이상 탐지',sub:'평소와 다른 정도 · k-NN',icon:'anomaly'}]},
+      context:{kicker:'환경',title:'현재 경제 상황',desc:'경기 사이클과 매크로 지표로 시장 환경 진단',items:[{tile:'macro',name:'거시경제',sub:'경기 국면 · 매크로 10년 · Top 섹터',icon:'globe'}]},
+      sector:{kicker:'섹터',title:'섹터 비교',desc:'모멘텀과 밸류 랭킹.',items:[{tile:'sector-mom',name:'섹터 모멘텀',sub:'1주·1개월 8섹터 랭킹',icon:'bars'},{tile:'sector-val',name:'섹터 밸류',sub:'가중평균 PER · 10년 평균 대비',icon:'gauge'}]},
+    };
+    const TILE_TO_CAT={'ai-chart':'today','market':'today','fundamental':'analysis','signal':'analysis','macro':'context','market-valuation':'context','sector-mom':'sector','sector-val':'sector'};
+    const overlay=document.getElementById('cat-overlay');
+    const grid=document.getElementById('cat-grid');
+    function setActive(cat){document.querySelectorAll('.cat-nav button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat))}
+    // pushState 카운터 — manual close 후에도 popstate 가 발생하면 흡수해서 main.js 까지 전파 차단
+    window._sheetStates = window._sheetStates || 0;
+    function openCat(cat){const c=CATS[cat];if(!c)return;setActive(cat);document.getElementById('cat-kicker').textContent=c.kicker;document.getElementById('cat-title').textContent=c.title;document.getElementById('cat-desc').textContent=c.desc;grid.replaceChildren();for(const it of c.items){const b=document.createElement('button');b.type='button';b.className='cat-card';b.innerHTML=`<span class="ico">${ICONS[it.icon]||''}</span><span class="body"><span class="t">${it.name}</span><span class="s">${it.sub}</span></span><span class="arrow">›</span>`;b.addEventListener('click',()=>{const tile=document.querySelector(`.home-tile[data-tile="${it.tile}"]`);if(tile)tile.click();closeOverlay()});grid.append(b)}overlay.classList.add('open');try{history.pushState({catSheet:true},'');window._sheetStates++;}catch(e){}}
+    function closeOverlay(){overlay.classList.remove('open')}  /* 시각만 닫기, history 는 popstate 가 흡수 */
+    // 시스템 뒤로가기 — sheet/menu pushState 흡수해서 main.js 의 home 토스트 방지
+    window.addEventListener('popstate', function(e){
+      if (window._sheetStates > 0) {
+        window._sheetStates--;
+        overlay.classList.remove('open');
+        e.stopImmediatePropagation();
+        return;
+      }
+      if (window._menuStates > 0) {
+        window._menuStates--;
+        if (typeof window._closeMenuDrawer === 'function') window._closeMenuDrawer();
+        e.stopImmediatePropagation();
+        return;
+      }
+    }, true);
+    document.querySelectorAll('.cat-nav button').forEach(b=>{b.addEventListener('click',()=>{const cat=b.dataset.cat;if(cat==='home'){if(typeof window.showHome==='function')window.showHome();setActive('home');closeOverlay();return}openCat(cat)})});
+    overlay.addEventListener('click',e=>{if(e.target===overlay)closeOverlay()});
+    overlay.querySelector('.cat-close').addEventListener('click',closeOverlay);
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeOverlay()});
+    document.querySelectorAll('.tab[data-idx]').forEach(t=>{t.addEventListener('click',()=>{const idx=+t.dataset.idx;const tileByIdx={0:'ai-chart',1:'market',2:'fundamental',3:'signal',4:'macro'};const cat=TILE_TO_CAT[tileByIdx[idx]];if(cat)setActive(cat)})});
+    const _origShowHome=window.showHome;if(typeof _origShowHome==='function'){window.showHome=function(){_origShowHome();setActive('home')}}
+    // 홈 4-카테고리 카드 클릭 → 카테고리 시트 열기
+    document.querySelectorAll('.home-cat[data-home-cat]').forEach(b=>{b.addEventListener('click',()=>openCat(b.dataset.homeCat))});
+    setActive('home');
+
+    // ─── 즐겨찾기 기능 ───
+    const FAV_KEY = 'passive_favorites';
+    const FAV_LABELS = {
+      'ai-chart':'AI차트', 'market':'시장', 'fundamental':'펀더멘털', 'signal':'이상 탐지', 'macro':'거시경제',
+      'sector-val':'섹터 밸류', 'sector-mom':'섹터 모멘텀', 'market-valuation':'시장 밸류',
+    };
+    const TAB_TO_TILE = {0:'ai-chart',1:'market',2:'fundamental',3:'signal',4:'macro'};
+    const SECTOR_TAB_TO_TILE = {'tab-sector-val':'sector-val','tab-sector-mom':'sector-mom','tab-market-valuation':'market-valuation'};
+
+    function getFavs(){ try{ return JSON.parse(localStorage.getItem(FAV_KEY)||'[]'); }catch(e){ return []; } }
+    function setFavs(arr){ localStorage.setItem(FAV_KEY, JSON.stringify(arr)); renderFavSection(); }
+    function isFav(tile){ return getFavs().includes(tile); }
+    function toggleFav(tile){
+      const cur = getFavs();
+      const idx = cur.indexOf(tile);
+      if (idx >= 0) cur.splice(idx, 1); else cur.push(tile);
+      setFavs(cur);
+      return idx < 0;  // true = 추가됨
+    }
+
+    // 현재 활성 탭 → tile 식별
+    let _currentTile = null;
+    function getCurrentTile(){
+      // sector-tab 우선 (sector-val/mom/market-valuation 표시 중)
+      for (const [id, tile] of Object.entries(SECTOR_TAB_TO_TILE)) {
+        const el = document.getElementById(id);
+        if (el && el.style.display !== 'none' && el.offsetParent !== null) return tile;
+      }
+      // main 5탭
+      const active = document.querySelector('.tab.active[data-idx]');
+      if (active) return TAB_TO_TILE[+active.dataset.idx];
+      return null;
+    }
+
+    const favBtn = document.getElementById('fav-star');
+    function updateFavBtn(){
+      const homeView = document.getElementById('home-view');
+      const homeShown = homeView && homeView.style.display !== 'none';
+      _currentTile = getCurrentTile();
+      if (homeShown || !_currentTile) { favBtn.classList.remove('show'); return; }
+      favBtn.classList.add('show');
+      favBtn.classList.toggle('on', isFav(_currentTile));
+      favBtn.querySelector('svg').setAttribute('fill', isFav(_currentTile) ? 'currentColor' : 'none');
+    }
+    favBtn.addEventListener('click', () => {
+      if (!_currentTile) return;
+      const added = toggleFav(_currentTile);
+      favBtn.classList.add('pop');
+      setTimeout(() => favBtn.classList.remove('pop'), 500);
+      updateFavBtn();
+    });
+
+    // 홈 즐겨찾기 섹션 렌더
+    function renderFavSection(){
+      const sec = document.getElementById('fav-section');
+      const list = document.getElementById('fav-list');
+      const favs = getFavs();
+      if (!favs.length) { sec.classList.add('empty'); return; }
+      sec.classList.remove('empty');
+      list.replaceChildren();
+      for (const tile of favs) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'fav-chip';
+        b.innerHTML = `<span class="star-ico">★</span> ${FAV_LABELS[tile] || tile}`;
+        b.addEventListener('click', () => {
+          const t = document.querySelector(`.home-tile[data-tile="${tile}"]`);
+          if (t) t.click();
+        });
+        list.append(b);
+      }
+    }
+
+    // 탭 / sector-tab 전환 시 별 상태 갱신
+    const _favObserver = new MutationObserver(() => updateFavBtn());
+    document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => setTimeout(updateFavBtn, 30)));
+    document.querySelectorAll('.home-tile').forEach(t => t.addEventListener('click', () => setTimeout(updateFavBtn, 50)));
+    // 홈 복귀 hook
+    const _origShowHomeFav = window.showHome;
+    if (typeof _origShowHomeFav === 'function') {
+      window.showHome = function(){ _origShowHomeFav(); updateFavBtn(); };
+    }
+    // 초기 렌더
+    renderFavSection();
+    updateFavBtn();
+  })();
+  </script>
+
   <script src="/static/js/region.js?v=9"></script>
   <script src="/static/js/i18n.js?v=13"></script>
   <script>
@@ -986,6 +1973,7 @@
     try { if (localStorage.getItem('lang') !== 'ko') localStorage.setItem('lang', 'ko'); } catch (e) {}
   </script>
   <script src="/static/js/chart.js?v=37"></script>
+  <script src="/static/js/intro.js?v=4"></script>
   <script src="/static/js/main.js?v=164"></script>
   <script src="/static/js/sector.js?v=9"></script>
   <script src="/static/js/home.js?v=65"></script>

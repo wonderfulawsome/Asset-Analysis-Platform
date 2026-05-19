@@ -28,6 +28,8 @@
       backdrop.setAttribute('aria-hidden', 'false');
       btnMenu.setAttribute('aria-expanded', 'true');
       document.body.classList.add('menu-open');
+      // 시스템 뒤로가기 처리 — 메뉴 닫기만, 직전 화면 유지
+      try { history.pushState({ menuOpen: true }, ''); window._menuStates = (window._menuStates || 0) + 1; } catch (e) {}
     }
     function closeDrawer() {
       drawer.classList.remove('open');
@@ -37,6 +39,9 @@
       btnMenu.setAttribute('aria-expanded', 'false');
       document.body.classList.remove('menu-open');
     }
+    // window 노출 — popstate 핸들러에서 호출
+    window._closeMenuDrawer = closeDrawer;
+    window._isMenuOpen = function() { return drawer.classList.contains('open'); };
 
     btnMenu.addEventListener('click', function(e) {
       e.preventDefault();
