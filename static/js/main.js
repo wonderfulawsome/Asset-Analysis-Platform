@@ -2507,8 +2507,7 @@ setupPullToRefresh();
 // ── 초기화 ──
 function dismissSplash(skipAnimation) {
   const splash = document.getElementById('splash');
-  const onEnd = () => {
-    if (splash && splash.parentNode) splash.remove();
+  const continueAfterIntro = () => {
     if (!getHoldings()) {
       showHoldingsSetup();
     } else {
@@ -2523,6 +2522,14 @@ function dismissSplash(skipAnimation) {
       });
     }
     initFadeTargets();
+  };
+  const onEnd = () => {
+    if (splash && splash.parentNode) splash.remove();
+    if (typeof window.showIntroIfNeeded === 'function') {
+      window.showIntroIfNeeded(continueAfterIntro);
+    } else {
+      continueAfterIntro();
+    }
   };
   // skipAnimation: 같은 세션에서 두 번째 진입(/about ← 뒤로) 시 page paint 전에
   // html.splash-skip 클래스로 splash 가 이미 display:none — 페이드 애니메이션 우회.
