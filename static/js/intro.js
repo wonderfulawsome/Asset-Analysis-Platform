@@ -7,7 +7,7 @@
   const STORAGE_KEY = 'passive_intro_seen';
   // 인트로 콘텐츠 버전. 인트로 슬라이드/문구를 의미있게 바꿀 때마다 1씩 올린다.
   // 사용자 localStorage 의 저장값과 다르면 재노출 후 현재 버전으로 갱신.
-  const INTRO_VERSION = '2';
+  const INTRO_VERSION = '3';
   // 개발용: true 로 두면 새로고침마다 강제 노출.
   const FORCE_ALWAYS_SHOW = false;
   let _idx = 0;
