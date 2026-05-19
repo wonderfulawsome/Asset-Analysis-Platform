@@ -108,6 +108,8 @@
     _idx = 0;
     _overlay.style.display = 'flex';
     _overlay.setAttribute('aria-hidden', 'false');
+    // 이전 close 가 남긴 fade-out 클래스 제거 (재호출 대비)
+    _overlay.classList.remove('fade-out');
     // 강제 reflow 후 visible 클래스로 fade-in
     void _overlay.offsetWidth;
     _overlay.classList.add('visible');
