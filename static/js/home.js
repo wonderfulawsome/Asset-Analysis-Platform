@@ -546,33 +546,14 @@
 
   // 5개 지수는 컨베이어(.feed-section) 가 main.js loadFeed() 로 채움 — 별도 정적 카드 불필요
 
-  // AI 종합판단 카드 — RSS 헤드라인 + Groq 한 줄 시황 + 출처 토글
+  // AI 종합판단 카드 — 4개 탭 지표 중 가장 중요한 신호 1문장 (LLM 직접 선정)
   async function loadAiCard() {
     try {
-      const region = (typeof window.getRegion === 'function') ? window.getRegion() : 'us';
-      const r = await fetch(`/api/market-summary/market-brief?region=${region}`);
+      const r = await fetch('/api/market-summary/home-headline');
       const data = await r.json();
       const body = document.getElementById('home-ai-body');
-      if (data.text) {
-        const kwHtml = (data.keywords && data.keywords.length)
-          ? `<div class="brief-kws">${data.keywords.map(k=>`<span class="brief-kw">${k}</span>`).join('')}</div>` : '';
-        const srcCount = (data.sources || []).length;
-        const srcToggle = srcCount > 0
-          ? `<button type="button" class="brief-src-toggle" aria-expanded="false">출처 ${srcCount}건 <span class="brief-src-caret">▾</span></button>` : '';
-        const srcList = srcCount > 0
-          ? `<ul class="brief-src-list" hidden>${data.sources.map(s=>`<li><a href="${s.url}" target="_blank" rel="noopener"><span class="brief-src-name">${s.source}</span><span class="brief-src-title">${s.title}</span></a></li>`).join('')}</ul>` : '';
-        const disclaimer = '<div class="brief-disclaimer">본 정보는 투자자문이 아니며 투자 판단과 책임은 사용자에게 있습니다.</div>';
-        body.innerHTML = `<div class="brief-text">${data.text}</div>${kwHtml}${srcToggle}${srcList}${disclaimer}`;
-        const tog = body.querySelector('.brief-src-toggle');
-        const list = body.querySelector('.brief-src-list');
-        if (tog && list) {
-          tog.addEventListener('click', () => {
-            const open = !list.hidden;
-            list.hidden = open;
-            tog.setAttribute('aria-expanded', String(!open));
-            tog.querySelector('.brief-src-caret').textContent = open ? '▾' : '▴';
-          });
-        }
+      if (data.summary) {
+        body.textContent = data.summary;
       }
     } catch (e) { console.error('[home] AI 카드 로드 실패', e); }
 

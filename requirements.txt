@@ -24,4 +24,3 @@ xmltodict
 httpx
 pykrx
 finance-datareader
-feedparser
