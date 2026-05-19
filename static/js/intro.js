@@ -36,7 +36,6 @@
   }
 
   function _close() {
-    console.log('[intro] _close called from', new Error().stack.split('\n').slice(2,5).join(' | '));
     if (!FORCE_ALWAYS_SHOW) {
       try { localStorage.setItem(STORAGE_KEY, INTRO_VERSION); } catch (_) {}
     }
@@ -97,17 +96,13 @@
 
   window.showIntroIfNeeded = function(onDone) {
     let seen = false;
-    let stored = null;
     if (!FORCE_ALWAYS_SHOW) {
-      try { stored = localStorage.getItem(STORAGE_KEY); seen = stored === INTRO_VERSION; } catch (_) {}
+      try { seen = localStorage.getItem(STORAGE_KEY) === INTRO_VERSION; } catch (_) {}
     }
-    console.log('[intro] call — stored=', stored, 'ver=', INTRO_VERSION, 'seen=', seen);
     if (seen) { if (onDone) onDone(); return; }
     _overlay = document.getElementById('intro-overlay');
-    console.log('[intro] overlay=', !!_overlay);
     if (!_overlay) { if (onDone) onDone(); return; }
     _slides = Array.from(_overlay.querySelectorAll('.intro-slide'));
-    console.log('[intro] slides=', _slides.length);
     if (_slides.length === 0) { if (onDone) onDone(); return; }
     _onDone = onDone;
     _idx = 0;
