@@ -147,7 +147,10 @@ def _build_prompt(region: str, headlines: List[dict], indicators: dict) -> str:
     if indicators.get('live_pct') is not None:
         lv = indicators['live_pct']
         direction = '상승' if lv > 0.05 else ('하락' if lv < -0.05 else '보합')
-        lines.append(f'★ 현재 실시간 등락(SPY, 프리장·장중·시간외 현재가 vs 직전 정규장 종가): {lv:+.2f}% ({direction}) — 지금 시장 방향')
+        phase = indicators.get('live_phase', 'regular')
+        phase_kr = {'pre': '프리장(개장 전)', 'regular': '정규장 장중',
+                    'after': '시간외(장 마감 후)', 'closed': '장 마감 상태'}.get(phase, '장중')
+        lines.append(f'★ 현재 시장 단계: {phase_kr}. 실시간 등락(SPY vs 직전 정규장 종가): {lv:+.2f}% ({direction}) — 지금 시장 방향. 방향 서술 시 이 단계 용어를 정확히 써라(프리장이 아니면 "프리장"이라 쓰지 마라).')
     lines.append('')
     lines.append('오늘 헤드라인:')
     for i, h in enumerate(headlines, 1):
@@ -311,8 +314,39 @@ def _fetch_indicators(region: str) -> dict:
         live = _fetch_live_us()
         if live is not None:
             out['live_pct'] = live
-            out['premarket_pct'] = live  # 프론트 태그 호환 (기존 키 유지)
+            phase = _us_market_phase()
+            out['live_phase'] = phase  # pre / regular / after / closed
+            # 프론트 '프리장' 태그는 실제 프리장 시간대에만 노출
+            if phase == 'pre':
+                out['premarket_pct'] = live
     return out
+
+
+def _us_market_phase() -> str:
+    """현재 미국 동부시각 기준 시장 단계. pre / regular / after / closed.
+
+    pre: 04:00~09:30, regular: 09:30~16:00, after: 16:00~20:00 (ET, 평일).
+    공휴일은 미반영 (근사).
+    """
+    try:
+        try:
+            from zoneinfo import ZoneInfo
+            now = datetime.now(ZoneInfo('America/New_York'))
+        except Exception:
+            # 폴백 — UTC 에서 EDT(-4) 근사
+            now = datetime.now(timezone.utc) - timedelta(hours=4)
+        if now.weekday() >= 5:  # 토(5)/일(6)
+            return 'closed'
+        mins = now.hour * 60 + now.minute
+        if 4 * 60 <= mins < 9 * 60 + 30:
+            return 'pre'
+        if 9 * 60 + 30 <= mins < 16 * 60:
+            return 'regular'
+        if 16 * 60 <= mins < 20 * 60:
+            return 'after'
+        return 'closed'
+    except Exception:
+        return 'closed'
 
 
 def _last_close_value(series) -> Optional[float]:
@@ -407,7 +441,9 @@ def get_market_brief(region: str) -> dict:
         if indicators.get('live_pct') is not None:
             lv = indicators['live_pct']
             d = '상승' if lv > 0.05 else ('하락' if lv < -0.05 else '보합')
-            fb_head = f'{idx} 현재 {lv:+.2f}% {d} (프리장·장중 기준)'
+            ph = {'pre': '프리장', 'regular': '장중', 'after': '시간외',
+                  'closed': '최근'}.get(indicators.get('live_phase'), '현재')
+            fb_head = f'{idx} {ph} {lv:+.2f}% {d}'
         elif indicators.get('return_pct') is not None:
             fb_head = f'{idx} 일일 수익률 {indicators["return_pct"]:+.2f}%'
         elif headlines:
