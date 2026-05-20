@@ -31,7 +31,8 @@
       // 시스템 뒤로가기 처리 — 메뉴 닫기만, 직전 화면 유지
       try { history.pushState({ menuOpen: true }, ''); window._menuStates = (window._menuStates || 0) + 1; } catch (e) {}
     }
-    function closeDrawer() {
+    // 시각만 닫기 (popstate 가 호출)
+    function closeDrawerVisual() {
       drawer.classList.remove('open');
       backdrop.classList.remove('open');
       drawer.setAttribute('aria-hidden', 'true');
@@ -39,8 +40,18 @@
       btnMenu.setAttribute('aria-expanded', 'false');
       document.body.classList.remove('menu-open');
     }
-    // window 노출 — popstate 핸들러에서 호출
-    window._closeMenuDrawer = closeDrawer;
+    // 수동 닫기 — history 엔트리 1칸 소비 (뒤로가기 1번에 닫히도록)
+    function closeDrawer() {
+      if (!drawer.classList.contains('open')) return;
+      if (window._menuStates > 0) {
+        window._menuStates--; window._suppressPop = true;
+        try { history.back(); } catch (e) {}
+      }
+      closeDrawerVisual();
+    }
+    // window 노출 — popstate 핸들러는 visual 만 호출 (엔트리 이미 소비됨)
+    window._closeMenuDrawerVisual = closeDrawerVisual;
+    window._closeMenuDrawer = closeDrawerVisual;
     window._isMenuOpen = function() { return drawer.classList.contains('open'); };
 
     btnMenu.addEventListener('click', function(e) {
@@ -56,8 +67,9 @@
     document.addEventListener('keydown', function(e) {
       if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
     });
+    // 메뉴 링크: 페이지 이동이므로 시각만 닫고 엔트리는 그대로(이동 후 정리됨)
     Array.prototype.forEach.call(drawer.querySelectorAll('a.menu-link'), function(a) {
-      a.addEventListener('click', closeDrawer);
+      a.addEventListener('click', closeDrawerVisual);
     });
 
     console.log('[menu.js] init OK');

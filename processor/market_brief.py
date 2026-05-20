@@ -16,9 +16,13 @@ from typing import Dict, List, Optional
 # 언론사 공식 RSS — 최신순 (안정 소스)
 _RSS_SOURCES = {
     'kr': [
+        ('매경 증권', 'https://www.mk.co.kr/rss/50200011/'),
         ('한경 증권', 'https://rss.hankyung.com/feed/marketstock.xml'),
         ('이데일리 증권', 'https://rss.edaily.co.kr/stock_news.xml'),
-        ('매경 증권', 'https://www.mk.co.kr/rss/50200011/'),
+        ('연합뉴스 경제', 'https://www.yna.co.kr/rss/economy.xml'),
+        ('서울경제 증권', 'https://www.sedaily.com/RSS/S11.xml'),
+        ('파이낸셜뉴스 증권', 'https://www.fnnews.com/rss/r20/fn_realnews_stock.xml'),
+        ('머니투데이 증권', 'https://rss.mt.co.kr/mt_stock.xml'),
     ],
     'us': [
         ('Yahoo Finance', 'https://finance.yahoo.com/news/rssindex'),
@@ -57,81 +61,223 @@ def _clean_gnews_title(title: str) -> tuple:
     return title, None
 
 
-def _parse_feed(url: str) -> List[dict]:
-    """RSS/Atom 피드 → [{'title','link'}]. feedparser 있으면 사용, 없으면 stdlib 폴백.
+_TAG_RE = re.compile(r'<[^>]+>')
 
-    Railway 등에서 feedparser 미설치여도 동작하도록 httpx+xml.etree 폴백 보유.
+
+def _clean_summary(raw: str, limit: int = 120) -> str:
+    """RSS description/summary 에서 HTML 태그 제거 + 길이 컷."""
+    if not raw:
+        return ''
+    txt = _TAG_RE.sub('', raw)
+    txt = re.sub(r'&[a-z]+;', ' ', txt)
+    txt = re.sub(r'\s+', ' ', txt).strip()
+    if len(txt) > limit:
+        txt = txt[:limit].rstrip() + '…'
+    return txt
+
+
+def _fmt_time(published) -> str:
+    """RSS pubDate → 'HH:MM' (KST). 파싱 실패 시 ''."""
+    try:
+        from email.utils import parsedate_to_datetime
+        dt = parsedate_to_datetime(published)
+        if dt is None:
+            return ''
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        kst = dt.astimezone(timezone(timedelta(hours=9)))
+        return kst.strftime('%H:%M')
+    except Exception:
+        return ''
+
+
+_OG_RE = re.compile(
+    r'<meta[^>]+(?:property|name)=["\'](?:og:image|twitter:image)(?::url)?["\'][^>]+content=["\']([^"\']+)["\']',
+    re.IGNORECASE)
+_OG_RE2 = re.compile(
+    r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+(?:property|name)=["\'](?:og:image|twitter:image)(?::url)?["\']',
+    re.IGNORECASE)
+
+
+def _fetch_og_image(url: str) -> str:
+    """기사 URL 의 og:image / twitter:image 추출. 실패 시 ''."""
+    try:
+        import httpx
+        r = httpx.get(url, timeout=5.0, follow_redirects=True,
+                      headers={'User-Agent': 'Mozilla/5.0 (compatible; PassiveBot/1.0)'})
+        html = r.text[:200000]  # head 영역이면 충분
+        m = _OG_RE.search(html) or _OG_RE2.search(html)
+        if m:
+            img = m.group(1).strip()
+            if img.startswith('//'):
+                img = 'https:' + img
+            if img.startswith('http'):
+                return img
+    except Exception:
+        pass
+    return ''
+
+
+def _enrich_images(sources: List[dict]) -> List[dict]:
+    """이미지 없는 기사들에 og:image 병렬 보강. 모든 카드에 썸네일 노출 목적."""
+    todo = [i for i, s in enumerate(sources) if not s.get('image') and s.get('url')]
+    if not todo:
+        return sources
+    try:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=8) as ex:
+            results = list(ex.map(lambda i: (i, _fetch_og_image(sources[i]['url'])), todo))
+        for i, img in results:
+            if img:
+                sources[i]['image'] = img
+    except Exception as e:
+        print(f'[market_brief] og:image 보강 실패: {e}')
+    return sources
+
+
+def _parse_feed(url: str) -> List[dict]:
+    """RSS/Atom 피드 → [{'title','link','summary','image','time'}].
+
+    httpx(브라우저 UA)로 바이트를 받아 feedparser 에 넘긴다 (UA 차단·malformed XML 대응).
+    실패 시 feedparser URL 직접 / stdlib 순으로 폴백.
     """
-    # 1) feedparser 우선 (설치돼 있으면)
+    content = None
+    try:
+        import httpx
+        r = httpx.get(url, timeout=8.0, follow_redirects=True,
+                      headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+                                             'AppleWebKit/537.36 (KHTML, like Gecko) '
+                                             'Chrome/124.0 Safari/537.36'})
+        if r.status_code == 200:
+            content = r.content
+    except Exception:
+        content = None
+
+    # 1) feedparser — 받은 바이트 우선, 없으면 URL 직접
     try:
         import feedparser
-        feed = feedparser.parse(url)
-        out = [{'title': (e.get('title') or '').strip(),
-                'link': (e.get('link') or '').strip()}
-               for e in (feed.entries or [])]
+        feed = feedparser.parse(content if content is not None else url)
+        out = []
+        for e in (feed.entries or []):
+            img = ''
+            # media:thumbnail / media:content / enclosure 순으로 이미지 탐색
+            if e.get('media_thumbnail'):
+                img = (e['media_thumbnail'][0] or {}).get('url', '')
+            if not img and e.get('media_content'):
+                for mc in e['media_content']:
+                    if str(mc.get('medium') or '').startswith('image') or 'image' in str(mc.get('type') or ''):
+                        img = mc.get('url', ''); break
+                if not img:
+                    img = (e['media_content'][0] or {}).get('url', '')
+            if not img:
+                for lk in (e.get('links') or []):
+                    if lk.get('rel') == 'enclosure' and 'image' in str(lk.get('type') or ''):
+                        img = lk.get('href', ''); break
+            out.append({
+                'title': (e.get('title') or '').strip(),
+                'link': (e.get('link') or '').strip(),
+                'summary': _clean_summary(e.get('summary') or e.get('description') or ''),
+                'image': img or '',
+                'time': _fmt_time(e.get('published') or e.get('updated') or ''),
+            })
         if out:
             return out
     except Exception as e:
         print(f'[market_brief] feedparser 미사용/실패 → stdlib 폴백: {e}')
 
-    # 2) stdlib 폴백 — httpx + xml.etree
+    # 2) stdlib 폴백 — 이미 받은 content (없으면 재요청) + xml.etree
     try:
-        import httpx
         import xml.etree.ElementTree as ET
-        resp = httpx.get(url, timeout=8.0, follow_redirects=True,
-                         headers={'User-Agent': 'Mozilla/5.0 (compatible; PassiveBot/1.0)'})
-        root = ET.fromstring(resp.content)
+        raw = content
+        if raw is None:
+            import httpx
+            resp = httpx.get(url, timeout=8.0, follow_redirects=True,
+                             headers={'User-Agent': 'Mozilla/5.0 (compatible; PassiveBot/1.0)'})
+            raw = resp.content
+        root = ET.fromstring(raw)
         out = []
         for node in root.iter():
             tag = node.tag.split('}')[-1]
             if tag not in ('item', 'entry'):
                 continue
-            title, link = '', ''
+            title, link, summary, image, pub = '', '', '', '', ''
             for ch in node:
                 ctag = ch.tag.split('}')[-1]
                 if ctag == 'title':
                     title = (ch.text or '').strip()
                 elif ctag == 'link':
                     link = (ch.text or '').strip() or ch.get('href', '')
-            out.append({'title': title, 'link': link})
+                elif ctag in ('description', 'summary', 'encoded'):
+                    if not summary:
+                        summary = _clean_summary(ch.text or '')
+                elif ctag in ('thumbnail', 'content') and ch.get('url'):
+                    if not image and 'image' in (ch.get('type', '') + ch.get('medium', '') + 'image'):
+                        image = ch.get('url', '')
+                elif ctag == 'enclosure' and 'image' in str(ch.get('type', '')):
+                    image = ch.get('url', '')
+                elif ctag in ('pubDate', 'published', 'date'):
+                    pub = (ch.text or '').strip()
+            out.append({'title': title, 'link': link, 'summary': summary,
+                        'image': image, 'time': _fmt_time(pub)})
         return out
     except Exception as e:
         print(f'[market_brief] stdlib RSS 파싱 실패 {url}: {e}')
         return []
 
 
-def _fetch_headlines(region: str) -> List[dict]:
-    """화제성(Google News) + 최신(언론사 RSS) 병합. dedup. 각 항목 {title, url, source}.
+def _fetch_headlines(region: str) -> dict:
+    """뉴스 2갈래 반환.
 
-    Google News 를 앞에 둬서 화제성 높은 헤드라인이 LLM 입력 상위에 오게 한다.
+    - 'brief': 브리핑(LLM) 입력 풀 = Google News(화제성) + 언론사 RSS 병합 [:_MAX_HEADLINES].
+    - 'display': 화면 카드용 = 언론사 RSS 만 (실제 기사 URL·이미지 보유, og 보강 가능).
+    각 항목 {title, url, source, summary, image, time}.
     """
-    items: List[dict] = []
-    seen_titles = set()
-
-    def _add(title, link, source):
+    def _mk(title, link, source, entry):
         title = (title or '').strip()
         link = (link or '').strip()
         if not title or not link:
-            return
-        key = title[:30]
-        if key in seen_titles:
-            return
-        seen_titles.add(key)
-        items.append({'title': title, 'url': link, 'source': source})
+            return None
+        return {'title': title, 'url': link, 'source': source,
+                'summary': entry.get('summary') or '', 'image': entry.get('image') or '',
+                'time': entry.get('time') or ''}
 
-    # 1) Google News — 화제성 우선
+    gnews_items: List[dict] = []
     gurl = _GNEWS_SOURCES.get(region)
     if gurl:
         for entry in _parse_feed(gurl)[:_GNEWS_TAKE]:
             clean_title, src = _clean_gnews_title(entry['title'])
-            _add(clean_title, entry['link'], src or 'Google뉴스')
+            it = _mk(clean_title, entry['link'], src or 'Google뉴스', entry)
+            if it:
+                gnews_items.append(it)
 
-    # 2) 언론사 공식 RSS — 최신순 보강
+    pub_items: List[dict] = []
     for source_name, url in _RSS_SOURCES.get(region, []):
         for entry in _parse_feed(url)[:6]:
-            _add(entry['title'], entry['link'], source_name)
+            it = _mk(entry['title'], entry['link'], source_name, entry)
+            if it:
+                pub_items.append(it)
 
-    return items[:_MAX_HEADLINES]
+    # 제목 앞 30자 기준 dedup (병합 풀)
+    seen = set()
+    brief_pool = []
+    for it in gnews_items + pub_items:
+        k = it['title'][:30]
+        if k in seen:
+            continue
+        seen.add(k)
+        brief_pool.append(it)
+
+    # display = 언론사 RSS 만 dedup
+    seen_d = set()
+    display = []
+    for it in pub_items:
+        k = it['title'][:30]
+        if k in seen_d:
+            continue
+        seen_d.add(k)
+        display.append(it)
+
+    return {'brief': brief_pool[:_MAX_HEADLINES], 'display': display[:20]}
 
 
 def _build_prompt(region: str, headlines: List[dict], indicators: dict) -> str:
@@ -233,6 +379,62 @@ def _clean(s: str) -> str:
     return _fix_names(_strip_hanja(s))
 
 
+_EN_RE = re.compile(r'[A-Za-z]')
+
+
+def _translate_sources_ko(sources: List[dict]) -> List[dict]:
+    """US 영어 뉴스 제목·요약을 한국어로 일괄 번역 (Groq). 실패/차단 시 원문 유지.
+
+    title/summary 만 교체, url·source·image·time 보존. 1회 호출(배치).
+    """
+    if os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes'):
+        return sources
+    # 영어가 섞인 항목만 번역 대상
+    targets = [i for i, s in enumerate(sources)
+               if _EN_RE.search(s.get('title', '') or '') or _EN_RE.search(s.get('summary', '') or '')]
+    if not targets:
+        return sources
+    api_key = os.getenv('GROQ_API_KEY')
+    if not api_key:
+        return sources
+    try:
+        from groq import Groq
+        client = Groq(api_key=api_key)
+        payload = [{'i': i, 't': sources[i].get('title', ''), 's': sources[i].get('summary', '')}
+                   for i in targets]
+        sys_prompt = (
+            '너는 금융 뉴스 번역가다. 주어진 영어 제목(t)과 요약(s)을 자연스러운 한국어로 번역한다. '
+            '출력은 JSON 한 개: {"items":[{"i":인덱스,"t":"한국어 제목","s":"한국어 요약"}]}. '
+            '순서·인덱스 유지. 종목/기업명은 한국 통용 표기(Nvidia=엔비디아, Tesla=테슬라, Fed=연준 등). '
+            '한자 절대 금지, 한글만. 의역 OK, 과장·추측 금지. 다른 텍스트 절대 출력 금지.'
+        )
+        user_msg = json.dumps({'items': payload}, ensure_ascii=False)
+        completion = client.chat.completions.create(
+            model=_GROQ_MODEL,
+            messages=[{'role': 'system', 'content': sys_prompt},
+                      {'role': 'user', 'content': user_msg}],
+            temperature=0.2, max_tokens=2000,
+            response_format={'type': 'json_object'},
+        )
+        raw = completion.choices[0].message.content or ''
+        raw = re.sub(r'<think>[\s\S]*?</think>', '', raw).strip()
+        data = json.loads(raw)
+        for it in (data.get('items') or []):
+            idx = it.get('i')
+            if not isinstance(idx, int) or idx < 0 or idx >= len(sources):
+                continue
+            t = _clean(str(it.get('t') or '').strip())
+            s = _clean(str(it.get('s') or '').strip())
+            if t:
+                sources[idx]['title'] = t
+            if s:
+                sources[idx]['summary'] = s
+        return sources
+    except Exception as e:
+        print(f'[market_brief] 소스 번역 실패: {e}')
+        return sources
+
+
 def _call_groq(prompt: str) -> Optional[dict]:
     """Groq llama-3.3-70b 호출. 구조화 JSON 파싱 결과 반환. 실패 시 None."""
     if os.getenv('DISABLE_GROQ', '').lower() in ('true', '1', 'yes'):
@@ -307,6 +509,12 @@ def _fetch_indicators(region: str) -> dict:
             vix = row.get('vix')
             if vix is not None:
                 out['vix'] = float(vix)
+            fx = row.get('usdkrw')
+            if fx is not None:
+                out['usdkrw'] = float(fx)
+            fxc = row.get('usdkrw_change_pct')
+            if fxc is not None:
+                out['usdkrw_change_pct'] = float(fxc)
     except Exception as e:
         print(f'[market_brief] indicator fetch 실패: {e}')
     # US 실시간 등락 (프리장·장중·시간외 현재가 vs 직전 정규장 종가) — 방향 판단 1순위
@@ -320,6 +528,53 @@ def _fetch_indicators(region: str) -> dict:
             if phase == 'pre':
                 out['premarket_pct'] = live
     return out
+
+
+def _fetch_volume_ratio(region: str) -> Optional[float]:
+    """지수 거래량 / 최근 20일 평균 비율. SPY(US) / ^KS11(KR). 실패 시 None."""
+    try:
+        import yfinance as yf
+        ticker = 'SPY' if region == 'us' else '^KS11'
+        df = yf.download(ticker, period='2mo', progress=False)
+        if df is None or df.empty or 'Volume' not in df:
+            return None
+        vol = df['Volume'].dropna().values.ravel()
+        if len(vol) < 6:
+            return None
+        latest = float(vol[-1])
+        base = vol[-21:-1] if len(vol) > 21 else vol[:-1]
+        avg = float(base.mean())
+        if avg <= 0:
+            return None
+        return round(latest / avg, 2)
+    except Exception as e:
+        print(f'[market_brief] 거래량 비율 fetch 실패: {e}')
+        return None
+
+
+def _build_meta(region: str, indicators: dict) -> dict:
+    """홈 카드 메타라인 — US: 공포탐욕·RSI·거래량 / KR: 원달러·RSI·거래량."""
+    meta: dict = {}
+    if indicators.get('rsi') is not None:
+        meta['rsi'] = round(indicators['rsi'], 1)
+    vr = _fetch_volume_ratio(region)
+    if vr is not None:
+        meta['volume_ratio'] = vr
+    if region == 'us':
+        try:
+            from database.repositories import fetch_fear_greed_latest
+            fg = fetch_fear_greed_latest() or {}
+            if fg.get('score') is not None:
+                meta['fear_greed'] = {'score': round(float(fg['score'])),
+                                      'rating': fg.get('rating') or ''}
+        except Exception as e:
+            print(f'[market_brief] fear_greed fetch 실패: {e}')
+    else:  # kr
+        if indicators.get('usdkrw') is not None:
+            meta['usdkrw'] = round(indicators['usdkrw'], 1)
+            if indicators.get('usdkrw_change_pct') is not None:
+                meta['usdkrw_change_pct'] = round(indicators['usdkrw_change_pct'], 2)
+    return meta
 
 
 def _us_market_phase() -> str:
@@ -407,6 +662,43 @@ def _fetch_live_us() -> Optional[float]:
         return None
 
 
+_STOP = {'있어요', '했어요', '됐어요', '오늘', '시장', '주식', '관련', '대비', '이번',
+         '기록', '전망', '발표', '대한', '있는', '이날', '대해', '통해', '위해', '가운데'}
+_TOKEN_RE = re.compile(r'[가-힣A-Za-z0-9]{2,}')
+
+
+def _keywords_from_brief(brief: dict) -> set:
+    """브리핑 headline+summary+섹션 제목에서 핵심 토큰 집합 추출."""
+    text = ' '.join([
+        brief.get('headline', ''),
+        ' '.join(brief.get('summary') or []),
+        ' '.join(s.get('title', '') for s in (brief.get('sections') or [])),
+    ])
+    toks = set()
+    for t in _TOKEN_RE.findall(text):
+        if t in _STOP or len(t) < 2:
+            continue
+        toks.add(t.lower())
+    return toks
+
+
+def _rank_display_by_brief(display: List[dict], brief: dict) -> List[dict]:
+    """브리핑 키워드와 겹치는 기사를 앞으로. 동점은 기존(최신) 순서 유지."""
+    kws = _keywords_from_brief(brief)
+    if not kws or not display:
+        return display
+
+    def score(item):
+        text = (item.get('title', '') + ' ' + item.get('summary', '')).lower()
+        toks = set(_TOKEN_RE.findall(text))
+        return len(toks & kws)
+
+    scored = [(score(it), idx, it) for idx, it in enumerate(display)]
+    # 점수 내림차순, 동점은 원래 인덱스 오름차순(안정)
+    scored.sort(key=lambda x: (-x[0], x[1]))
+    return [it for _, _, it in scored]
+
+
 def get_market_brief(region: str) -> dict:
     """region 별 시황 브리핑 반환. 캐시 hit 시 즉시, miss 시 RSS+LLM 생성.
 
@@ -428,11 +720,13 @@ def get_market_brief(region: str) -> dict:
         if entry and (now - entry['ts']) < _CACHE_TTL:
             return {**entry['data'], 'cached': True}
 
-    headlines = _fetch_headlines(region)
+    news = _fetch_headlines(region)
+    brief_pool = news['brief']       # 브리핑(LLM) 입력 — Google News 포함
+    display = news['display']        # 화면 카드 — 언론사 RSS 만 (이미지·실URL)
     indicators = _fetch_indicators(region)
     brief: Optional[dict] = None
-    if headlines:
-        prompt = _build_prompt(region, headlines, indicators)
+    if brief_pool:
+        prompt = _build_prompt(region, brief_pool, indicators)
         brief = _call_groq(prompt)
 
     if not brief:
@@ -446,22 +740,30 @@ def get_market_brief(region: str) -> dict:
             fb_head = f'{idx} {ph} {lv:+.2f}% {d}'
         elif indicators.get('return_pct') is not None:
             fb_head = f'{idx} 일일 수익률 {indicators["return_pct"]:+.2f}%'
-        elif headlines:
-            fb_head = headlines[0]['title']
+        elif brief_pool:
+            fb_head = brief_pool[0]['title']
         else:
             fb_head = '시황 데이터 수집 중'
         brief = {
             'headline': fb_head,
-            'summary': [h['title'] for h in headlines[:3]],
+            'summary': [h['title'] for h in brief_pool[:3]],
             'sections': [],
         }
+
+    # 화면 카드(display): US 영어면 한국어 번역 + 이미지 og 보강
+    if region == 'us':
+        display = _translate_sources_ko(display)
+    display = _enrich_images(display)
+    # 브리핑 핵심 키워드와 일치하는 '주요 뉴스'를 상단으로 정렬
+    display = _rank_display_by_brief(display, brief)
 
     data = {
         'headline': brief['headline'],
         'summary': brief.get('summary') or [],
         'sections': brief.get('sections') or [],
-        'sources': headlines,
+        'sources': display,
         'premarket_pct': indicators.get('premarket_pct'),  # US 프리장 등락% (없으면 None)
+        'meta': _build_meta(region, indicators),            # US: 공포탐욕·RSI·거래량 / KR: 원달러·RSI·거래량
         'updated_at': _kst_now_str(),
         'region': region,
     }

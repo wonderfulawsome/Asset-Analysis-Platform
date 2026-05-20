@@ -17,13 +17,13 @@
     rgba(20, 20, 26, 0.65);
   border: 1px solid rgba(245, 158, 11, 0.35);
   border-radius: 18px;
-  padding: 18px 18px 16px;
+  padding: 14px 18px 16px;
   margin-bottom: 20px;
   box-shadow: 0 6px 24px -8px rgba(245, 158, 11, 0.15);
 }
 .home-ai-head {
   display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
 }
 .home-ai-label {
   font-size: 11px; color: rgba(245, 158, 11, 0.85);
@@ -35,10 +35,9 @@
   letter-spacing: 0.5px;
 }
 .home-ai-body {
-  font-size: 18px; font-weight: 800; line-height: 1.4;
+  font-size: 18px; font-weight: 800; line-height: 1.3;
   color: var(--text-primary, #fff);
   letter-spacing: -0.2px;
-  min-height: 26px;
   white-space: pre-line;                       /* 백엔드 \n 분리 → 요약/인사이트 줄바꿈 */
 }
 .home-ai-meta {
@@ -98,6 +97,98 @@
 .home-ai-body .brief-bar:hover .brief-bar-hint { opacity: 0.8; }
 [data-theme="light"] .home-ai-body .brief-bar-time { color: #9ca3af; }
 [data-theme="light"] .home-ai-body .brief-bar-line { color: #1a1a1a; }
+
+/* ── 주요 뉴스 피드 (홈) ───────────────────────────────────────── */
+.news-feed { margin-bottom: 20px; }
+.news-feed .nf-list {
+  display: flex; flex-direction: column;
+  background: rgba(28, 28, 34, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px; overflow: hidden;
+}
+[data-theme="light"] .news-feed .nf-list { background: #fafafa; border-color: #ececf0; }
+.nf-item {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px; text-decoration: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  transition: background .12s;
+}
+.nf-item:first-child { border-top: 0; }
+.nf-item:hover { background: rgba(245, 158, 11, 0.06); }
+[data-theme="light"] .nf-item { border-top-color: #f0f0f3; }
+.nf-text { flex: 1 1 auto; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.nf-src {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  color: #f59e0b;
+}
+.nf-title {
+  font-size: 14px; font-weight: 700; line-height: 1.35;
+  color: var(--text-primary, #fff); letter-spacing: -0.2px;
+}
+[data-theme="light"] .nf-title { color: #1a1a1a; }
+.nf-snippet {
+  font-size: 12px; font-weight: 400; line-height: 1.45;
+  color: rgba(255, 255, 255, 0.5);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+[data-theme="light"] .nf-snippet { color: #6b7280; }
+.nf-meta {
+  font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.4);
+  margin-top: 2px;
+}
+[data-theme="light"] .nf-meta { color: #9ca3af; }
+.nf-thumb {
+  flex-shrink: 0; width: 76px; height: 76px; border-radius: 12px;
+  background-size: cover; background-position: center;
+  background-color: rgba(255, 255, 255, 0.06);
+}
+.nf-thumb-ph {
+  background-image: linear-gradient(135deg, rgba(245,158,11,0.25), rgba(234,88,12,0.12));
+  position: relative;
+}
+.nf-thumb-ph::after {
+  content: '📰'; position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; opacity: 0.55;
+}
+.nf-item { width: 100%; text-align: left; background: transparent; border: 0; cursor: pointer; font-family: inherit; }
+
+/* ── 뉴스 상세 시트 (.brief-modal 재사용) ──────────────────────── */
+.ns-hero {
+  width: 100%; height: 180px; border-radius: 14px;
+  background-size: cover; background-position: center;
+  background-color: rgba(255,255,255,0.06); margin-bottom: 16px;
+}
+.ns-src { font-size: 11px; font-weight: 800; letter-spacing: 0.04em; color: #f59e0b; margin-bottom: 6px; }
+.ns-title {
+  font-size: 20px; font-weight: 800; line-height: 1.35;
+  letter-spacing: -0.3px; color: var(--text-primary, #fff); margin: 0 0 8px;
+}
+[data-theme="light"] .ns-title { color: #111; }
+.ns-meta { font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.4); margin-bottom: 16px; }
+[data-theme="light"] .ns-meta { color: #9ca3af; }
+.ns-summary {
+  font-size: 14px; line-height: 1.7; font-weight: 400;
+  color: rgba(255,255,255,0.78); margin: 0 0 20px;
+}
+[data-theme="light"] .ns-summary { color: #374151; }
+.ns-open {
+  display: block; text-align: center; text-decoration: none;
+  padding: 14px; border-radius: 12px;
+  background: linear-gradient(135deg, #f59e0b, #ea580c); color: #fff;
+  font-size: 14px; font-weight: 800; letter-spacing: -0.2px;
+}
+.ns-open:active { transform: scale(0.98); }
+.nf-rest { display: flex; flex-direction: column; }
+.nf-more {
+  width: 100%; padding: 12px; border: 0; cursor: pointer;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  background: transparent; color: rgba(255,255,255,0.55);
+  font-size: 12px; font-weight: 700; font-family: inherit;
+  transition: color .15s, background .15s;
+}
+.nf-more:hover { color: #f59e0b; background: rgba(245,158,11,0.05); }
+[data-theme="light"] .nf-more { color: #6b7280; border-top-color: #f0f0f3; }
 
 /* ── AI 브리핑 상세 모달 ───────────────────────────────────────── */
 body.brief-modal-open { overflow: hidden; }

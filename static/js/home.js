@@ -590,22 +590,112 @@
     window._briefStates = (window._briefStates || 0) + 1;
   }
 
-  function _closeBriefModal() {
-    const overlay = document.getElementById('brief-modal');
+  // 시각만 닫기 (popstate 가 호출) — 어떤 시트든 열려있는 것 닫음
+  function _closeTopSheetVisual() {
+    const overlay = document.getElementById('news-sheet') || document.getElementById('brief-modal');
     if (!overlay) return;
     overlay.classList.remove('open');
     document.body.classList.remove('brief-modal-open');
     setTimeout(() => { if (overlay) overlay.remove(); }, 240);
   }
-  window._closeBriefModal = _closeBriefModal;
+  window._closeTopSheetVisual = _closeTopSheetVisual;
 
-  // 시스템 뒤로가기 — 브리핑 모달 열려있으면 닫기만
-  window.addEventListener('popstate', () => {
-    if (window._briefStates > 0 && document.getElementById('brief-modal')) {
-      window._briefStates--;
-      _closeBriefModal();
+  // 수동 닫기 — history 엔트리 1칸 소비 (뒤로가기 1번에 닫히도록)
+  function _manualCloseSheet() {
+    if (window._briefStates > 0) { window._briefStates--; window._suppressPop = true; try { history.back(); } catch (e) {} }
+    _closeTopSheetVisual();
+  }
+  function _closeBriefModal() { _manualCloseSheet(); }
+  function _closeNewsSheet() { _manualCloseSheet(); }
+  window._closeBriefModal = _closeBriefModal;
+  window._closeNewsSheet = _closeNewsSheet;
+
+  // 주요 뉴스 피드 — AI 브리핑 출처 헤드라인을 홈 리스트로. 6개 노출 + 더보기.
+  function _renderNewsFeed(sources) {
+    const sec = document.getElementById('news-feed');
+    const list = document.getElementById('nf-list');
+    if (!sec || !list) return;
+    if (!sources.length) { sec.hidden = true; return; }
+    sec.hidden = false;
+    const INIT = 6;
+    function rowHtml(s, idx) {
+      const thumb = s.image
+        ? `<span class="nf-thumb" style="background-image:url('${_esc(s.image)}')"></span>`
+        : `<span class="nf-thumb nf-thumb-ph"></span>`;
+      const snip = s.summary ? `<span class="nf-snippet">${_esc(s.summary)}</span>` : '';
+      const meta = [s.time, s.source].filter(Boolean).map(_esc).join(' · ');
+      return `<button type="button" class="nf-item ${s.image ? 'has-thumb' : ''}" data-idx="${idx}">
+        <span class="nf-text">
+          <span class="nf-src">${_esc(s.source)}</span>
+          <span class="nf-title">${_esc(s.title)}</span>
+          ${snip}
+          <span class="nf-meta">${meta}</span>
+        </span>
+        ${thumb}
+      </button>`;
     }
-  });
+    const head = sources.slice(0, INIT).map((s, i) => rowHtml(s, i)).join('');
+    const rest = sources.slice(INIT);
+    const restHtml = rest.map((s, i) => rowHtml(s, INIT + i)).join('');
+    const moreBtn = rest.length
+      ? `<button type="button" class="nf-more">뉴스 ${rest.length}건 더보기 ▾</button>` : '';
+    list.innerHTML = head + `<div class="nf-rest" hidden>${restHtml}</div>` + moreBtn;
+    // 카드 클릭 → 인앱 시트
+    list.querySelectorAll('.nf-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const s = sources[parseInt(el.dataset.idx, 10)];
+        if (s) _openNewsSheet(s);
+      });
+    });
+    const btn = list.querySelector('.nf-more');
+    const restEl = list.querySelector('.nf-rest');
+    if (btn && restEl) {
+      btn.addEventListener('click', () => {
+        const open = !restEl.hidden;
+        restEl.hidden = open;
+        btn.textContent = open ? `뉴스 ${rest.length}건 더보기 ▾` : '접기 ▴';
+      });
+    }
+  }
+
+  // 뉴스 상세 시트 — 밑에서 올라옴. 미리보기(썸네일·제목·요약) + 원문 보기 버튼.
+  function _openNewsSheet(s) {
+    let overlay = document.getElementById('news-sheet');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'news-sheet';
+      overlay.className = 'brief-modal';
+      document.body.appendChild(overlay);
+    }
+    const hero = s.image
+      ? `<div class="ns-hero" style="background-image:url('${_esc(s.image)}')"></div>` : '';
+    const meta = [s.time, s.source].filter(Boolean).map(_esc).join(' · ');
+    const snip = s.summary ? `<p class="ns-summary">${_esc(s.summary)}</p>` : '';
+    overlay.innerHTML = `
+      <div class="bm-sheet" role="dialog" aria-modal="true">
+        <header class="bm-head">
+          <span class="bm-head-title">뉴스</span>
+          <button type="button" class="bm-close" aria-label="닫기">✕</button>
+        </header>
+        <div class="bm-scroll">
+          ${hero}
+          <div class="ns-src">${_esc(s.source)}</div>
+          <h2 class="ns-title">${_esc(s.title)}</h2>
+          <div class="ns-meta">${meta}</div>
+          ${snip}
+          <a class="ns-open" href="${_esc(s.url)}" target="_blank" rel="noopener">원문 전체 보기 ↗</a>
+          <div class="bm-disclaimer">본 미리보기는 출처 매체의 RSS 요약이며, 전문은 원문에서 확인하세요.</div>
+        </div>
+      </div>`;
+    overlay.querySelector('.bm-close').addEventListener('click', _closeNewsSheet);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) _closeNewsSheet(); });
+    requestAnimationFrame(() => overlay.classList.add('open'));
+    document.body.classList.add('brief-modal-open');
+    history.pushState({ newsSheet: true }, '');
+    window._briefStates = (window._briefStates || 0) + 1;
+  }
+
+  // _closeNewsSheet / _closeBriefModal 은 위에서 _manualCloseSheet 로 통합 정의됨
 
   // AI 종합판단 카드 → AI 브리핑 진입 바 (클릭 시 상세 모달)
   async function loadAiCard() {
@@ -628,32 +718,36 @@
           </button>`;
         body.querySelector('.brief-bar').addEventListener('click', () => _openBriefModal(data));
       }
+      _renderNewsFeed(data.sources || []);
+      _renderAiMeta(data.meta || {}, data.region);
     } catch (e) { console.error('[home] AI 브리핑 로드 실패', e); }
+  }
 
-    // 메타라인: 심리 / 이상도 (anomaly percentile) / 국면 — 3 endpoint 병렬
-    try {
-      const _wr = (typeof window.withRegion === 'function') ? window.withRegion : (u => u);
-      const [fg, cycle, anomaly] = await Promise.all([
-        fetch('/api/macro/fear-greed').then(r => r.json()).catch(() => null),
-        fetch('/api/sector-cycle/current').then(r => r.json()).catch(() => null),
-        fetch(_wr('/api/anomaly/current')).then(r => r.json()).catch(() => null),
-      ]);
-      const meta = document.getElementById('home-ai-meta');
-      const parts = [];
-      if (fg && fg.score != null) {
-        parts.push(`<span class="meta-item"><span class="meta-key">심리</span><span class="meta-val">${fg.rating || ''} ${Math.round(fg.score)}</span></span>`);
+  // 메타라인 — US: 공포탐욕·RSI·거래량 / KR: 원달러·RSI·거래량
+  function _renderAiMeta(m, region) {
+    const meta = document.getElementById('home-ai-meta');
+    if (!meta) return;
+    const parts = [];
+    if (region === 'us') {
+      if (m.fear_greed && m.fear_greed.score != null) {
+        parts.push(`<span class="meta-item"><span class="meta-key">공포·탐욕</span><span class="meta-val">${_esc(m.fear_greed.rating || '')} ${m.fear_greed.score}</span></span>`);
       }
-      // 이상도 — 10년 분포 내 percentile (descriptive only, 자문 리스크 없는 표현)
-      if (anomaly && !anomaly.empty && anomaly.percentile_10y != null) {
-        const p = anomaly.percentile_10y;
-        const cls = p >= 80 ? 'down' : (p <= 20 ? 'up' : '');   // 시각 단서만, 위험/안전 라벨 X
-        parts.push(`<span class="meta-item"><span class="meta-key">이상도</span><span class="meta-val ${cls}">상위 ${(100 - p).toFixed(0)}%</span></span>`);
+    } else {
+      if (m.usdkrw != null) {
+        const c = m.usdkrw_change_pct;
+        const cls = (typeof c === 'number') ? (c > 0 ? 'down' : (c < 0 ? 'up' : '')) : '';
+        const ch = (typeof c === 'number') ? ` ${c > 0 ? '+' : ''}${c.toFixed(2)}%` : '';
+        parts.push(`<span class="meta-item"><span class="meta-key">원/달러</span><span class="meta-val ${cls}">${m.usdkrw.toLocaleString()}${ch}</span></span>`);
       }
-      if (cycle && cycle.phase_name) {
-        parts.push(`<span class="meta-item"><span class="meta-key">국면</span><span class="meta-val">${cycle.phase_name}</span></span>`);
-      }
-      meta.innerHTML = parts.join('');
-    } catch (e) { console.error('[home] AI 메타 로드 실패', e); }
+    }
+    if (m.rsi != null) {
+      const cls = m.rsi >= 70 ? 'down' : (m.rsi <= 30 ? 'up' : '');
+      parts.push(`<span class="meta-item"><span class="meta-key">RSI</span><span class="meta-val ${cls}">${m.rsi}</span></span>`);
+    }
+    if (m.volume_ratio != null) {
+      parts.push(`<span class="meta-item"><span class="meta-key">거래량</span><span class="meta-val">${m.volume_ratio}배</span></span>`);
+    }
+    meta.innerHTML = parts.join('');
   }
 
   // 섹터 밸류 히트맵 — z-score 절대값으로 색상 (양수=빨강 비쌈, 음수=파랑 쌈)

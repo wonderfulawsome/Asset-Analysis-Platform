@@ -790,7 +790,7 @@
   </style>
   <!-- Tailwind CDN 제거: preflight 가 body 의 margin:0 auto 를 덮어써 홈 뷰가 좌측 정렬됨.
        홈 뷰는 home.css 자체 grid 로 처리하므로 Tailwind 없이도 동작 -->
-  <link rel="stylesheet" href="/static/css/home.css?v=22">
+  <link rel="stylesheet" href="/static/css/home.css?v=27">
   <script>
     // 깜빡임 방지: CSS 로드 직후, 바디 렌더링 전에 테마 적용
     (function(){
@@ -1238,15 +1238,24 @@
       <div id="home-ai-meta" class="home-ai-meta"></div>
     </div>
 
-    <!-- 즐겨찾기 (별표 추가한 분석 페이지 빠른 진입) -->
-    <section class="fav-section empty" id="fav-section">
+    <!-- 빠른 진입 칩 (즐겨찾기 + 카테고리) — 가로 스크롤 축소 -->
+    <div class="home-quick" id="home-quick"></div>
+
+    <!-- 주요 뉴스 피드 (AI 브리핑 출처 헤드라인) -->
+    <section class="news-feed" id="news-feed" hidden>
+      <div class="home-section-label">주요 뉴스</div>
+      <div class="nf-list" id="nf-list"></div>
+    </section>
+
+    <!-- 즐겨찾기 (별표) — home-quick 으로 통합, 숨김 유지 -->
+    <section class="fav-section empty" id="fav-section" style="display:none">
       <div class="home-section-label">즐겨찾기</div>
       <div class="fav-list" id="fav-list"></div>
     </section>
 
-    <!-- 카테고리 4 카드 (가로 리스트, 한눈 미리보기) -->
-    <div class="home-section-label">한눈에</div>
-    <div class="home-cats" id="home-cats">
+    <!-- 카테고리 4 카드 — home-quick 칩으로 대체, 숨김 (home-tiles 라우팅은 유지) -->
+    <div class="home-section-label" style="display:none">한눈에</div>
+    <div class="home-cats" id="home-cats" style="display:none">
       <button class="home-cat" type="button" data-home-cat="today">
         <span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H7 L9 6 L12 18 L14 9 L16 13 L18 12 H21"/></svg></span>
         <span class="body">
@@ -1794,6 +1803,19 @@
     .fav-chip{flex-shrink:0;display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:var(--catnav-soft);border:1px solid var(--catnav-primary);border-radius:99px;color:var(--catnav-ink);font-family:inherit;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:-0.005em;transition:transform .12s}
     .fav-chip:active{transform:scale(0.96)}
     .fav-chip .star-ico{color:var(--catnav-primary);font-size:12px;line-height:1}
+
+    /* 빠른 진입 — 원형 아이콘 퀵액세스 (가로 스크롤) */
+    .home-quick{display:flex;gap:14px;justify-content:safe center;overflow-x:auto;padding:4px 4px 16px;scrollbar-width:none}
+    .home-quick::-webkit-scrollbar{display:none}
+    .home-quick .qa-item{flex-shrink:0;display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:0;cursor:pointer;font-family:inherit;padding:0;width:60px}
+    .home-quick .qa-icon{width:54px;height:54px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:transform .14s, background .15s}
+    .home-quick .qa-icon svg{width:24px;height:24px}
+    .home-quick .qa-item:active .qa-icon{transform:scale(0.92)}
+    .home-quick .qa-label{font-size:11.5px;font-weight:700;letter-spacing:-0.02em;color:var(--text);max-width:60px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .home-quick .qa-item.cat .qa-icon{background:rgba(255,255,255,0.06);color:var(--catnav-primary)}
+    .home-quick .qa-item.cat:hover .qa-icon{background:rgba(245,158,11,0.14)}
+    .home-quick .qa-item.fav .qa-icon{background:var(--catnav-soft);color:var(--catnav-primary);border:1px solid var(--catnav-primary)}
+    [data-theme="light"] .home-quick .qa-item.cat .qa-icon{background:#f3f4f6}
   </style>
   <!-- 즐겨찾기 별 (탭 페이지 우측 상단 고정) -->
   <button class="fav-star" id="fav-star" type="button" aria-label="즐겨찾기 토글">
@@ -1842,24 +1864,41 @@
     window._sheetStates = window._sheetStates || 0;
     function openCat(cat){const c=CATS[cat];if(!c)return;setActive(cat);document.getElementById('cat-kicker').textContent=c.kicker;document.getElementById('cat-title').textContent=c.title;document.getElementById('cat-desc').textContent=c.desc;grid.replaceChildren();for(const it of c.items){const b=document.createElement('button');b.type='button';b.className='cat-card';b.innerHTML=`<span class="ico">${ICONS[it.icon]||''}</span><span class="body"><span class="t">${it.name}</span><span class="s">${it.sub}</span></span><span class="arrow">›</span>`;b.addEventListener('click',()=>{const tile=document.querySelector(`.home-tile[data-tile="${it.tile}"]`);if(tile)tile.click();closeOverlay()});grid.append(b)}if(_closeTimer){clearTimeout(_closeTimer);_closeTimer=null}overlay.classList.remove('closing');overlay.classList.add('open');try{history.pushState({catSheet:true},'');window._sheetStates++;}catch(e){}}
     let _closeTimer=null;
-    function closeOverlay(){
+    function _isHomeActive(){const h=document.getElementById('home-view');return !!h && h.style.display!=='none' && !h.hidden;}
+    function _syncActive(){ if(_isHomeActive()) setActive('home'); }
+    // 시각만 닫기 (popstate / 수동 공통)
+    function _visualCloseCat(){
       if(!overlay.classList.contains('open'))return;
       if(_closeTimer){clearTimeout(_closeTimer);_closeTimer=null}
       overlay.classList.add('closing');
+      _syncActive();
       _closeTimer=setTimeout(()=>{overlay.classList.remove('open','closing');_closeTimer=null},260);
     }
-    /* 시각만 닫기, history 는 popstate 가 흡수 */
-    // 시스템 뒤로가기 — sheet/menu pushState 흡수해서 main.js 의 home 토스트 방지
+    // 수동 닫기 — history 엔트리도 한 칸 소비(뒤로가기 1번에 닫히도록)
+    function closeOverlay(){
+      if(!overlay.classList.contains('open'))return;
+      if(window._sheetStates>0){window._sheetStates--; window._suppressPop=true; try{history.back();}catch(e){}}
+      _visualCloseCat();
+    }
+    // 통합 popstate (capture) — suppress 우선, 그다음 sheet/menu 흡수
     window.addEventListener('popstate', function(e){
+      if (window._suppressPop) { window._suppressPop=false; e.stopImmediatePropagation(); return; }
       if (window._sheetStates > 0) {
         window._sheetStates--;
-        closeOverlay();
+        _visualCloseCat();
         e.stopImmediatePropagation();
         return;
       }
       if (window._menuStates > 0) {
         window._menuStates--;
-        if (typeof window._closeMenuDrawer === 'function') window._closeMenuDrawer();
+        if (typeof window._closeMenuDrawerVisual === 'function') window._closeMenuDrawerVisual();
+        else if (typeof window._closeMenuDrawer === 'function') window._closeMenuDrawer();
+        e.stopImmediatePropagation();
+        return;
+      }
+      if (window._briefStates > 0) {
+        window._briefStates--;
+        if (typeof window._closeTopSheetVisual === 'function') window._closeTopSheetVisual();
         e.stopImmediatePropagation();
         return;
       }
@@ -1884,7 +1923,7 @@
     const SECTOR_TAB_TO_TILE = {'tab-sector-val':'sector-val','tab-sector-mom':'sector-mom','tab-market-valuation':'market-valuation'};
 
     function getFavs(){ try{ return JSON.parse(localStorage.getItem(FAV_KEY)||'[]'); }catch(e){ return []; } }
-    function setFavs(arr){ localStorage.setItem(FAV_KEY, JSON.stringify(arr)); renderFavSection(); }
+    function setFavs(arr){ localStorage.setItem(FAV_KEY, JSON.stringify(arr)); renderFavSection(); renderHomeQuick(); }
     function isFav(tile){ return getFavs().includes(tile); }
     function toggleFav(tile){
       const cur = getFavs();
@@ -1947,6 +1986,48 @@
       }
     }
 
+    // 빠른 진입 — 원형 아이콘 버튼 (즐겨찾기 + 카테고리)
+    const QA_ICONS = {
+      today:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12 H7 L9 6 L12 18 L14 9 L16 13 L18 12 H21"/></svg>',
+      analysis:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3" fill="currentColor"/><circle cx="12" cy="12" r="7" opacity="0.5"/><circle cx="12" cy="12" r="10" opacity="0.3"/></svg>',
+      context:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg>',
+      sector:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="14" width="3" height="6" rx="0.5"/><rect x="10.5" y="9" width="3" height="11" rx="0.5"/><rect x="16" y="4" width="3" height="16" rx="0.5"/></svg>',
+      star:'<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.3 6.9.7-5.1 4.6 1.4 6.8L12 17.8 5.9 20.4l1.4-6.8L2.2 9l6.9-.7z"/></svg>',
+    };
+    const QUICK_CATS = [
+      {cat:'today', label:'시황'}, {cat:'analysis', label:'분석'},
+      {cat:'context', label:'환경'}, {cat:'sector', label:'섹터'},
+    ];
+    function renderHomeQuick(){
+      const wrap = document.getElementById('home-quick');
+      if (!wrap) return;
+      wrap.replaceChildren();
+      // 즐겨찾기 (별표) 먼저
+      for (const tile of getFavs()) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'qa-item fav';
+        b.innerHTML = `<span class="qa-icon">${QA_ICONS.star}</span><span class="qa-label">${FAV_LABELS[tile] || tile}</span>`;
+        b.addEventListener('click', () => {
+          const t = document.querySelector(`.home-tile[data-tile="${tile}"]`);
+          if (t) t.click();
+        });
+        wrap.append(b);
+      }
+      // 카테고리
+      for (const c of QUICK_CATS) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'qa-item cat';
+        b.innerHTML = `<span class="qa-icon">${QA_ICONS[c.cat] || ''}</span><span class="qa-label">${c.label}</span>`;
+        b.addEventListener('click', () => {
+          const navBtn = document.querySelector(`.cat-nav button[data-cat="${c.cat}"]`);
+          if (navBtn) navBtn.click();
+        });
+        wrap.append(b);
+      }
+    }
+
     // 탭 / sector-tab 전환 시 별 상태 갱신
     const _favObserver = new MutationObserver(() => updateFavBtn());
     document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => setTimeout(updateFavBtn, 30)));
@@ -1958,6 +2039,7 @@
     }
     // 초기 렌더
     renderFavSection();
+    renderHomeQuick();
     updateFavBtn();
   })();
   </script>
@@ -2004,8 +2086,8 @@
   <script src="/static/js/intro.js?v=10"></script>
   <script src="/static/js/main.js?v=165"></script>
   <script src="/static/js/sector.js?v=9"></script>
-  <script src="/static/js/home.js?v=69"></script>
+  <script src="/static/js/home.js?v=75"></script>
   <script src="/static/js/anomaly.js?v=22"></script>
-  <script src="/static/js/menu.js?v=2"></script>
+  <script src="/static/js/menu.js?v=3"></script>
 </body>
 </html>
