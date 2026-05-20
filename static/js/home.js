@@ -546,16 +546,84 @@
 
   // 5개 지수는 컨베이어(.feed-section) 가 main.js loadFeed() 로 채움 — 별도 정적 카드 불필요
 
-  // AI 종합판단 카드 — 4개 탭 지표 중 가장 중요한 신호 1문장 (LLM 직접 선정)
+  // ── AI 브리핑 ── 네이버 스타일: 진입 바(타임스탬프+헤드라인) + 클릭 시 상세 모달
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function _openBriefModal(data) {
+    let overlay = document.getElementById('brief-modal');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'brief-modal';
+      overlay.className = 'brief-modal';
+      document.body.appendChild(overlay);
+    }
+    const summaryHtml = (data.summary && data.summary.length)
+      ? `<div class="bm-summary"><div class="bm-summary-label">요약</div><ul>${data.summary.map(s=>`<li>${_esc(s)}</li>`).join('')}</ul></div>` : '';
+    const sectionsHtml = (data.sections && data.sections.length)
+      ? data.sections.map(sec=>`<div class="bm-section"><h3 class="bm-sec-title">${_esc(sec.emoji)} ${_esc(sec.title)}</h3><p class="bm-sec-body">${_esc(sec.body)}</p></div>`).join('') : '';
+    const srcHtml = (data.sources && data.sources.length)
+      ? `<div class="bm-sources"><div class="bm-sources-label">출처 ${data.sources.length}건</div><ul>${data.sources.map(s=>`<li><a href="${_esc(s.url)}" target="_blank" rel="noopener"><span class="bm-src-name">${_esc(s.source)}</span><span class="bm-src-title">${_esc(s.title)}</span></a></li>`).join('')}</ul></div>` : '';
+    overlay.innerHTML = `
+      <div class="bm-sheet" role="dialog" aria-modal="true">
+        <header class="bm-head">
+          <span class="bm-head-title">AI 브리핑</span>
+          <button type="button" class="bm-close" aria-label="닫기">✕</button>
+        </header>
+        <div class="bm-scroll">
+          <div class="bm-meta">📌 ${_esc(data.updated_at)}에 주요 뉴스를 요약했어요.</div>
+          <h2 class="bm-headline">${_esc(data.headline)}</h2>
+          ${summaryHtml}
+          ${sectionsHtml}
+          ${srcHtml}
+          <div class="bm-disclaimer">본 정보는 투자자문이 아니며 투자 판단과 책임은 사용자에게 있습니다.</div>
+        </div>
+      </div>`;
+    overlay.querySelector('.bm-close').addEventListener('click', _closeBriefModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) _closeBriefModal(); });
+    requestAnimationFrame(() => overlay.classList.add('open'));
+    document.body.classList.add('brief-modal-open');
+    history.pushState({ briefModal: true }, '');
+    window._briefStates = (window._briefStates || 0) + 1;
+  }
+
+  function _closeBriefModal() {
+    const overlay = document.getElementById('brief-modal');
+    if (!overlay) return;
+    overlay.classList.remove('open');
+    document.body.classList.remove('brief-modal-open');
+    setTimeout(() => { if (overlay) overlay.remove(); }, 240);
+  }
+  window._closeBriefModal = _closeBriefModal;
+
+  // 시스템 뒤로가기 — 브리핑 모달 열려있으면 닫기만
+  window.addEventListener('popstate', () => {
+    if (window._briefStates > 0 && document.getElementById('brief-modal')) {
+      window._briefStates--;
+      _closeBriefModal();
+    }
+  });
+
+  // AI 종합판단 카드 → AI 브리핑 진입 바 (클릭 시 상세 모달)
   async function loadAiCard() {
     try {
-      const r = await fetch('/api/market-summary/home-headline');
+      const region = (typeof window.getRegion === 'function') ? window.getRegion() : 'us';
+      const r = await fetch(`/api/market-summary/market-brief?region=${region}`);
       const data = await r.json();
       const body = document.getElementById('home-ai-body');
-      if (data.summary) {
-        body.textContent = data.summary;
+      if (data.headline) {
+        body.innerHTML = `
+          <button type="button" class="brief-bar">
+            <span class="brief-bar-time">${_esc(data.updated_at)} ›</span>
+            <span class="brief-bar-line"><span class="brief-bar-badge">AI 브리핑</span>${_esc(data.headline)}</span>
+            <span class="brief-bar-hint">자세히 보려면 클릭 ›</span>
+          </button>`;
+        body.querySelector('.brief-bar').addEventListener('click', () => _openBriefModal(data));
       }
-    } catch (e) { console.error('[home] AI 카드 로드 실패', e); }
+    } catch (e) { console.error('[home] AI 브리핑 로드 실패', e); }
 
     // 메타라인: 심리 / 이상도 (anomaly percentile) / 국면 — 3 endpoint 병렬
     try {

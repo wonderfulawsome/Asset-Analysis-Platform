@@ -708,6 +708,25 @@ def _bg_generate_explain(tab: str, lang: str, region: str) -> None:
             _bg_running.discard(bg_key)
 
 
+@router.get('/market-brief')
+def get_market_brief_endpoint(region: str = Query('us')):
+    """홈 'AI 종합 판단' 카드 — 뉴스 RSS + Groq 한 줄 요약 + 지표.
+
+    region: 'us' | 'kr'. 캐시 TTL 10분 (region 별 분리).
+    응답: {text, keywords, sources, updated_at, region, cached}.
+    """
+    region = _norm_region(region)
+    try:
+        from processor.market_brief import get_market_brief
+        data = get_market_brief(region)
+        return data
+    except Exception as e:
+        print(f'[market-brief] 실패: {e}')
+        return {'headline': '시황 데이터 수집 중', 'summary': [], 'sections': [],
+                'sources': [], 'updated_at': _kst_now_str(),
+                'region': region, 'cached': False, 'error': True}
+
+
 @router.get('/home-headline')
 def get_home_headline(lang: str = Query('ko'), region: str = Query('us')):
     """홈 화면 상단 — 5개 탭 지표 비교 후 1~2문장 헤드라인.
