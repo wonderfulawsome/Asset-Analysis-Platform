@@ -57,12 +57,54 @@ def _clean_gnews_title(title: str) -> tuple:
     return title, None
 
 
+def _parse_feed(url: str) -> List[dict]:
+    """RSS/Atom 피드 → [{'title','link'}]. feedparser 있으면 사용, 없으면 stdlib 폴백.
+
+    Railway 등에서 feedparser 미설치여도 동작하도록 httpx+xml.etree 폴백 보유.
+    """
+    # 1) feedparser 우선 (설치돼 있으면)
+    try:
+        import feedparser
+        feed = feedparser.parse(url)
+        out = [{'title': (e.get('title') or '').strip(),
+                'link': (e.get('link') or '').strip()}
+               for e in (feed.entries or [])]
+        if out:
+            return out
+    except Exception as e:
+        print(f'[market_brief] feedparser 미사용/실패 → stdlib 폴백: {e}')
+
+    # 2) stdlib 폴백 — httpx + xml.etree
+    try:
+        import httpx
+        import xml.etree.ElementTree as ET
+        resp = httpx.get(url, timeout=8.0, follow_redirects=True,
+                         headers={'User-Agent': 'Mozilla/5.0 (compatible; PassiveBot/1.0)'})
+        root = ET.fromstring(resp.content)
+        out = []
+        for node in root.iter():
+            tag = node.tag.split('}')[-1]
+            if tag not in ('item', 'entry'):
+                continue
+            title, link = '', ''
+            for ch in node:
+                ctag = ch.tag.split('}')[-1]
+                if ctag == 'title':
+                    title = (ch.text or '').strip()
+                elif ctag == 'link':
+                    link = (ch.text or '').strip() or ch.get('href', '')
+            out.append({'title': title, 'link': link})
+        return out
+    except Exception as e:
+        print(f'[market_brief] stdlib RSS 파싱 실패 {url}: {e}')
+        return []
+
+
 def _fetch_headlines(region: str) -> List[dict]:
     """화제성(Google News) + 최신(언론사 RSS) 병합. dedup. 각 항목 {title, url, source}.
 
     Google News 를 앞에 둬서 화제성 높은 헤드라인이 LLM 입력 상위에 오게 한다.
     """
-    import feedparser
     items: List[dict] = []
     seen_titles = set()
 
@@ -80,23 +122,14 @@ def _fetch_headlines(region: str) -> List[dict]:
     # 1) Google News — 화제성 우선
     gurl = _GNEWS_SOURCES.get(region)
     if gurl:
-        try:
-            feed = feedparser.parse(gurl)
-            for entry in (feed.entries or [])[:_GNEWS_TAKE]:
-                raw_title = (entry.get('title') or '').strip()
-                clean_title, src = _clean_gnews_title(raw_title)
-                _add(clean_title, entry.get('link'), src or 'Google뉴스')
-        except Exception as e:
-            print(f'[market_brief] Google News fetch 실패: {e}')
+        for entry in _parse_feed(gurl)[:_GNEWS_TAKE]:
+            clean_title, src = _clean_gnews_title(entry['title'])
+            _add(clean_title, entry['link'], src or 'Google뉴스')
 
     # 2) 언론사 공식 RSS — 최신순 보강
     for source_name, url in _RSS_SOURCES.get(region, []):
-        try:
-            feed = feedparser.parse(url)
-            for entry in (feed.entries or [])[:6]:
-                _add(entry.get('title'), entry.get('link'), source_name)
-        except Exception as e:
-            print(f'[market_brief] RSS fetch 실패 {source_name}: {e}')
+        for entry in _parse_feed(url)[:6]:
+            _add(entry['title'], entry['link'], source_name)
 
     return items[:_MAX_HEADLINES]
 
