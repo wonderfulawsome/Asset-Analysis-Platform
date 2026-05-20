@@ -615,9 +615,14 @@
       const data = await r.json();
       const body = document.getElementById('home-ai-body');
       if (data.headline) {
+        let pmTag = '';
+        if (typeof data.premarket_pct === 'number') {
+          const up = data.premarket_pct > 0;
+          pmTag = `<span class="brief-pm ${up ? 'up' : 'down'}">프리장 ${up ? '상승' : '하락'} ${data.premarket_pct > 0 ? '+' : ''}${data.premarket_pct.toFixed(2)}%</span>`;
+        }
         body.innerHTML = `
           <button type="button" class="brief-bar">
-            <span class="brief-bar-time">${_esc(data.updated_at)} ›</span>
+            <span class="brief-bar-time">${_esc(data.updated_at)} ›${pmTag}</span>
             <span class="brief-bar-line"><span class="brief-bar-badge">AI 브리핑</span>${_esc(data.headline)}</span>
             <span class="brief-bar-hint">자세히 보려면 클릭 ›</span>
           </button>`;

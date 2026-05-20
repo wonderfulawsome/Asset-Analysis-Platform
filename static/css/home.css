@@ -87,6 +87,13 @@
   font-size: 11.5px; font-weight: 600; letter-spacing: -0.1px;
   color: #f59e0b; margin-top: 2px;
 }
+.home-ai-body .brief-pm {
+  display: inline-block; margin-left: 8px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: -0.1px;
+  padding: 2px 7px; border-radius: 6px; vertical-align: middle;
+}
+.home-ai-body .brief-pm.up { background: rgba(16, 185, 129, 0.16); color: #10b981; }
+.home-ai-body .brief-pm.down { background: rgba(239, 68, 68, 0.16); color: #ef4444; }
 .home-ai-body .brief-bar:hover .brief-bar-line { opacity: 0.85; }
 .home-ai-body .brief-bar:hover .brief-bar-hint { opacity: 0.8; }
 [data-theme="light"] .home-ai-body .brief-bar-time { color: #9ca3af; }

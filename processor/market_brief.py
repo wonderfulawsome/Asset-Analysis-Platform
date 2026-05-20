@@ -388,6 +388,7 @@ def get_market_brief(region: str) -> dict:
         'summary': brief.get('summary') or [],
         'sections': brief.get('sections') or [],
         'sources': headlines,
+        'premarket_pct': indicators.get('premarket_pct'),  # US 프리장 등락% (없으면 None)
         'updated_at': _kst_now_str(),
         'region': region,
     }
