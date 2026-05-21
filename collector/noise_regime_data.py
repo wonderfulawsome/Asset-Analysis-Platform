@@ -104,6 +104,22 @@ def _fetch_fred(series_id: str, col_name: str, retries: int = 3,
                 raise
 
 
+def _last_valid_hy_from_db(region: str = 'us'):
+    """DB noise_regime 최근 행 중 hy_spread > 0.1 인 마지막 유효값. 없으면 None."""
+    try:
+        from database.repositories import fetch_noise_regime_history
+        rows = fetch_noise_regime_history(days=90, region=region)  # 날짜 내림차순
+        for r in rows:
+            fv = r.get('feature_values')
+            if isinstance(fv, dict):
+                v = fv.get('hy_spread')
+                if v is not None and float(v) > 0.1:
+                    return float(v)
+    except Exception as e:
+        print(f'    HY spread DB 조회 실패: {type(e).__name__}')
+    return None
+
+
 def _fetch_yahoo_monthly(ticker: str, years: int = 3) -> pd.Series:
     """Yahoo Finance v8 API로 월별 종가 Series 반환."""
     today = datetime.date.today()
@@ -652,10 +668,26 @@ def fetch_noise_regime_light(model_bundle: dict, lookback_days: int = 60) -> np.
         print(f'    VIX term 실패, 캐시 사용: {e}')      # 실패 시 캐시 사용
         vt_val = vt_val_cached                           # 모델 번들의 캐시값
 
-    # ── ⑤-B HY_OAS: 모델 번들 캐시값 사용 (경량 모드에서 FRED 호출 스킵)
-    # FRED는 일별 업데이트이므로 10분 주기 호출 불필요, 캐시값으로 충분
-    hy_val = hy_val_cached                               # 모델 번들의 캐시값 사용
-    print(f'    HY spread: 캐시 사용 ({hy_val:.4f})')    # 캐시값 로그
+    # ── ⑤-B HY_OAS: 실시간 FRED → DB 마지막 유효값 → 캐시 (sentinel 0 방지)
+    # 기존엔 캐시(0)만 써서 noise_regime hy_spread=0 → anomaly sentinel 제외 → 날짜 고정 버그.
+    hy_val = None
+    try:
+        _hy_df = _fetch_fred('BAMLH0A0HYM2', 'hy_spread', retries=1, timeout=(5, 12))
+        _s = _hy_df['hy_spread'].dropna()
+        if len(_s) > 0:
+            hy_val = float(_s.iloc[-1])
+    except Exception as e:
+        print(f'    HY spread FRED 실패: {type(e).__name__}')
+    if hy_val is None or hy_val <= 0.1:                  # FRED 실패/이상 → DB 마지막 유효값
+        _hy_db = _last_valid_hy_from_db()
+        if _hy_db is not None:
+            hy_val = _hy_db
+            print(f'    HY spread: DB 마지막 유효값 사용 ({hy_val:.4f})')
+    if hy_val is None or hy_val <= 0.1:                  # 그래도 없으면 캐시 / 역사적 평균
+        hy_val = hy_val_cached if (hy_val_cached and hy_val_cached > 0.1) else 3.5
+        print(f'    HY spread: 폴백 ({hy_val:.4f})')
+    else:
+        print(f'    HY spread: {hy_val:.4f}')
 
     # ── ⑥ realized_vol: 최근 20일 SPY 수익률 기반 ──
     if spy_ret is not None and len(spy_ret) >= 20:       # SPY 데이터가 충분하면

@@ -1849,14 +1849,15 @@
       globe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a13 13 0 0 1 0 18M12 3a13 13 0 0 0 0 18"/></svg>',
       gauge:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17 A9 9 0 0 1 21 17"/><path d="M12 17 L17 8"/><circle cx="12" cy="17" r="1.4" fill="currentColor"/></svg>',
       bars:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18"/><rect x="5" y="14" width="3" height="6" rx="0.5"/><rect x="10.5" y="9" width="3" height="11" rx="0.5"/><rect x="16" y="4" width="3" height="16" rx="0.5"/></svg>',
+      signal:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 16l5-5 4 4 7-7"/><path d="M16 8h5v5"/></svg>',
     };
     const CATS = {
-      today:{kicker:'시황',title:'오늘 시장 상태',desc:'지수·심리·변동성 한 번에 확인',items:[{tile:'market',name:'시장',sub:'VIX · 공포·탐욕 · 보유 포트',icon:'market'},{tile:'ai-chart',name:'AI차트',sub:'캔들·MA·거래량 · 유사 패턴',icon:'chart'}]},
+      today:{kicker:'시황',title:'오늘 시장 상태',desc:'지수·심리·변동성 한 번에 확인',items:[{tile:'market',name:'시장',sub:'VIX · 공포·탐욕 · 보유 포트',icon:'market'},{tile:'ai-chart',name:'AI차트',sub:'캔들·MA·거래량 · 유사 패턴',icon:'chart'},{tile:'crash-surge',name:'상승·하락 신호',sub:'XGBoost 20일 예측 · 선행성',icon:'signal'}]},
       analysis:{kicker:'분석',title:'펀더멘털과 가격의 차이',desc:'실적 대비 주가가 어디 있는지, 평소와 얼마나 다른지.',items:[{tile:'fundamental',name:'펀더멘털',sub:'Noise vs Signal · 갭 분해',icon:'fund'},{tile:'signal',name:'이상 탐지',sub:'평소와 다른 정도 · k-NN',icon:'anomaly'}]},
       context:{kicker:'환경',title:'현재 경제 상황',desc:'경기 사이클과 매크로 지표로 시장 환경 진단',items:[{tile:'macro',name:'거시경제',sub:'경기 국면 · 매크로 10년 · Top 섹터',icon:'globe'}]},
       sector:{kicker:'섹터',title:'섹터 비교',desc:'모멘텀과 밸류 랭킹.',items:[{tile:'sector-mom',name:'섹터 모멘텀',sub:'1주·1개월 8섹터 랭킹',icon:'bars'},{tile:'sector-val',name:'섹터 밸류',sub:'가중평균 PER · 10년 평균 대비',icon:'gauge'}]},
     };
-    const TILE_TO_CAT={'ai-chart':'today','market':'today','fundamental':'analysis','signal':'analysis','macro':'context','market-valuation':'context','sector-mom':'sector','sector-val':'sector'};
+    const TILE_TO_CAT={'ai-chart':'today','market':'today','crash-surge':'today','fundamental':'analysis','signal':'analysis','macro':'context','market-valuation':'context','sector-mom':'sector','sector-val':'sector'};
     const overlay=document.getElementById('cat-overlay');
     const grid=document.getElementById('cat-grid');
     function setActive(cat){document.querySelectorAll('.cat-nav button').forEach(b=>b.classList.toggle('on',b.dataset.cat===cat))}
